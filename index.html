@@ -760,14 +760,26 @@
               <textarea id="f-skill2" data-key="skill2" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
             </div>
             <div class="field">
+              <div class="label-row"><label for="f-skill3">Skill 3 <span class="mono">(optional)</span></label><button type="button" class="q" aria-expanded="false" aria-controls="h-skill3" aria-label="Guideline for Skill 3">?</button></div>
+              <div class="help" id="h-skill3" hidden><p class="mono red">Guideline</p><p>Another special skill of your character. Include its limitation and cooldown. Leave it empty if you don't have one.</p></div>
+              <textarea id="f-skill3" data-key="skill3" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-skill4">Skill 4 <span class="mono">(optional)</span></label><button type="button" class="q" aria-expanded="false" aria-controls="h-skill4" aria-label="Guideline for Skill 4">?</button></div>
+              <div class="help" id="h-skill4" hidden><p class="mono red">Guideline</p><p>Another special skill of your character. Include its limitation and cooldown. Leave it empty if you don't have one.</p></div>
+              <textarea id="f-skill4" data-key="skill4" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
+            </div>
+            <div class="field">
               <div class="label-row"><label for="f-ultimate">Ultimate</label><button type="button" class="q" aria-expanded="false" aria-controls="h-ultimate" aria-label="Guideline for Ultimate">?</button></div>
               <div class="help" id="h-ultimate" hidden><p class="mono red">Guideline</p><p>Your character's ultimate. It must include a heavy cooldown or limitation, based on what the ultimate can do.</p></div>
               <textarea id="f-ultimate" data-key="ultimate" rows="3" placeholder="Name, what it does, heavy cooldown or limitation."></textarea>
             </div>
             <div class="field">
-              <div class="label-row"><label for="f-quirk">Quirk</label><button type="button" class="q" aria-expanded="false" aria-controls="h-quirk" aria-label="Guideline for Quirk">?</button></div>
-              <div class="help" id="h-quirk" hidden><p class="mono red">Guideline</p><p>Your character's natural talent that was learned.</p></div>
-              <textarea id="f-quirk" data-key="quirk" rows="2" placeholder="A natural talent your character learned."></textarea>
+              <div class="label-row"><span class="label-text">Quirks <span class="mono">(up to 3)</span></span><button type="button" class="q" aria-expanded="false" aria-controls="h-quirk" aria-label="Guideline for Quirks">?</button></div>
+              <div class="help" id="h-quirk" hidden><p class="mono red">Guideline</p><p>Natural talents your character learned. You can have up to 3 quirks. Only the first is needed.</p></div>
+              <input type="text" id="f-quirk1" data-key="quirk1" maxlength="80" placeholder="Quirk 1">
+              <input type="text" id="f-quirk2" data-key="quirk2" maxlength="80" placeholder="Quirk 2 (optional)" style="margin-top:0.5rem;">
+              <input type="text" id="f-quirk3" data-key="quirk3" maxlength="80" placeholder="Quirk 3 (optional)" style="margin-top:0.5rem;">
             </div>
           </div>
 
@@ -775,6 +787,7 @@
             <h3 id="g3">Soul's Physiology</h3>
             <dl class="fixed">
               <div><dt>Health Points</dt><dd>20</dd></div>
+              <div><dt>Armor</dt><dd>0</dd></div>
               <div><dt>Speed</dt><dd>30</dd></div>
               <div><dt>Size</dt><dd>Medium</dd></div>
               <div><dt>Language</dt><dd>Common</dd></div>
@@ -966,11 +979,14 @@
       L.push(line('Basic Skill', v.basic));
       L.push(line('Skill 1', v.skill1));
       L.push(line('Skill 2', v.skill2));
+      if ((v.skill3 || '').trim()) L.push(line('Skill 3', v.skill3));
+      if ((v.skill4 || '').trim()) L.push(line('Skill 4', v.skill4));
       L.push(line('Ultimate', v.ultimate));
-      L.push(line('Quirk', v.quirk));
+      L.push(line('Quirk', [v.quirk1, v.quirk2, v.quirk3].map(function (q) { return (q || '').replace(/\s+/g, ' ').trim(); }).filter(Boolean).slice(0, 3).join('\n')));
       L.push('ㅤ');
       L.push("𝐒𝐨𝐮𝐥'𝐬 𝐏𝐡𝐲𝐬𝐢𝐨𝐥𝐨𝐠𝐲");
       L.push('Health Points: 20');
+      L.push('Armor: 0');
       L.push('Speed: 30');
       L.push('Size: Medium');
       L.push('Language: Common');
@@ -1013,6 +1029,7 @@
           fields.forEach(function (f) {
             if (typeof d.v[f.dataset.key] === 'string') f.value = d.v[f.dataset.key];
           });
+          if (typeof d.v.quirk === 'string' && d.v.quirk && !d.v.quirk1) document.getElementById('f-quirk1').value = d.v.quirk.slice(0, 80);
         }
         if (d && d.s) {
           var next = {}, sum = 0, ok = true;
@@ -1478,11 +1495,15 @@
       var sealed = el('div', 'reg-sealed'); sealed.appendChild(el('h4', null, 'Undisclosed')); sealed.appendChild(el('p', 'dim', 'The headmaster has sealed this entry.'));
       c1.appendChild(sealed);
     } else {
-      if ('stats' in e) c1.appendChild(block('Stats', ORDER.map(function (k) { return el('p', null, k + ': ' + (e.stats && e.stats[k] != null ? e.stats[k] : '—')); })));
+      var sl = [];
+      if ('hp' in e) sl.push(el('p', null, 'HP: ' + e.hp));
+      if ('armor' in e) sl.push(el('p', null, 'Armor: ' + e.armor));
+      if ('stats' in e) ORDER.forEach(function (k) { sl.push(el('p', null, k + ': ' + (e.stats && e.stats[k] != null ? e.stats[k] : '—'))); });
+      if (sl.length) c1.appendChild(block('Stats', sl));
       if ('basic' in e) c1.appendChild(block('Basic skill', bullets([e.basic])));
       if ('skills' in e) c1.appendChild(block('Skills', bullets(e.skills)));
       if ('ultimate' in e) c1.appendChild(block('Ultimate', bullets([e.ultimate])));
-      if ('quirk' in e) c1.appendChild(block('Quirk', [el('p', e.quirk ? '' : 'dim', e.quirk || '—')]));
+      if ('quirks' in e) c1.appendChild(block('Quirks', [el('p', (e.quirks || []).length ? '' : 'dim', (e.quirks || []).join(', ') || '—')]));
       if ('karma' in e) c2.appendChild(block('Accumulated karma: ' + (e.karma || '—'), []));
       if ('notes' in e) c2.appendChild(block('Headmaster notes', [el('p', e.notes ? '' : 'dim', e.notes || '—')]));
       if ('risk' in e) c2.appendChild(block('Assessment', [el('p', e.risk ? '' : 'dim', e.risk ? '* Risk LVL ' + e.risk : '—')]));
@@ -1585,7 +1606,7 @@
 
   /* ---------- Character editor ---------- */
   function editor(src) {
-    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || [];
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; c.armor = c.armor || 0;
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
     function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
@@ -1600,7 +1621,7 @@
       box.appendChild(h('div', { className: 'g2' }, [txt('Name', c, 'name'), txt('Gender', c, 'gender'), txt('Born - Died', c, 'dates'), txt('Karma', c, 'karma')]));
       ['persona', 'destiny', 'appearance'].forEach(function (k) { box.appendChild(txt(k[0].toUpperCase() + k.slice(1), c, k, 3)); });
       box.appendChild(h('h4', { text: 'Vitals and stats' }));
-      box.appendChild(h('div', { className: 'g2' }, [num('Health points', c, 'hp'), num('Speed', c, 'speed')]));
+      box.appendChild(h('div', { className: 'g6' }, [num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed')]));
       box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { return h('div', { className: 'stbox' }, [h('b', { text: k }), num('Score', c.stats[k], 'score'), num('Modifier', c.stats[k], 'mod')]); })));
       box.appendChild(h('h4', { text: 'Core item' }));
       box.appendChild(txt('Item name', c, 'itemName')); box.appendChild(txt('Item description', c, 'itemDesc', 3));
@@ -1627,7 +1648,11 @@
         box.appendChild(h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }),
           h('div', { className: 'g2' }, [txt('Skill name', sk, 'name'), txt('Cooldown / limit', sk, 'cooldown')]), txt('Description', sk, 'text', 3), fx, add]));
       });
-      box.appendChild(txt('Quirk', c, 'quirk', 2));
+      var qs = String(c.quirk || '').split('\n').slice(0, 3); while (qs.length < 3) qs.push('');
+      box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'Quirks (up to 3)' })].concat(qs.map(function (q, j) {
+        var i = h('input', { value: q, placeholder: 'Quirk ' + (j + 1), maxLength: 80 }); i.oninput = function () { qs[j] = i.value; c.quirk = qs.map(function (x) { return x.trim(); }).filter(Boolean).join('\n'); };
+        return i;
+      }))));
       var st = h('p', { className: 'mono' });
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save changes' });
       save.onclick = function () {
@@ -1679,7 +1704,7 @@
     }
     w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
       h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
-    var rows = [['Gender', c.gender], ['Health / Speed', c.hp + ' / ' + c.speed], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirk', c.quirk]]
+    var rows = [['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
       .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), h('dd', { text: p[1] })]); });
     w.appendChild(h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, rows)]));
 
@@ -1815,12 +1840,13 @@
   function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : ''); }
   function newEntry(ch) {
     reg = reg.filter(function (x) { return !x.isNew; });
-    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, revealTo: [], stats: {}, basic: '', skills: [], ultimate: '', quirk: '', karma: '', notes: '', risk: '' };
+    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, revealTo: [], hp: 20, armor: 0, stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
     if (ch && ch.id) {
-      var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; };
-      e.name = ch.name || ''; e.image = ch.image || ''; e.quirk = ch.quirk || ''; e.karma = ch.karma || '';
+      var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; }, by = function (l) { return sk.filter(function (x) { return x.label === l; })[0]; };
+      e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0;
+      e.quirks = String(ch.quirk || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 3);
       ST.forEach(function (k) { e.stats[k] = (ch.stats && ch.stats[k] && ch.stats[k].score) || 0; });
-      e.basic = nm(sk[0]); e.skills = [nm(sk[1]), nm(sk[2])].filter(Boolean); e.ultimate = nm(sk[3]);
+      e.basic = nm(by('Basic Skill')); e.skills = sk.filter(function (x) { return /^Skill/.test(x.label); }).map(nm).filter(Boolean); e.ultimate = nm(by('Ultimate'));
     }
     reg.push(e); tab = 'reg'; cur = 'new'; render();
   }
@@ -1874,6 +1900,8 @@
   function regEditor(src) {
     var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }), st = h('p', { className: 'mono' }), crop = cropper(c);
     c.stats = c.stats || {}; c.skills = c.skills || []; c.revealTo = c.revealTo || [];
+    if (!Array.isArray(c.quirks)) c.quirks = c.quirk ? String(c.quirk).split('\n').slice(0, 3) : [];
+    if (c.hp == null) c.hp = 20; if (c.armor == null) c.armor = 0;
     function has(k) { return !regTpl || (regTpl[c.type] || []).indexOf(k) >= 0; }
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function chk(label, on, set) { var i = h('input', { type: 'checkbox', checked: !!on }); i.onchange = function () { set(i.checked); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); }
@@ -1898,6 +1926,10 @@
         }
       }
       box.appendChild(h('h4', { text: 'Public details' }));
+      if (has('hp') || has('armor')) {
+        var hpi = function (label, k) { var i = h('input', { type: 'number', value: c[k] || 0, className: 'ni' }); i.oninput = function () { c[k] = Number(i.value) || 0; }; return h('label', { className: 'fl sm' }, [h('span', { text: label }), i]); };
+        box.appendChild(h('div', { className: 'g6' }, [has('hp') ? hpi('HP', 'hp') : null, has('armor') ? hpi('Armor', 'armor') : null]));
+      }
       if (has('stats')) {
         box.appendChild(h('div', { className: 'g6' }, ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'].map(function (k) {
           var i = h('input', { type: 'number', value: c.stats[k] || 0, className: 'ni' }); i.oninput = function () { c.stats[k] = Number(i.value) || 0; };
@@ -1914,7 +1946,11 @@
         var addk = h('button', { type: 'button', className: 'btn', text: '+ Add skill' }); addk.onclick = function () { c.skills.push(''); draw(); }; box.appendChild(addk);
       }
       if (has('ultimate')) box.appendChild(txt('Ultimate', c, 'ultimate'));
-      if (has('quirk')) box.appendChild(txt('Quirk', c, 'quirk'));
+      if (has('quirks')) {
+        var qw = h('div', { className: 'fl' }, [h('span', { text: 'Quirks (up to 3)' })]);
+        [0, 1, 2].forEach(function (j) { var i = h('input', { value: c.quirks[j] || '', placeholder: 'Quirk ' + (j + 1), maxLength: 80 }); i.oninput = function () { c.quirks[j] = i.value; }; qw.appendChild(i); });
+        box.appendChild(qw);
+      }
       if (has('karma') || has('risk')) box.appendChild(h('div', { className: 'g2' }, [has('karma') ? txt('Accumulated karma', c, 'karma') : null, has('risk') ? txt('Risk level (shown as “Risk LVL …”)', c, 'risk') : null]));
       if (has('notes')) box.appendChild(txt('Headmaster notes', c, 'notes', 3));
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save entry' });

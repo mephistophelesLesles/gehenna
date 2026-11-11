@@ -23,10 +23,13 @@ const S = (v, n) => String(v == null ? '' : v).slice(0, n || 4000);
 const N = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
 const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
 
+// At most 3 quirks, one per line.
+const quirks = v => String(v || '').split('\n').map(x => x.trim().slice(0, 100)).filter(Boolean).slice(0, 3).join('\n');
+
 // Turn the sheet text a player sent into a structured character.
 function fromSheet(d) {
   const t = '\n' + String(d.sheet || '').replace(/\r/g, '');
-  const L = ['Name', 'Gender', 'Date of Birth and Date of Death', 'Persona', 'Destiny', 'Accumulated Karma', 'Appearance Description', 'Core Most Treasured Item', 'Basic Skill', 'Skill 1', 'Skill 2', 'Ultimate', 'Quirk', 'Health Points'];
+  const L = ['Name', 'Gender', 'Date of Birth and Date of Death', 'Persona', 'Destiny', 'Accumulated Karma', 'Appearance Description', 'Core Most Treasured Item', 'Basic Skill', 'Skill 1', 'Skill 2', 'Skill 3', 'Skill 4', 'Ultimate', 'Quirk', 'Health Points'];
   let from = 0; const at = L.map(l => { const i = t.indexOf('\n' + l + ':', from); if (i >= 0) from = i + 1; return i; });
   const val = k => { const i = at[k]; if (i < 0) return ''; let e = t.length; for (let j = k + 1; j < at.length; j++) if (at[j] >= 0) { e = at[j]; break; } return t.slice(i + L[k].length + 2, e).trim(); };
   const item = val(7).split('\n'), stats = {};
@@ -35,8 +38,8 @@ function fromSheet(d) {
   const karma = val(5);
   return {
     name: val(0) || S(d.name, 100), gender: val(1), dates: val(2), persona: val(3), destiny: val(4), karma: /judged by the headmaster/i.test(karma) ? '' : karma,
-    appearance: val(6), itemName: item[0] || '', itemDesc: item.slice(1).join('\n').trim(), quirk: val(12), hp: 20, speed: 30, items: [], stats,
-    skills: [skill('Basic Skill', 8), skill('Skill 1', 9), skill('Skill 2', 10), skill('Ultimate', 11)],
+    appearance: val(6), itemName: item[0] || '', itemDesc: item.slice(1).join('\n').trim(), quirk: quirks(val(14)), hp: 20, armor: 0, speed: 30, items: [], stats,
+    skills: [skill('Basic Skill', 8), skill('Skill 1', 9), skill('Skill 2', 10), skill('Skill 3', 11), skill('Skill 4', 12), skill('Ultimate', 13)].filter(s => s.text || s.label === 'Basic Skill' || s.label === 'Ultimate' || /[12]$/.test(s.label)),
   };
 }
 
@@ -46,9 +49,9 @@ function clean(c, old) {
     id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '',
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
     itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
-    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: S(c.quirk), hp: N(c.hp, 0, 9999), speed: N(c.speed, 0, 999),
+    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: quirks(c.quirk), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), speed: N(c.speed, 0, 999),
     stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; o[k] = { score: N(s.score, 0, 99), mod: N(s.mod, -99, 99) }; return o; }, {}),
-    skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 8).map(s => ({
+    skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 12).map(s => ({
       label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100),
       effects: (Array.isArray(s.effects) ? s.effects : []).slice(0, 10).map(e => ({ type: TYPES.includes(e.type) ? e.type : 'Other', n: N(e.n, 0, 50), d: N(e.d, 0, 1000), flat: N(e.flat, -999, 999), note: S(e.note, 200) })),
     })),

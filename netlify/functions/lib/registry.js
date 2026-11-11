@@ -7,7 +7,7 @@ const STATS = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
 
 // THE TEMPLATE. This decides which sections each kind of entry has. Anything not listed here is never
 // sent to players, even if it was saved. Edit these lists to change a template.
-const COMMON = ['stats', 'basic', 'skills', 'ultimate', 'quirk'];
+const COMMON = ['hp', 'armor', 'stats', 'basic', 'skills', 'ultimate', 'quirks'];
 const TEMPLATE = {
   player: COMMON.concat(['karma', 'notes', 'risk']),
   npc: COMMON.concat(['karma', 'notes', 'risk']),
@@ -16,8 +16,11 @@ const TEMPLATE = {
 
 const ID = /^[a-f0-9-]{8,40}$/i;
 const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+// Up to 3 quirks. Older entries stored one text; split it so nothing is lost.
 const S = (v, n) => String(v == null ? '' : v).slice(0, n == null ? 4000 : n);
 const N = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
+// Up to 3 quirks. Older entries stored a single text, so split it and nothing is lost.
+function quirksOf(e) { return (Array.isArray(e.quirks) ? e.quirks : String(e.quirk || '').split('\n')).map((x) => S(x, 100).trim()).filter(Boolean).slice(0, 3); }
 
 async function loadAll(store) {
   const { blobs } = await store.list();
@@ -37,11 +40,13 @@ function clean(e, old) {
     listed: e.listed === false ? false : true,
     undisclosed: type === 'npc' && e.undisclosed === true,
     revealTo: (Array.isArray(e.revealTo) ? e.revealTo : []).filter((x) => ID.test(String(x))).slice(0, 200).map(String),
+    hp: N(e.hp, 0, 9999),
+    armor: N(e.armor, 0, 999),
     stats: STATS.reduce((o, k) => { o[k] = N((e.stats || {})[k], 0, 99); return o; }, {}),
     basic: S(e.basic, 200),
-    skills: (Array.isArray(e.skills) ? e.skills : []).slice(0, 10).map((x) => S(x, 200)).filter(Boolean),
+    skills: (Array.isArray(e.skills) ? e.skills : []).slice(0, 12).map((x) => S(x, 200)).filter(Boolean),
     ultimate: S(e.ultimate, 200),
-    quirk: S(e.quirk, 400),
+    quirks: quirksOf(e),
     karma: S(e.karma, 40),
     notes: S(e.notes, 2000),
     risk: S(e.risk, 40),
@@ -63,7 +68,7 @@ function view(e, viewerId, detail) {
   if (!o.open) return out;
   if (e.image) out.image = o.granted ? e.image : '/.netlify/functions/registry?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0);
   if (!detail) return out;
-  TEMPLATE[e.type].forEach((k) => { out[k] = e[k] == null ? '' : e[k]; });
+  TEMPLATE[e.type].forEach((k) => { out[k] = k === 'quirks' ? quirksOf(e) : (e[k] == null ? '' : e[k]); });
   return out;
 }
 
@@ -72,7 +77,7 @@ async function registryAdmin(b, store) {
   if (!['reglist', 'regsave', 'regdelete'].includes(b.action)) return null;
   if (b.action === 'reglist') {
     const all = await loadAll(store);
-    return [200, { entries: all.sort((x, y) => x.name.localeCompare(y.name)), template: TEMPLATE }];
+    return [200, { entries: all.map((e) => Object.assign({}, e, { quirks: quirksOf(e) })).sort((x, y) => x.name.localeCompare(y.name)), template: TEMPLATE }];
   }
   if (b.action === 'regsave') {
     const inc = b.entry || {};
