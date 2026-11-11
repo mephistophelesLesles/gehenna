@@ -34,7 +34,10 @@ exports.handler = async (event) => {
     const forms = await nf('/sites/' + siteId + '/forms');
     const form = forms.find(f => f.name === FORM);
     if (!form) return reply(200, { items: [] });
-    const subs = await nf('/forms/' + form.id + '/submissions?per_page=100');
-    return reply(200, { items: subs.map(s => ({ id: s.id, at: s.created_at, name: (s.data && s.data.name) || 'Unnamed soul', sheet: (s.data && s.data.sheet) || '' })) });
+    const base = '/forms/' + form.id + '/submissions?per_page=100';
+    const [ok, spam] = await Promise.all([nf(base), nf(base + '&state=spam').catch(() => [])]);
+    const map = (flag) => (s) => ({ id: s.id, at: s.created_at, spam: flag, name: (s.data && s.data.name) || 'Unnamed soul', sheet: (s.data && s.data.sheet) || '' });
+    const items = ok.map(map(false)).concat(spam.map(map(true))).sort((a, b) => new Date(b.at) - new Date(a.at));
+    return reply(200, { items: items });
   } catch (e) { return reply(502, { error: 'Could not reach Netlify: ' + e.message }); }
 };

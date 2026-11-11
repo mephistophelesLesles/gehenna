@@ -917,7 +917,7 @@
   btn.addEventListener('click', function () {
     var nameEl = document.getElementById('f-name');
     var name = (nameEl && nameEl.value.trim()) || '';
-    var sheet = document.getElementById('sheet').textContent;
+    var sheet = document.getElementById('sheet').textContent.normalize('NFKC').replace(/[\u1160\u3164]/g, '').replace(/\n{3,}/g, '\n\n');
     if (!name) { status.textContent = 'Give your character a name before sending.'; return; }
     status.textContent = 'Sending…';
     btn.disabled = true;
@@ -980,7 +980,7 @@
       var b = document.createElement('button'); b.type = 'button'; b.className = 'adm-row';
       b.setAttribute('aria-current', String(it.id === current));
       var n = document.createElement('b'); n.textContent = it.name;
-      var d = document.createElement('small'); d.textContent = new Date(it.at).toLocaleString();
+      var d = document.createElement('small'); d.textContent = (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString();
       b.appendChild(n); b.appendChild(d);
       b.onclick = function () { current = it.id; armed = false; renderSide(); renderMain(); };
       side.appendChild(b);
