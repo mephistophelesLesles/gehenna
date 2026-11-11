@@ -322,6 +322,10 @@
   .skill { display: grid; gap: 0.6rem; padding: 0.9rem; border: 1px solid var(--line); background: var(--surface-2); }
   .fxs { display: grid; gap: 0.5rem; } .ef { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; } .ef select { width: auto; } .ef .ni { width: 4.5rem; } .ef > input:not(.ni) { flex: 1 1 10rem; width: auto; }
   .pl-view { max-width: 44rem; margin: 0 auto; padding: 1rem max(16px, env(safe-area-inset-left, 0px)) 4rem; } .pv { display: grid; gap: 0.9rem; } .pv h2 { font-size: 2.2rem; }
+  .roller { display: grid; gap: 0.6rem; padding: 0.9rem; border: 1px solid var(--line); background: var(--surface-2); } .roller h4 { font-size: 1.3rem; }
+  .roller input, .roller select { background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 0.5rem 0.6rem; font: inherit; border-radius: 0; } .roller .ni { width: 4.5rem; }
+  .roller .btn, .stbox .btn { padding: 0.5rem 0.7rem; } .hist { display: grid; gap: 0.25rem; } .hist p { margin: 0; }
+  .nat20 { color: #7dff9a !important; font-weight: 700; } .nat1 { color: var(--red-hi) !important; font-weight: 700; }
 </style>
 
 
@@ -615,13 +619,13 @@
     </div>
   </div>
   <div class="adm-login" id="adm-login">
-    <p class="mono red">Headmaster login</p>
-    <input type="email" id="adm-email" placeholder="Email" autocomplete="username">
-    <input type="password" id="adm-pass" placeholder="Password" autocomplete="current-password">
+    <p class="mono red">Secret Login key</p>
+    <input type="text" id="adm-email" placeholder="Secret ID" autocomplete="username" autocapitalize="off">
+    <input type="password" id="adm-pass" placeholder="Secret Key" autocomplete="current-password">
     <button type="button" class="btn primary" id="adm-go">Log in</button>
     <p id="adm-msg" aria-live="polite"></p>
     <hr class="sep">
-    <p class="mono red">Player login</p>
+    <p class="mono red">Soul's login</p>
     <input type="text" id="pl-key" placeholder="Your key (GEH-XXXX-XXXX-XXXX)" autocomplete="off" autocapitalize="characters">
     <button type="button" class="btn primary" id="pl-go">Open my profile</button>
     <p id="pl-msg" aria-live="polite"></p>
@@ -1013,7 +1017,7 @@
   function show(m) {
     login.hidden = m !== 'login'; grid.hidden = m !== 'admin'; pv.hidden = m !== 'player';
     $('adm-out').hidden = m === 'login'; $('adm-refresh').hidden = m !== 'admin';
-    $('adm-title').textContent = m === 'player' ? 'Your soul' : 'Headmaster';
+    $('adm-title').textContent = m === 'player' ? 'Your soul' : m === 'admin' ? 'Headmaster' : 'Login';
   }
   function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) show('admin'); else if (pchar) show('player'); else { show('login'); $('adm-email').focus(); } }
   function closeAdm() { adm.hidden = true; document.body.style.overflow = ''; }
@@ -1096,19 +1100,43 @@
     draw(); return [box];
   }
 
+  function dice(n, d) { var r = []; for (var i = 0; i < n; i++) r.push(1 + Math.floor(Math.random() * Math.max(1, d))); return r; }
+  function sgn(m) { return m ? (m > 0 ? ' + ' : ' - ') + Math.abs(m) : ''; }
+  function plain(n, d, m) { var r = dice(n, d), t = m; r.forEach(function (v) { t += v; }); return '[' + r.join(', ') + ']' + sgn(m) + ' = ' + t; }
+
   /* ---------- Player profile (read-only, with dice roller) ---------- */
   function profile(c) {
     pv.textContent = '';
     var w = h('div', { className: 'pv' }, [h('h2', { text: c.name }), c.image && h('img', { src: c.image, className: 'portrait', alt: '' })]);
     [['Gender', c.gender], ['Born - Died', c.dates], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance]].forEach(function (p) { if (p[1]) w.appendChild(h('p', {}, [h('b', { text: p[0] + ': ' }), p[1]])); });
     w.appendChild(h('p', {}, [h('b', { text: 'HP: ' }), String(c.hp), '   ', h('b', { text: 'Speed: ' }), String(c.speed)]));
-    w.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { var s = c.stats[k]; return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'mod ' + (s.mod >= 0 ? '+' : '') + s.mod })]); })));
+    var hist = h('div', { className: 'hist' });
+    var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+    function logRoll(label, line, cls) { hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
+    function d20(m) {
+      var a = dice(1, 20)[0], b = adv.value === 'n' ? null : dice(1, 20)[0], pk = b === null ? a : (adv.value === 'a' ? Math.max(a, b) : Math.min(a, b));
+      return { txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
+    }
+    w.appendChild(h('h4', { text: 'Stats and saving throws' }));
+    w.appendChild(h('div', { className: 'g6' }, ST.map(function (k) {
+      var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
+      b.onclick = function () { var x = d20(s.mod); res.textContent = x.txt; res.className = 'mono ' + x.cls; logRoll(k + ' save', x.txt, x.cls); };
+      return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'modifier ' + (s.mod >= 0 ? '+' : '') + s.mod }), b, res]);
+    })));
+    var cnt = h('input', { type: 'number', value: 1, className: 'ni', 'aria-label': 'Number of dice' }), mod = h('input', { type: 'number', value: 0, className: 'ni', 'aria-label': 'Modifier' });
+    var die = h('select', { 'aria-label': 'Die' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { return h('option', { text: 'd' + n, value: n, selected: n === 20 }); }));
+    function free(n, d, m) { var lab = n + 'd' + d + (m ? (m > 0 ? '+' : '') + m : ''); if (n === 1 && d === 20) { var x = d20(m); logRoll(lab, x.txt, x.cls); } else logRoll(lab, plain(n, d, m)); }
+    var go = h('button', { type: 'button', className: 'btn primary', text: 'Roll' });
+    go.onclick = function () { free(Math.max(1, Math.min(20, Math.floor(+cnt.value) || 1)), +die.value, Math.floor(+mod.value) || 0); };
+    var quick = h('div', { className: 'ef' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { var q = h('button', { type: 'button', className: 'btn', text: 'd' + n }); q.onclick = function () { free(1, n, 0); }; return q; }));
+    w.appendChild(h('div', { className: 'roller' }, [h('h4', { text: 'Dice' }), quick,
+      h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, go]), h('div', { className: 'ef' }, [h('small', { text: 'd20 and saving throws:' }), adv]), hist]));
     if (c.itemName || c.itemDesc) w.appendChild(h('p', {}, [h('b', { text: 'Core item: ' }), c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')]));
     c.skills.forEach(function (sk) {
       var out = h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }), h('b', { text: sk.name }), sk.cooldown && h('small', { text: '  (' + sk.cooldown + ')' }), h('p', { text: sk.text })]);
       sk.effects.forEach(function (e) {
         var res = h('span', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + e.type + ' ' + rollText(e) });
-        b.onclick = function () { var r = [], t = e.flat; for (var i = 0; i < e.n; i++) { var x = 1 + Math.floor(Math.random() * Math.max(1, e.d)); r.push(x); t += x; } res.textContent = ' [' + r.join(', ') + ']' + (e.flat ? ' ' + (e.flat > 0 ? '+' : '') + e.flat : '') + ' = ' + t; };
+        b.onclick = function () { var x = plain(e.n, e.d, e.flat); res.textContent = ' ' + x; logRoll((sk.name || sk.label) + ' ' + e.type + ' ' + rollText(e), x); };
         out.appendChild(h('div', { className: 'ef' }, [b, res, e.note && h('small', { text: e.note })]));
       });
       w.appendChild(out);
@@ -1154,7 +1182,7 @@
   }
   function submitLogin() {
     var em = $('adm-email').value.trim(), pw = $('adm-pass').value;
-    if (!em || !pw) { msg.textContent = 'Enter your email and password.'; return; }
+    if (!em || !pw) { msg.textContent = 'Enter your Secret ID and Secret Key.'; return; }
     msg.textContent = 'Checking…'; creds = { email: em, password: pw }; load();
   }
   function playerLogin() {
