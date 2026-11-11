@@ -375,6 +375,20 @@
   #storyline { background: var(--bg); border-top: 1px solid var(--line); }
   #storyline[hidden] { display: none !important; }
 
+  /* Dice System */
+  #dice { background: var(--bg); border-top: 1px solid var(--line); }
+  #dice[hidden] { display: none !important; }
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .rule { background: var(--surface); padding: clamp(1.1rem, 3vw, 1.7rem); display: grid; gap: 0.7rem; align-content: start; min-width: 0; }
+  .rule.wide { grid-column: 1 / -1; background: linear-gradient(160deg, color-mix(in srgb, var(--red) 18%, var(--surface)), var(--surface) 72%); }
+  .rule h3 { font-size: 1.55rem; line-height: 1.15; }
+  .rule p { margin: 0; } .rule p:not(.mono) { color: var(--fg); }
+  .rule .ex { padding: 0.7rem 0.9rem; border-left: 3px solid var(--red); background: var(--bg); color: var(--muted) !important; font-size: 0.97rem; }
+  .rule ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.4rem; } .rule li::marker { color: var(--red-hi); }
+  .rule.nat20 { border-top: 3px solid #7dff9a; } .rule.nat20 h3 { color: #7dff9a; }
+  .rule.nat1 { border-top: 3px solid var(--red-hi); } .rule.nat1 h3 { color: var(--red-hi); }
+  .rules-note { margin-top: 1rem; color: var(--muted); }
+
   /* Registry: Players / NPCs / Monsters */
   #registry { background: var(--bg); border-top: 1px solid var(--line); }
   #registry[hidden] { display: none !important; }
@@ -520,6 +534,8 @@
         <article class="panel">
           <p class="mono red">The rules of chance</p>
           <h3>Dice System</h3>
+          <p class="desc">How rolls, saving throws and skills work, and what happens on the luckiest and unluckiest rolls.</p>
+          <button type="button" class="btn primary" id="open-dice" aria-controls="dice" aria-expanded="false">Open the rules</button>
         </article>
         <article class="panel soon">
           <p class="mono red">The world</p>
@@ -549,6 +565,68 @@
           <p class="mono">Opening the book…</p>
         </article>
       </div>
+    </div>
+  </section>
+
+  <section id="dice" hidden aria-label="Dice System">
+    <div class="wrap">
+      <div class="book-top">
+        <p class="mono red">Gehenna’s Gate &middot; Dice System</p>
+        <button type="button" class="btn" id="dice-close">Close the rules</button>
+      </div>
+      <h2 class="sr-only">Dice System</h2>
+      <div class="rules">
+        <article class="rule wide">
+          <p class="mono red">The core roll</p>
+          <h3>d20 + modifier</h3>
+          <p>Whenever the outcome is uncertain, the headmaster asks for a roll. You roll one twenty-sided die (<b>d20</b>), add the <b>modifier</b> of the stat being tested, and compare the total to a <b>target number</b> the headmaster sets. Meet it or beat it and you succeed; fall short and you fail.</p>
+          <p class="ex">Example: the headmaster sets the target at 12 and asks for a WIS save. You have WIS 8, so you roll d20 + 8. A 5 on the die makes 13, which succeeds. A 3 makes 11, which fails.</p>
+        </article>
+        <article class="rule">
+          <p class="mono red">Stats</p>
+          <h3>Six stats, six saves</h3>
+          <p>Your stat’s score is also its modifier, so a stat of 8 means +8 on that roll. Stats start from a fixed base and you add 20 points on top, at most 7 into any one stat.</p>
+          <ul>
+            <li><b>STR</b> raw physical power</li>
+            <li><b>DEX</b> reflexes and coordination</li>
+            <li><b>CON</b> endurance and resilience</li>
+            <li><b>INT</b> reasoning and knowledge</li>
+            <li><b>WIS</b> awareness and willpower</li>
+            <li><b>CHA</b> force of personality</li>
+          </ul>
+        </article>
+        <article class="rule">
+          <p class="mono red">Luck, for or against you</p>
+          <h3>Advantage and disadvantage</h3>
+          <p>With <b>advantage</b> you roll two d20 and keep the higher one. With <b>disadvantage</b> you roll two and keep the lower one. Only the die you keep counts, including for a natural 20 or natural 1. The headmaster decides when either applies, and if you have both at once they cancel out.</p>
+        </article>
+        <article class="rule">
+          <p class="mono red">Skills</p>
+          <h3>Damage, healing and shields</h3>
+          <p>Skills roll their own dice, written like <b>2d6+3</b>: roll two six-sided dice, add them up, then add 3. A skill can deal damage, heal, or give a shield. Your basic skill can be used freely. Other skills have a <b>cooldown</b> or limit, and your ultimate has a heavy one. You start with <b>20 HP</b>; at 0, you fall.</p>
+        </article>
+        <article class="rule nat nat20">
+          <p class="mono red">Natural 20</p>
+          <h3>The die shows 20</h3>
+          <p>A <b>natural</b> number is what the die itself shows, before any modifier.</p>
+          <ul>
+            <li><b>Always a success</b>, whatever the target number was.</li>
+            <li><b>Critical hit:</b> on a skill that deals damage, heals or shields, roll its dice twice and add them together. The flat bonus is added only once.</li>
+            <li>The headmaster may add something extra for a truly spectacular result.</li>
+          </ul>
+        </article>
+        <article class="rule nat nat1">
+          <p class="mono red">Natural 1</p>
+          <h3>The die shows 1</h3>
+          <p>Same idea in reverse: the number on the die, before any modifier.</p>
+          <ul>
+            <li><b>Always a failure</b>, however high your modifier is.</li>
+            <li><b>Fumble:</b> the headmaster may add a complication, such as the skill going wrong, a lost turn, or an unwanted attention.</li>
+            <li>A skill used on a natural 1 still goes on cooldown.</li>
+          </ul>
+        </article>
+      </div>
+      <p class="mono rules-note">Unsure about a ruling? The headmaster has the final word.</p>
     </div>
   </section>
 
@@ -1435,6 +1513,20 @@
   closeBtn.addEventListener('click', closeReg);
   if (location.hash === '#registry') openReg();
   window.addEventListener('hashchange', function () { if (location.hash === '#registry') openReg(); });
+})();
+</script>
+
+<script>
+// Dice System: opens and closes the rules page.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var sec = $('dice'), openBtn = $('open-dice'), closeBtn = $('dice-close');
+  function openDice() { sec.hidden = false; openBtn.setAttribute('aria-expanded', 'true'); sec.scrollIntoView({ block: 'start' }); }
+  function closeDice() { sec.hidden = true; openBtn.setAttribute('aria-expanded', 'false'); var g = $('gate'); if (g) g.scrollIntoView({ block: 'start' }); openBtn.focus({ preventScroll: true }); }
+  openBtn.addEventListener('click', openDice);
+  closeBtn.addEventListener('click', closeDice);
+  if (location.hash === '#dice') openDice();
+  window.addEventListener('hashchange', function () { if (location.hash === '#dice') openDice(); });
 })();
 </script>
 
