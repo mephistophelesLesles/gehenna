@@ -421,6 +421,11 @@
   .reg-sec p { margin: 0; text-transform: uppercase; overflow-wrap: anywhere; white-space: pre-wrap; } .reg-sec p.dim { color: var(--muted); }
   .reg-sec ul { margin: 0; padding-left: 1.2rem; text-transform: uppercase; } .reg-sec li::marker { color: var(--red-hi); }
   .reg-sealed { padding: 1rem 1.2rem; border: 1px dashed var(--red); }
+  .reg-cats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.4rem; } .reg-cats:empty { display: none; }
+  .reg-cat { background: none; border: 1px solid var(--line); border-radius: 0; padding: 0.35rem 0.8rem; color: var(--muted); font-family: var(--f-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+  .reg-cat:hover { color: var(--fg); } .reg-cat[aria-pressed="true"] { color: var(--fg); border-color: var(--red); background: color-mix(in srgb, var(--red) 22%, transparent); }
+  .reg-tag { color: var(--red-hi); }
+  .reg-reveal { display: grid; gap: 0.4rem; padding: 0.8rem 1rem; border: 1px dashed var(--line); } .reg-reveal .rv { display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; }
   @media (max-width: 56rem) { .reg-det { grid-template-columns: minmax(0, 1fr); } .reg-who { justify-items: start; text-align: left; } .reg-who .reg-img { max-width: 14rem; } }
   @media (max-width: 40rem) { .reg { grid-template-columns: minmax(0, 1fr); } .reg-nav { border-right: 0; border-bottom: 1px solid var(--line); gap: 1.2rem; } .reg-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; } }
 
@@ -666,6 +671,7 @@
         <div class="reg-main" id="reg-main" tabindex="-1" aria-live="polite">
           <div id="reg-list">
             <div class="reg-bar"><input type="search" id="reg-search" placeholder="Search name" aria-label="Search name"></div>
+            <div class="reg-cats" id="reg-cats" role="group" aria-label="Categories"></div>
             <div class="reg-grid" id="reg-grid"></div>
           </div>
           <div class="reg-det" id="reg-det" hidden></div>
@@ -1446,9 +1452,9 @@
 // player's key (optional) was allowed by the headmaster. The server decides what each person may see.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var sec = $('registry'), openBtn = $('open-registry'), closeBtn = $('reg-close'), list = $('reg-list'), grid = $('reg-grid'), det = $('reg-det'), main = $('reg-main'),
+  var sec = $('registry'), openBtn = $('open-registry'), closeBtn = $('reg-close'), list = $('reg-list'), grid = $('reg-grid'), cats = $('reg-cats'), det = $('reg-det'), main = $('reg-main'),
       q = $('reg-search'), keyIn = $('reg-key'), keyMsg = $('reg-keymsg'), tabs = document.querySelectorAll('.reg-tab');
-  var entries = [], type = 'player', key = '', loaded = false, SK = 'gehenna-reg-key', ORDER = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
+  var entries = [], type = 'player', cat = '', key = '', loaded = false, SK = 'gehenna-reg-key', ORDER = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function call(body) {
@@ -1464,11 +1470,21 @@
   function renderList() {
     grid.textContent = '';
     var s = q.value.trim().toLowerCase(), ofType = entries.filter(function (e) { return e.type === type; });
-    var rows = ofType.filter(function (e) { return !s || e.name.toLowerCase().indexOf(s) >= 0; });
+    var names = [], seen = {};
+    ofType.forEach(function (e) { if (e.category && !seen[e.category]) { seen[e.category] = 1; names.push(e.category); } });
+    names.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }); });
+    if (cat && !seen[cat]) cat = '';
+    cats.textContent = '';
+    if (names.length) [''].concat(names).forEach(function (n) {
+      var c = el('button', 'reg-cat', n || 'All'); c.type = 'button'; c.setAttribute('aria-pressed', String(n === cat));
+      c.onclick = function () { cat = n; renderList(); }; cats.appendChild(c);
+    });
+    var rows = ofType.filter(function (e) { return (!cat || e.category === cat) && (!s || e.name.toLowerCase().indexOf(s) >= 0); });
+    rows.sort(function (a, b) { return (a.category || '\uffff').localeCompare(b.category || '\uffff', undefined, { numeric: true, sensitivity: 'base' }) || a.name.localeCompare(b.name); });
     if (!rows.length) { grid.appendChild(el('p', 'mono', ofType.length ? 'No one by that name.' : 'No one has been registered here yet.')); return; }
     rows.forEach(function (e) {
       var b = el('button', 'reg-card'); b.type = 'button';
-      b.appendChild(thumb(e)); b.appendChild(el('b', null, e.name)); b.appendChild(el('small', null, e.undisclosed ? 'Undisclosed' : 'Details'));
+      b.appendChild(thumb(e)); b.appendChild(el('b', null, e.name)); if (e.category) b.appendChild(el('small', 'reg-tag', e.category)); b.appendChild(el('small', null, e.undisclosed ? 'Undisclosed' : 'Details'));
       b.onclick = function () { openEntry(e.id); };
       grid.appendChild(b);
     });
@@ -1502,12 +1518,14 @@
     list.hidden = true; det.hidden = false; det.textContent = '';
     var back = el('button', 'btn reg-back', 'Back to the list'); back.type = 'button'; back.onclick = function () { showList(); main.focus({ preventScroll: true }); };
     det.appendChild(back);
-    var who = el('div', 'reg-who'); who.appendChild(thumb(e)); who.appendChild(el('h3', null, e.name)); det.appendChild(who);
+    var who = el('div', 'reg-who'); who.appendChild(thumb(e)); who.appendChild(el('h3', null, e.name)); if (e.category) who.appendChild(el('small', 'mono reg-tag', e.category)); det.appendChild(who);
     var c1 = el('div', 'reg-col'), c2 = el('div', 'reg-col');
     if (e.undisclosed) {
       var sealed = el('div', 'reg-sealed'); sealed.appendChild(el('h4', null, 'Undisclosed')); sealed.appendChild(el('p', 'dim', 'The headmaster has sealed this entry.'));
+      if (e.teaser) sealed.appendChild(el('p', null, e.teaser));
       c1.appendChild(sealed);
-    } else {
+    }
+    {
       var sl = [];
       var nv = function (x) { return x === '' || x == null ? '—' : x; };
       if ('hp' in e) sl.push(el('p', null, 'HP: ' + nv(e.hp)));
@@ -1543,7 +1561,7 @@
 
   Array.prototype.forEach.call(tabs, function (t) {
     t.addEventListener('click', function () {
-      type = t.getAttribute('data-t');
+      type = t.getAttribute('data-t'); cat = '';
       Array.prototype.forEach.call(tabs, function (x) { x.setAttribute('aria-pressed', String(x === t)); });
       showList(); renderList();
     });
@@ -1864,10 +1882,10 @@
 
   /* ---------- Registry (Players / NPCs / Monsters) ---------- */
   var KINDS = { player: 'Player', npc: 'NPC', shadow: 'Monster' };
-  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.undisclosed && it.hideImage ? ' · Appearance hidden' : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
+  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.undisclosed && it.hideImage ? ' · Appearance hidden' : '') + (it.category ? ' · ' + it.category : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
   function newEntry(ch) {
     reg = reg.filter(function (x) { return !x.isNew; });
-    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, hideImage: false, revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
+    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, hideImage: false, category: '', teaser: '', revealFields: [], revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
     if (ch && ch.id) {
       var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; }, by = function (l) { return sk.filter(function (x) { return x.label === l; })[0]; };
       e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0; e.speed = ch.speed == null ? 30 : ch.speed; e.initiative = ch.initiative != null ? ch.initiative : ((ch.stats && ch.stats.DEX && ch.stats.DEX.mod) || 0); e.size = ch.size || 'Medium'; e.languages = ch.languages || '';
@@ -1926,7 +1944,7 @@
   }
   function regEditor(src) {
     var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }), st = h('p', { className: 'mono' }), crop = cropper(c);
-    c.stats = c.stats || {}; c.skills = c.skills || []; c.revealTo = c.revealTo || [];
+    c.stats = c.stats || {}; c.skills = c.skills || []; c.revealTo = c.revealTo || []; c.revealFields = c.revealFields || [];
     if (!Array.isArray(c.quirks)) c.quirks = c.quirk ? String(c.quirk).split('\n').slice(0, 3) : [];
     if (c.hp == null) c.hp = 20; if (c.armor == null) c.armor = 0; if (c.speed == null) c.speed = 30; if (c.initiative == null) c.initiative = 0;
     ['size', 'languages', 'weaknesses', 'resistances', 'level', 'saves', 'senses', 'immunities', 'attacks'].forEach(function (k) { if (c[k] == null) c[k] = ''; }); if (c.prof == null) c.prof = 2;
@@ -1938,11 +1956,23 @@
       var ts = h('select', {}, [['player', 'Player'], ['npc', 'NPC'], ['shadow', 'Monster / Shadow']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: c.type === o[0] }); }));
       ts.onchange = function () { c.type = ts.value; draw(); };
       box.appendChild(h('div', { className: 'g2' }, [h('label', { className: 'fl' }, [h('span', { text: 'Type' }), ts]), txt('Name', c, 'name')]));
+      var dl = h('datalist', { id: 'cat-list' }), seenC = {};
+      reg.forEach(function (x) { if (x.type === c.type && x.category && !seenC[x.category]) { seenC[x.category] = 1; dl.appendChild(h('option', { value: x.category })); } });
+      var ci = h('input', { value: c.category || '', maxLength: 40, placeholder: c.type === 'player' ? 'e.g. ver1.0' : c.type === 'npc' ? 'e.g. Gehenna’s Worker' : 'e.g. S Rank' }); ci.setAttribute('list', 'cat-list'); ci.oninput = function () { c.category = ci.value; };
+      box.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Category (type a new one to create it, or pick an existing one. Always public)' }), ci, dl]));
       box.appendChild(chk('Listed to players (untick to hide this entry completely)', c.listed !== false, function (v) { c.listed = v; }));
       box.appendChild(crop);
       if (c.type === 'npc') {
         box.appendChild(chk('Undisclosed: players only see the name and picture (all details sealed), until you allow them below', c.undisclosed, function (v) { c.undisclosed = v; draw(); }));
         if (c.undisclosed) {
+          var rv = h('div', { className: 'reg-reveal' }, [h('span', { className: 'mono red', text: 'Reveal a little while sealed (shown to everyone)' })]);
+          var ta = h('textarea', { value: c.teaser || '', rows: 2, maxLength: 300, placeholder: 'A short public note, e.g. “Keeper of the hourglass.”' }); ta.oninput = function () { c.teaser = ta.value; };
+          rv.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Public note' }), ta]));
+          var LB = { hp: 'HP', armor: 'Armor', speed: 'Speed', initiative: 'Initiative', size: 'Size', languages: 'Languages', level: 'Level / CR', prof: 'Proficiency', saves: 'Saving throws', senses: 'Senses', immunities: 'Immunities', attacks: 'Attacks', stats: 'Ability scores', basic: 'Basic skill', skills: 'Skills', ultimate: 'Ultimate', quirks: 'Quirks', weaknesses: 'Weaknesses', resistances: 'Resistances', karma: 'Karma', notes: 'Headmaster notes', risk: 'Risk level' };
+          var rf = h('div', { className: 'rv' });
+          Object.keys(LB).filter(has).forEach(function (k) { rf.appendChild(chk(LB[k], c.revealFields.indexOf(k) >= 0, function (v) { c.revealFields = c.revealFields.filter(function (x) { return x !== k; }); if (v) c.revealFields.push(k); })); });
+          rv.appendChild(rf); rv.appendChild(h('p', { className: 'mono', text: 'Ticked fields are shown to everyone. Fields that are sealed under “Stats” (HP, armor, ability scores, saves and so on) stay hidden until you disclose the stats.' }));
+          box.appendChild(rv);
           box.appendChild(chk('Hide the appearance too (the picture is sealed as well, and shows as “?”)', c.hideImage, function (v) { c.hideImage = v; }));
           var pk = h('div', { className: 'pick' }, [h('span', { className: 'mono red', text: 'Players allowed to see this NPC' })]);
           if (!chars.length) pk.appendChild(h('p', { className: 'mono', text: 'No accepted characters yet.' }));

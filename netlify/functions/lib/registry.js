@@ -42,6 +42,11 @@ function clean(e, old) {
     image: img,
     listed: e.listed === false ? false : true,
     undisclosed: type === 'npc' && e.undisclosed === true,
+    // A label the headmaster makes up (e.g. ver1.0, Gehenna's Worker, S Rank). Always public.
+    category: S(e.category, 40).trim(),
+    // For sealed NPCs only: a short public note, and the fields the headmaster chose to reveal.
+    teaser: S(e.teaser, 300).trim(),
+    revealFields: (Array.isArray(e.revealFields) ? e.revealFields : []).filter((k) => TEMPLATE[type].includes(k)).slice(0, 30),
     // Sealed NPCs show their picture by default. Only when this is true is the picture sealed too.
     hideImage: type === 'npc' && e.undisclosed === true && e.hideImage === true,
     revealTo: (Array.isArray(e.revealTo) ? e.revealTo : []).filter((x) => ID.test(String(x))).slice(0, 200).map(String),
@@ -83,13 +88,15 @@ function canOpen(e, viewerId) {
 // What a player is allowed to receive. Public images are served by URL; granted ones go inline.
 function view(e, viewerId, detail) {
   const o = canOpen(e, viewerId);
-  const out = { id: e.id, type: e.type, name: e.name, undisclosed: !o.open, image: '' };
+  const out = { id: e.id, type: e.type, name: e.name, category: e.category || '', undisclosed: !o.open, image: '' };
   // The picture is public unless the headmaster hid the appearance too. Everything else stays sealed.
   if (e.image && (o.open || !e.hideImage)) out.image = o.granted ? e.image : '/.netlify/functions/registry?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0);
-  if (!o.open) return out;
   if (!detail) return out;
-  TEMPLATE[e.type].forEach((k) => { out[k] = k === 'quirks' ? quirksOf(e) : (e[k] == null ? '' : e[k]); });
-  if (e.statsOpen === false) { GATED.forEach((k) => { delete out[k]; }); out.statsHidden = true; }
+  // A sealed entry only gets its public note and the fields the headmaster chose to reveal.
+  const keys = o.open ? TEMPLATE[e.type] : TEMPLATE[e.type].filter((k) => (e.revealFields || []).includes(k));
+  if (!o.open && e.teaser) out.teaser = e.teaser;
+  keys.forEach((k) => { out[k] = k === 'quirks' ? quirksOf(e) : (e[k] == null ? '' : e[k]); });
+  if (e.statsOpen === false) { GATED.forEach((k) => { delete out[k]; }); if (o.open) out.statsHidden = true; }
   return out;
 }
 
