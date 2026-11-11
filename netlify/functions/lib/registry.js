@@ -7,12 +7,15 @@ const STATS = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
 
 // THE TEMPLATE. This decides which sections each kind of entry has. Anything not listed here is never
 // sent to players, even if it was saved. Edit these lists to change a template.
-const COMMON = ['hp', 'armor', 'stats', 'basic', 'skills', 'ultimate', 'quirks'];
+const COMMON = ['hp', 'armor', 'speed', 'initiative', 'size', 'languages', 'level', 'prof', 'saves', 'senses', 'immunities', 'attacks', 'stats', 'basic', 'skills', 'ultimate', 'quirks', 'weaknesses', 'resistances'];
 const TEMPLATE = {
   player: COMMON.concat(['karma', 'notes', 'risk']),
   npc: COMMON.concat(['karma', 'notes', 'risk']),
   shadow: COMMON.concat(['risk']), // no karma, no headmaster notes
 };
+
+// The "stats" a headmaster can seal. When statsOpen is false these are never sent to players.
+const GATED = ['hp', 'armor', 'speed', 'initiative', 'stats', 'prof', 'saves', 'immunities', 'resistances', 'weaknesses', 'attacks'];
 
 const ID = /^[a-f0-9-]{8,40}$/i;
 const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
@@ -42,6 +45,20 @@ function clean(e, old) {
     revealTo: (Array.isArray(e.revealTo) ? e.revealTo : []).filter((x) => ID.test(String(x))).slice(0, 200).map(String),
     hp: N(e.hp, 0, 9999),
     armor: N(e.armor, 0, 999),
+    speed: N(e.speed == null ? 30 : e.speed, 0, 999),
+    initiative: N(e.initiative, -99, 99),
+    size: S(e.size, 40),
+    level: S(e.level, 40),
+    prof: N(e.prof, 0, 20),
+    saves: S(e.saves, 200),
+    senses: S(e.senses, 200),
+    immunities: S(e.immunities, 300),
+    attacks: S(e.attacks, 1500),
+    // Older entries have no value and stay disclosed; new entries start sealed.
+    statsOpen: typeof e.statsOpen === 'boolean' ? e.statsOpen : (old ? old.statsOpen !== false : false),
+    languages: S(e.languages, 200),
+    weaknesses: S(e.weaknesses, 300),
+    resistances: S(e.resistances, 300),
     stats: STATS.reduce((o, k) => { o[k] = N((e.stats || {})[k], 0, 99); return o; }, {}),
     basic: S(e.basic, 200),
     skills: (Array.isArray(e.skills) ? e.skills : []).slice(0, 12).map((x) => S(x, 200)).filter(Boolean),
@@ -69,6 +86,7 @@ function view(e, viewerId, detail) {
   if (e.image) out.image = o.granted ? e.image : '/.netlify/functions/registry?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0);
   if (!detail) return out;
   TEMPLATE[e.type].forEach((k) => { out[k] = k === 'quirks' ? quirksOf(e) : (e[k] == null ? '' : e[k]); });
+  if (e.statsOpen === false) { GATED.forEach((k) => { delete out[k]; }); out.statsHidden = true; }
   return out;
 }
 

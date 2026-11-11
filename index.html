@@ -390,6 +390,7 @@
   .rules-note { margin-top: 1rem; color: var(--muted); }
 
   /* Registry: Players / NPCs / Monsters */
+  .reg-col p { white-space: pre-line; }
   #registry { background: var(--bg); border-top: 1px solid var(--line); }
   #registry[hidden] { display: none !important; }
   .reg { position: relative; display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); border: 1px solid var(--line); background: var(--surface); min-height: 26rem; }
@@ -605,12 +606,23 @@
           <h3>Damage, healing and shields</h3>
           <p>Skills roll their own dice, written like <b>2d6+3</b>: roll two six-sided dice, add them up, then add 3. A skill can deal damage, heal, or give a shield. Your basic skill can be used freely. Other skills have a <b>cooldown</b> or limit, and your ultimate has a heavy one. You start with <b>20 HP</b>; at 0, you fall.</p>
         </article>
+        <article class="rule">
+          <p class="mono red">Fighting</p>
+          <h3>Armor, initiative and turns</h3>
+          <ul>
+            <li><b>Initiative:</b> when a fight starts, everyone rolls d20 + their initiative bonus (usually the DEX modifier). Highest goes first, then down the order.</li>
+            <li><b>Speed:</b> how many feet you can move on your turn.</li>
+            <li><b>Your turn:</b> move up to your speed and use one skill.</li>
+            <li><b>Armor:</b> to hit someone, roll d20 + your modifier. If the total meets or beats their Armor, it hits.</li>
+            <li><b>Damage</b> lowers HP. At 0 HP, you fall.</li>
+          </ul>
+        </article>
         <article class="rule nat nat20">
           <p class="mono red">Natural 20</p>
           <h3>The die shows 20</h3>
           <p>A <b>natural</b> number is what the die itself shows, before any modifier.</p>
           <ul>
-            <li><b>Always a success</b>, whatever the target number was.</li>
+            <li><b>Always a success</b>, whatever the target number or Armor was.</li>
             <li><b>Critical hit:</b> on a skill that deals damage, heals or shields, roll its dice twice and add them together. The flat bonus is added only once.</li>
             <li>The headmaster may add something extra for a truly spectacular result.</li>
           </ul>
@@ -620,7 +632,7 @@
           <h3>The die shows 1</h3>
           <p>Same idea in reverse: the number on the die, before any modifier.</p>
           <ul>
-            <li><b>Always a failure</b>, however high your modifier is.</li>
+            <li><b>Always a failure</b>, however high your modifier or the target’s Armor is.</li>
             <li><b>Fumble:</b> the headmaster may add a complication, such as the skill going wrong, a lost turn, or an unwanted attention.</li>
             <li>A skill used on a natural 1 still goes on cooldown.</li>
           </ul>
@@ -788,6 +800,7 @@
             <dl class="fixed">
               <div><dt>Health Points</dt><dd>20</dd></div>
               <div><dt>Armor</dt><dd>0</dd></div>
+              <div><dt>Initiative</dt><dd>Your DEX modifier</dd></div>
               <div><dt>Speed</dt><dd>30</dd></div>
               <div><dt>Size</dt><dd>Medium</dd></div>
               <div><dt>Language</dt><dd>Common</dd></div>
@@ -1496,10 +1509,15 @@
       c1.appendChild(sealed);
     } else {
       var sl = [];
-      if ('hp' in e) sl.push(el('p', null, 'HP: ' + e.hp));
-      if ('armor' in e) sl.push(el('p', null, 'Armor: ' + e.armor));
+      var nv = function (x) { return x === '' || x == null ? '—' : x; };
+      if ('hp' in e) sl.push(el('p', null, 'HP: ' + nv(e.hp)));
+      if ('armor' in e) sl.push(el('p', null, 'Armor: ' + nv(e.armor)));
+      if ('speed' in e) sl.push(el('p', null, 'Speed: ' + nv(e.speed) + (e.speed === '' ? '' : ' ft')));
+      if ('initiative' in e) sl.push(el('p', null, 'Initiative: ' + (e.initiative === '' ? '—' : (e.initiative >= 0 ? '+' : '') + e.initiative)));
+      if ('prof' in e) sl.push(el('p', null, 'Proficiency bonus: ' + (e.prof >= 0 ? '+' : '') + e.prof));
       if ('stats' in e) ORDER.forEach(function (k) { sl.push(el('p', null, k + ': ' + (e.stats && e.stats[k] != null ? e.stats[k] : '—'))); });
       if (sl.length) c1.appendChild(block('Stats', sl));
+      if (e.statsHidden) c1.appendChild(block('Stats', [el('p', 'dim', 'Sealed by the headmaster. Not disclosed yet.')]));
       if ('basic' in e) c1.appendChild(block('Basic skill', bullets([e.basic])));
       if ('skills' in e) c1.appendChild(block('Skills', bullets(e.skills)));
       if ('ultimate' in e) c1.appendChild(block('Ultimate', bullets([e.ultimate])));
@@ -1507,6 +1525,9 @@
       if ('karma' in e) c2.appendChild(block('Accumulated karma: ' + (e.karma || '—'), []));
       if ('notes' in e) c2.appendChild(block('Headmaster notes', [el('p', e.notes ? '' : 'dim', e.notes || '—')]));
       if ('risk' in e) c2.appendChild(block('Assessment', [el('p', e.risk ? '' : 'dim', e.risk ? '* Risk LVL ' + e.risk : '—')]));
+      [['size', 'Size'], ['level', 'Level / CR'], ['languages', 'Languages'], ['senses', 'Senses'], ['saves', 'Saving throws'], ['immunities', 'Immunities'], ['attacks', 'Attacks and actions'], ['weaknesses', 'Weaknesses'], ['resistances', 'Resistances / immunities']].forEach(function (f) {
+        if (f[0] in e) c2.appendChild(block(f[1], [el('p', e[f[0]] ? '' : 'dim', e[f[0]] || '—')]));
+      });
     }
     det.appendChild(c1); det.appendChild(c2);
     main.focus({ preventScroll: true });
@@ -1606,7 +1627,7 @@
 
   /* ---------- Character editor ---------- */
   function editor(src) {
-    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; c.armor = c.armor || 0;
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
     function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
@@ -1621,7 +1642,8 @@
       box.appendChild(h('div', { className: 'g2' }, [txt('Name', c, 'name'), txt('Gender', c, 'gender'), txt('Born - Died', c, 'dates'), txt('Karma', c, 'karma')]));
       ['persona', 'destiny', 'appearance'].forEach(function (k) { box.appendChild(txt(k[0].toUpperCase() + k.slice(1), c, k, 3)); });
       box.appendChild(h('h4', { text: 'Vitals and stats' }));
-      box.appendChild(h('div', { className: 'g6' }, [num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed')]));
+      box.appendChild(h('div', { className: 'g6' }, [num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed'), num('Initiative', c, 'initiative')]));
+      box.appendChild(h('div', { className: 'g2' }, [txt('Size', c, 'size'), txt('Languages', c, 'languages')]));
       box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { return h('div', { className: 'stbox' }, [h('b', { text: k }), num('Score', c.stats[k], 'score'), num('Modifier', c.stats[k], 'mod')]); })));
       box.appendChild(h('h4', { text: 'Core item' }));
       box.appendChild(txt('Item name', c, 'itemName')); box.appendChild(txt('Item description', c, 'itemDesc', 3));
@@ -1704,7 +1726,8 @@
     }
     w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
       h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
-    var rows = [['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
+    var init = c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0);
+    var rows = [['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
       .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), h('dd', { text: p[1] })]); });
     w.appendChild(h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, rows)]));
 
@@ -1712,7 +1735,11 @@
       var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
       b.onclick = function () { var x = d20(s.mod); b.disabled = true; res.textContent = ''; tumble(x, k + ' save', function () { res.textContent = x.txt; res.className = 'mono ' + x.cls; logRoll(k + ' save', x.txt, x.cls); b.disabled = false; }); };
       return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'modifier ' + (s.mod >= 0 ? '+' : '') + s.mod }), b, res]);
-    }))]));
+    })), (function () {
+      var ib = h('button', { type: 'button', className: 'btn', text: 'Roll initiative (' + sgn(init) + ')' }), ir = h('small', { className: 'mono' });
+      ib.onclick = function () { var x = d20(init); ib.disabled = true; ir.textContent = ''; tumble(x, 'Initiative', function () { ir.textContent = x.txt; ir.className = 'mono ' + x.cls; logRoll('Initiative', x.txt, x.cls); ib.disabled = false; }); };
+      return h('div', { className: 'ef' }, [ib, ir]);
+    })()]));
 
     var cnt = h('input', { type: 'number', value: 1, className: 'ni', 'aria-label': 'Number of dice' }), mod = h('input', { type: 'number', value: 0, className: 'ni', 'aria-label': 'Modifier' });
     var die = h('select', { 'aria-label': 'Die' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { return h('option', { text: 'd' + n, value: n, selected: n === 20 }); }));
@@ -1837,13 +1864,13 @@
 
   /* ---------- Registry (Players / NPCs / Monsters) ---------- */
   var KINDS = { player: 'Player', npc: 'NPC', shadow: 'Monster' };
-  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : ''); }
+  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
   function newEntry(ch) {
     reg = reg.filter(function (x) { return !x.isNew; });
-    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, revealTo: [], hp: 20, armor: 0, stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
+    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
     if (ch && ch.id) {
       var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; }, by = function (l) { return sk.filter(function (x) { return x.label === l; })[0]; };
-      e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0;
+      e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0; e.speed = ch.speed == null ? 30 : ch.speed; e.initiative = ch.initiative != null ? ch.initiative : ((ch.stats && ch.stats.DEX && ch.stats.DEX.mod) || 0); e.size = ch.size || 'Medium'; e.languages = ch.languages || '';
       e.quirks = String(ch.quirk || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 3);
       ST.forEach(function (k) { e.stats[k] = (ch.stats && ch.stats[k] && ch.stats[k].score) || 0; });
       e.basic = nm(by('Basic Skill')); e.skills = sk.filter(function (x) { return /^Skill/.test(x.label); }).map(nm).filter(Boolean); e.ultimate = nm(by('Ultimate'));
@@ -1901,7 +1928,8 @@
     var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }), st = h('p', { className: 'mono' }), crop = cropper(c);
     c.stats = c.stats || {}; c.skills = c.skills || []; c.revealTo = c.revealTo || [];
     if (!Array.isArray(c.quirks)) c.quirks = c.quirk ? String(c.quirk).split('\n').slice(0, 3) : [];
-    if (c.hp == null) c.hp = 20; if (c.armor == null) c.armor = 0;
+    if (c.hp == null) c.hp = 20; if (c.armor == null) c.armor = 0; if (c.speed == null) c.speed = 30; if (c.initiative == null) c.initiative = 0;
+    ['size', 'languages', 'weaknesses', 'resistances', 'level', 'saves', 'senses', 'immunities', 'attacks'].forEach(function (k) { if (c[k] == null) c[k] = ''; }); if (c.prof == null) c.prof = 2;
     function has(k) { return !regTpl || (regTpl[c.type] || []).indexOf(k) >= 0; }
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function chk(label, on, set) { var i = h('input', { type: 'checkbox', checked: !!on }); i.onchange = function () { set(i.checked); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); }
@@ -1925,11 +1953,22 @@
           box.appendChild(pk);
         }
       }
+      var dis = h('button', { type: 'button', className: 'btn' + (c.statsOpen !== false ? ' primary' : ''), text: c.statsOpen !== false ? 'Stats are disclosed. Click to seal them' : 'Stats are sealed. Click to disclose them' });
+      dis.onclick = function () { c.statsOpen = c.statsOpen === false; if (!c.isNew) save.click(); draw(); };
+      box.appendChild(dis);
+      box.appendChild(h('p', { className: 'mono', text: 'Sealed stats (HP, armor, speed, initiative, ability scores, saves, immunities, weaknesses, resistances, attacks) are never sent to players.' }));
       box.appendChild(h('h4', { text: 'Public details' }));
-      if (has('hp') || has('armor')) {
+      if (has('hp') || has('armor') || has('speed') || has('initiative')) {
         var hpi = function (label, k) { var i = h('input', { type: 'number', value: c[k] || 0, className: 'ni' }); i.oninput = function () { c[k] = Number(i.value) || 0; }; return h('label', { className: 'fl sm' }, [h('span', { text: label }), i]); };
-        box.appendChild(h('div', { className: 'g6' }, [has('hp') ? hpi('HP', 'hp') : null, has('armor') ? hpi('Armor', 'armor') : null]));
+        box.appendChild(h('div', { className: 'g6' }, [has('hp') ? hpi('HP', 'hp') : null, has('armor') ? hpi('Armor', 'armor') : null, has('speed') ? hpi('Speed (ft)', 'speed') : null, has('initiative') ? hpi('Initiative', 'initiative') : null]));
+        if (has('size') || has('languages')) box.appendChild(h('div', { className: 'g2' }, [has('size') ? txt('Size', c, 'size') : null, has('languages') ? txt('Languages', c, 'languages') : null]));
+        if (has('weaknesses') || has('resistances')) box.appendChild(h('div', { className: 'g2' }, [has('weaknesses') ? txt('Weaknesses', c, 'weaknesses') : null, has('resistances') ? txt('Resistances / immunities', c, 'resistances') : null]));
       }
+      var numi = function (label, k) { var i = h('input', { type: 'number', value: c[k] || 0, className: 'ni' }); i.oninput = function () { c[k] = Number(i.value) || 0; }; return h('label', { className: 'fl sm' }, [h('span', { text: label }), i]); };
+      if (has('level')) box.appendChild(h('div', { className: 'g2' }, [txt('Level / CR', c, 'level'), txt('Senses (darkvision, passive Perception)', c, 'senses')]));
+      if (has('prof')) box.appendChild(h('div', { className: 'g2' }, [numi('Proficiency bonus', 'prof'), txt('Saving throws', c, 'saves')]));
+      if (has('immunities')) box.appendChild(txt('Damage / condition immunities', c, 'immunities'));
+      if (has('attacks')) box.appendChild(txt('Attacks and actions (one per line, e.g. Claw +5, 1d8+3)', c, 'attacks', 4));
       if (has('stats')) {
         box.appendChild(h('div', { className: 'g6' }, ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'].map(function (k) {
           var i = h('input', { type: 'number', value: c.stats[k] || 0, className: 'ni' }); i.oninput = function () { c.stats[k] = Number(i.value) || 0; };

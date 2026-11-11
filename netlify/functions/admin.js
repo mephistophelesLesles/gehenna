@@ -38,7 +38,7 @@ function fromSheet(d) {
   const karma = val(5);
   return {
     name: val(0) || S(d.name, 100), gender: val(1), dates: val(2), persona: val(3), destiny: val(4), karma: /judged by the headmaster/i.test(karma) ? '' : karma,
-    appearance: val(6), itemName: item[0] || '', itemDesc: item.slice(1).join('\n').trim(), quirk: quirks(val(14)), hp: 20, armor: 0, speed: 30, items: [], stats,
+    appearance: val(6), itemName: item[0] || '', itemDesc: item.slice(1).join('\n').trim(), quirk: quirks(val(14)), hp: 20, armor: 0, speed: 30, initiative: stats.DEX.mod, size: (t.match(/\nSize: ([^\n]*)/) || [, 'Medium'])[1].trim().slice(0, 40) || 'Medium', languages: (t.match(/\nLanguage: ([^\n]*)/) || [, 'Common'])[1].trim().slice(0, 200) || 'Common', items: [], stats,
     skills: [skill('Basic Skill', 8), skill('Skill 1', 9), skill('Skill 2', 10), skill('Skill 3', 11), skill('Skill 4', 12), skill('Ultimate', 13)].filter(s => s.text || s.label === 'Basic Skill' || s.label === 'Ultimate' || /[12]$/.test(s.label)),
   };
 }
@@ -49,7 +49,7 @@ function clean(c, old) {
     id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '',
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
     itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
-    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: quirks(c.quirk), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), speed: N(c.speed, 0, 999),
+    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: quirks(c.quirk), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), initiative: N(c.initiative, -99, 99), size: S(c.size, 40), languages: S(c.languages, 200), speed: N(c.speed, 0, 999),
     stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; o[k] = { score: N(s.score, 0, 99), mod: N(s.mod, -99, 99) }; return o; }, {}),
     skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 12).map(s => ({
       label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100),
