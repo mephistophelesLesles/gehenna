@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;500;700&family=Hanken+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@700&text=%E7%85%89%E7%8D%84&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@700&text=%E7%85%89%E7%8D%84%E9%AD%82&display=swap">
 <style>
   /* Layout: ink-black page, red disc and vertical kanji in the hero, ledger-style sections, form on the left with a live sheet beside it. Single dark look by design. */
   :root {
@@ -326,6 +326,43 @@
   .roller input, .roller select { background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 0.5rem 0.6rem; font: inherit; border-radius: 0; } .roller .ni { width: 4.5rem; }
   .roller .btn, .stbox .btn { padding: 0.5rem 0.7rem; } .hist { display: grid; gap: 0.25rem; } .hist p { margin: 0; }
   .nat20 { color: #7dff9a !important; font-weight: 700; } .nat1 { color: var(--red-hi) !important; font-weight: 700; }
+  /* Dice stage */
+  .stage { position: fixed; inset: 0; z-index: 300; display: grid; place-content: center; justify-items: center; gap: 1.2rem; background: rgba(10, 8, 8, 0.8); cursor: pointer; padding: 1rem; }
+  .stage[hidden] { display: none; }
+  .dice-row { display: flex; flex-wrap: wrap; gap: 0.8rem; justify-content: center; max-width: 90vw; filter: drop-shadow(0 0 14px rgba(227, 21, 31, 0.65)); }
+  .die { --s: 5.5rem; width: var(--s); height: var(--s); display: grid; place-items: center; background: var(--red); color: #fff; font: 700 calc(var(--s) * 0.38)/1 var(--f-display); animation: tumble 0.9s ease-in-out infinite; }
+  .die.land { animation: land 0.45s ease-out; }
+  .die.d4 { clip-path: polygon(50% 0, 100% 100%, 0 100%); padding-top: 28%; }
+  .die.d6 { border-radius: 14%; } .die.d100 { border-radius: 50%; }
+  .die.d8 { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  .die.d10 { clip-path: polygon(50% 0, 100% 40%, 50% 100%, 0 40%); }
+  .die.d12 { clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+  .die.d20 { clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+  .cap { font-size: 1rem; color: var(--fg); text-align: center; }
+  @keyframes tumble { 0% { transform: rotate(0) translateY(0); } 25% { transform: rotate(180deg) translateY(-1.5rem) scale(1.1); } 50% { transform: rotate(360deg) translateY(0); } 75% { transform: rotate(540deg) translateY(-0.8rem); } 100% { transform: rotate(720deg) translateY(0); } }
+  @keyframes land { 0% { transform: scale(1.5); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .die { animation: none; } }
+  /* Soul profile: ink black, red sun, ledger panels */
+  .adm.player { background: radial-gradient(70% 45% at 50% 118%, color-mix(in srgb, var(--red) 38%, transparent), transparent 70%), radial-gradient(60% 40% at 65% 0%, #2b2323, var(--bg) 72%); }
+  .pv { gap: 1.6rem; }
+  .pv-hero { position: relative; overflow: hidden; display: flex; align-items: flex-end; gap: 1rem; min-height: 14rem; padding: 2rem 1.2rem 1.4rem 1.8rem; border: 1px solid var(--line); background: radial-gradient(60% 70% at 70% 30%, #2b2323, var(--bg) 75%); }
+  .pv-hero::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: linear-gradient(90deg, var(--red) 0 6px, transparent 6px 8px, var(--red) 8px 9px, transparent 9px); }
+  .pv-sun { position: absolute; right: -2rem; top: -2.5rem; width: clamp(10rem, 40vw, 17rem); aspect-ratio: 1; border-radius: 50%; background: var(--red); filter: url(#rough); }
+  .pv-kanji { position: absolute; right: 1.2rem; top: 1rem; font-family: var(--f-kanji); font-weight: 700; font-size: clamp(4rem, 16vw, 7rem); line-height: 1; color: var(--fg); text-shadow: 0.05em 0.05em 0 #000; user-select: none; }
+  .pv-id { position: relative; display: grid; gap: 0.4rem; min-width: 0; } .pv-id .mono { color: var(--fg); }
+  .pv .pv-id h2 { font-size: clamp(2.4rem, 9vw, 4.2rem); line-height: 0.98; letter-spacing: 0.03em; text-transform: uppercase; font-weight: 400; text-shadow: 0 0 30px rgba(0, 0, 0, 0.6); overflow-wrap: anywhere; }
+  .pv-top { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); } @media (min-width: 40rem) { .pv-top:has(.portrait) { grid-template-columns: auto minmax(0, 1fr); } }
+  .pv .portrait { border: 1px solid var(--red); box-shadow: 8px 8px 0 color-mix(in srgb, var(--red) 40%, transparent); }
+  .pv-dl { margin: 0; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); align-content: start; }
+  .pv-dl > div { background: var(--bg); padding: 0.7rem 1rem; display: grid; gap: 0.15rem; }
+  .pv-dl dt { font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-hi); }
+  .pv-dl dd, .pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .pv-sec { display: grid; gap: 0.8rem; padding: 1.1rem; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 82%, transparent); }
+  .pv-sec > .mono.red { padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
+  .pv .stbox { border-top: 2px solid var(--red); background: var(--surface); }
+  .pv-skill { display: grid; gap: 0.5rem; padding: 0.9rem 1rem 0.9rem 1.3rem; border: 1px solid var(--line); border-left: 4px solid var(--red); background: var(--surface); }
+  .pv-skill h3 { font-size: 1.5rem; line-height: 1.1; } .pv-skill > .mono:first-child { color: var(--red-hi); }
+  .pv-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); } .pv-item p { flex-basis: 100%; color: var(--muted); margin: 0; }
 </style>
 
 
@@ -835,9 +872,7 @@
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { btn.hidden = true; return; }
     var ctx = null, master = null, bus = null, timer = null, on = false;
-    // Hirajoshi-style scale on D (D E F A Bb), two octaves, in semitones above D4.
-    var NOTES = [0, 2, 3, 7, 8, 12, 14, 15, 19, 20];
-
+    
     function impulse(c, seconds) {
       var rate = c.sampleRate, len = Math.floor(rate * seconds);
       var buf = c.createBuffer(2, len, rate);
@@ -889,23 +924,61 @@
       ns.start(); wl.start();
     }
 
-    // Sparse bell-like plucks, one every few seconds.
-    function pluck() {
-      if (!on || !ctx) return;
-      var f = 293.66 * Math.pow(2, NOTES[Math.floor(Math.random() * NOTES.length)] / 12);
-      var t = ctx.currentTime + 0.05;
-      var vol = 0.10 + Math.random() * 0.08;
-      [[1, 1], [2.76, 0.28], [5.4, 0.1]].forEach(function (p) {
-        var o = ctx.createOscillator();
-        o.type = 'sine'; o.frequency.value = f * p[0];
-        var g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(vol * p[1], t + 0.008);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2 / p[0]);
-        o.connect(g); g.connect(bus);
-        o.start(t); o.stop(t + 3.4);
+    // Slow, eerie J-pop style loop, no vocals: minor 9th pad, koto-like melody, wordless ghost "ooh", soft heartbeat kick and hats.
+    var BEAT = 60 / 78, nextT = 0, mi = 3, barN = 0, hatBuf = null;
+    var SC = [74, 76, 77, 81, 82, 86, 88, 89, 93];                                      // Hirajoshi on D; the melody walks along it
+    var PROG = [[50, 57, 64, 65], [46, 57, 62, 65], [43, 58, 62, 69], [45, 55, 61, 70]]; // Dm9, Bbmaj7, Gm9, A7b9
+    var hz = function (m) { return 440 * Math.pow(2, (m - 69) / 12); };
+
+    function pad(ch, t, len) {
+      ch.forEach(function (m) {
+        [-7, 7].forEach(function (dt) {
+          var o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(m); o.detune.value = dt;
+          var f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
+          var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.012, t + 1.4); g.gain.linearRampToValueAtTime(0.0001, t + len + 1.2);
+          o.connect(f); f.connect(g); g.connect(bus); o.start(t); o.stop(t + len + 1.3);
+        });
       });
-      timer = setTimeout(pluck, 1800 + Math.random() * 3800);
+    }
+    function ghost(m, t, len) {
+      var o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(m);
+      var v = ctx.createOscillator(), vg = ctx.createGain(); v.frequency.value = 5.2; vg.gain.value = 7; v.connect(vg); vg.connect(o.detune);
+      var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.1, t + 1.8); g.gain.linearRampToValueAtTime(0.0001, t + len);
+      [[350, 0.8], [820, 0.5]].forEach(function (fm) { var f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fm[0]; f.Q.value = 6; var fg = ctx.createGain(); fg.gain.value = fm[1]; o.connect(f); f.connect(fg); fg.connect(g); });
+      g.connect(bus); o.start(t); v.start(t); o.stop(t + len + 0.1); v.stop(t + len + 0.1);
+    }
+    function koto(f, t, vol) {
+      [[1, 1, 'triangle'], [2, 0.25, 'sine'], [3.01, 0.08, 'sine']].forEach(function (p) {
+        var o = ctx.createOscillator(); o.type = p[2]; o.frequency.value = f * p[0];
+        var g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol * p[1], t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8 / p[0]);
+        o.connect(g); g.connect(bus); o.start(t); o.stop(t + 2);
+      });
+    }
+    function kick(t) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.16);
+      g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.45);
+    }
+    function hat(t, v) {
+      var s = ctx.createBufferSource(); s.buffer = hatBuf; var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7500;
+      var g = ctx.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+      s.connect(f); f.connect(g); g.connect(master); s.start(t);
+    }
+    // Schedules one bar of music, then asks for the next one shortly before it ends.
+    function bar() {
+      if (!on || !ctx) return;
+      if (!hatBuf) { hatBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.05), ctx.sampleRate); var nd = hatBuf.getChannelData(0); for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; }
+      var t = Math.max(nextT, ctx.currentTime + 0.1), ch = PROG[barN % 4], len = 4 * BEAT;
+      pad(ch, t, len);
+      if (barN % 2 === 0) ghost(ch[3] + 12, t, len * 2);
+      kick(t); kick(t + 2 * BEAT);
+      for (var k = 0; k < 8; k++) {
+        if (k % 2 === 1) hat(t + k * BEAT / 2, 0.02);
+        if (Math.random() < 0.6) { mi = Math.max(0, Math.min(SC.length - 1, mi + [-2, -1, 1, 2][Math.floor(Math.random() * 4)])); koto(hz(SC[mi]), t + k * BEAT / 2, 0.09 + Math.random() * 0.05); }
+      }
+      nextT = t + len; barN++;
+      timer = setTimeout(bar, Math.max(100, (nextT - ctx.currentTime - 0.6) * 1000));
     }
 
     btn.addEventListener('click', function () {
@@ -918,7 +991,7 @@
         btn.classList.add('on');
         label.textContent = 'Sound on';
         clearTimeout(timer);
-        timer = setTimeout(pluck, 600);
+        nextT = 0; timer = setTimeout(bar, 300);
       } else {
         on = false;
         clearTimeout(timer);
@@ -1017,7 +1090,7 @@
   function show(m) {
     login.hidden = m !== 'login'; grid.hidden = m !== 'admin'; pv.hidden = m !== 'player';
     $('adm-out').hidden = m === 'login'; $('adm-refresh').hidden = m !== 'admin';
-    $('adm-title').textContent = m === 'player' ? 'Your soul' : m === 'admin' ? 'Headmaster' : 'Login';
+    adm.classList.toggle('player', m === 'player'); $('adm-title').textContent = m === 'player' ? 'Your soul' : m === 'admin' ? 'Headmaster' : 'Login';
   }
   function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) show('admin'); else if (pchar) show('player'); else { show('login'); $('adm-email').focus(); } }
   function closeAdm() { adm.hidden = true; document.body.style.overflow = ''; }
@@ -1049,7 +1122,7 @@
 
   /* ---------- Character editor ---------- */
   function editor(src) {
-    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' });
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || [];
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
     function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
@@ -1068,6 +1141,15 @@
       box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { return h('div', { className: 'stbox' }, [h('b', { text: k }), num('Score', c.stats[k], 'score'), num('Modifier', c.stats[k], 'mod')]); })));
       box.appendChild(h('h4', { text: 'Core item' }));
       box.appendChild(txt('Item name', c, 'itemName')); box.appendChild(txt('Item description', c, 'itemDesc', 3));
+      box.appendChild(h('h4', { text: 'Inventory (items gained in the story)' }));
+      c.items.forEach(function (it, j) {
+        var nm = h('input', { value: it.name || '', placeholder: 'Item name' }); nm.oninput = function () { it.name = nm.value; };
+        var ds = h('input', { value: it.desc || '', placeholder: 'Description' }); ds.oninput = function () { it.desc = ds.value; };
+        var x = h('button', { type: 'button', className: 'link', text: 'Remove' }); x.onclick = function () { c.items.splice(j, 1); draw(); };
+        box.appendChild(h('div', { className: 'ef' }, [nm, 'x', ni(it, 'qty'), ds, x]));
+      });
+      var addi = h('button', { type: 'button', className: 'btn', text: '+ Add item' }); addi.onclick = function () { c.items.push({ name: '', qty: 1, desc: '' }); draw(); };
+      box.appendChild(addi);
       box.appendChild(h('h4', { text: 'Skills and dice' }));
       c.skills.forEach(function (sk) {
         var fx = h('div', { className: 'fxs' });
@@ -1102,46 +1184,68 @@
 
   function dice(n, d) { var r = []; for (var i = 0; i < n; i++) r.push(1 + Math.floor(Math.random() * Math.max(1, d))); return r; }
   function sgn(m) { return m ? (m > 0 ? ' + ' : ' - ') + Math.abs(m) : ''; }
-  function plain(n, d, m) { var r = dice(n, d), t = m; r.forEach(function (v) { t += v; }); return '[' + r.join(', ') + ']' + sgn(m) + ' = ' + t; }
+  function plain(n, d, m) { var r = dice(n, d), t = m; r.forEach(function (v) { t += v; }); return { vals: r, d: d, cls: '', txt: '[' + r.join(', ') + ']' + sgn(m) + ' = ' + t }; }
+  var stage = null, stT = null;
+  // Full-screen tumbling dice that settle on the rolled numbers.
+  function tumble(r, label, cb) {
+    if (!stage) { stage = h('div', { className: 'stage', hidden: true }); stage.onclick = function () { stage.hidden = true; }; document.body.appendChild(stage); }
+    clearTimeout(stT); stage.textContent = ''; stage.hidden = false;
+    var row = h('div', { className: 'dice-row' }), cap = h('p', { className: 'mono cap', text: label }), d = Math.max(1, r.d);
+    var els = r.vals.map(function () { var e = h('div', { className: 'die d' + d, text: '?' }); if (r.vals.length > 6) e.style.setProperty('--s', '3.4rem'); row.appendChild(e); return e; });
+    stage.appendChild(row); stage.appendChild(cap);
+    var n = 0, iv = setInterval(function () {
+      if (++n < 13) { els.forEach(function (e) { e.textContent = 1 + Math.floor(Math.random() * d); }); return; }
+      clearInterval(iv);
+      els.forEach(function (e, i) { e.textContent = r.vals[i]; e.classList.add('land'); });
+      cap.textContent = label + ': ' + r.txt; cap.className = 'mono cap ' + (r.cls || ''); cb();
+      stT = setTimeout(function () { stage.hidden = true; }, 1800);
+    }, 75);
+  }
 
   /* ---------- Player profile (read-only, with dice roller) ---------- */
+  function sec(t, kids) { return h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: t })].concat(kids)); }
   function profile(c) {
     pv.textContent = '';
-    var w = h('div', { className: 'pv' }, [h('h2', { text: c.name }), c.image && h('img', { src: c.image, className: 'portrait', alt: '' })]);
-    [['Gender', c.gender], ['Born - Died', c.dates], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance]].forEach(function (p) { if (p[1]) w.appendChild(h('p', {}, [h('b', { text: p[0] + ': ' }), p[1]])); });
-    w.appendChild(h('p', {}, [h('b', { text: 'HP: ' }), String(c.hp), '   ', h('b', { text: 'Speed: ' }), String(c.speed)]));
+    var w = h('div', { className: 'pv' });
     var hist = h('div', { className: 'hist' });
     var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
     function logRoll(label, line, cls) { hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
     function d20(m) {
       var a = dice(1, 20)[0], b = adv.value === 'n' ? null : dice(1, 20)[0], pk = b === null ? a : (adv.value === 'a' ? Math.max(a, b) : Math.min(a, b));
-      return { txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
+      return { vals: b === null ? [a] : [a, b], d: 20, txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
     }
-    w.appendChild(h('h4', { text: 'Stats and saving throws' }));
-    w.appendChild(h('div', { className: 'g6' }, ST.map(function (k) {
+    w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
+      h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
+    var rows = [['Gender', c.gender], ['Health / Speed', c.hp + ' / ' + c.speed], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirk', c.quirk]]
+      .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), h('dd', { text: p[1] })]); });
+    w.appendChild(h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, rows)]));
+
+    w.appendChild(sec('Stats and saving throws', [h('div', { className: 'g6' }, ST.map(function (k) {
       var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
-      b.onclick = function () { var x = d20(s.mod); res.textContent = x.txt; res.className = 'mono ' + x.cls; logRoll(k + ' save', x.txt, x.cls); };
+      b.onclick = function () { var x = d20(s.mod); b.disabled = true; res.textContent = ''; tumble(x, k + ' save', function () { res.textContent = x.txt; res.className = 'mono ' + x.cls; logRoll(k + ' save', x.txt, x.cls); b.disabled = false; }); };
       return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'modifier ' + (s.mod >= 0 ? '+' : '') + s.mod }), b, res]);
-    })));
+    }))]));
+
     var cnt = h('input', { type: 'number', value: 1, className: 'ni', 'aria-label': 'Number of dice' }), mod = h('input', { type: 'number', value: 0, className: 'ni', 'aria-label': 'Modifier' });
     var die = h('select', { 'aria-label': 'Die' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { return h('option', { text: 'd' + n, value: n, selected: n === 20 }); }));
-    function free(n, d, m) { var lab = n + 'd' + d + (m ? (m > 0 ? '+' : '') + m : ''); if (n === 1 && d === 20) { var x = d20(m); logRoll(lab, x.txt, x.cls); } else logRoll(lab, plain(n, d, m)); }
+    function free(n, d, m) { var lab = n + 'd' + d + (m ? (m > 0 ? '+' : '') + m : ''), x = (n === 1 && d === 20) ? d20(m) : plain(n, d, m); tumble(x, lab, function () { logRoll(lab, x.txt, x.cls); }); }
     var go = h('button', { type: 'button', className: 'btn primary', text: 'Roll' });
     go.onclick = function () { free(Math.max(1, Math.min(20, Math.floor(+cnt.value) || 1)), +die.value, Math.floor(+mod.value) || 0); };
     var quick = h('div', { className: 'ef' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { var q = h('button', { type: 'button', className: 'btn', text: 'd' + n }); q.onclick = function () { free(1, n, 0); }; return q; }));
-    w.appendChild(h('div', { className: 'roller' }, [h('h4', { text: 'Dice' }), quick,
-      h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, go]), h('div', { className: 'ef' }, [h('small', { text: 'd20 and saving throws:' }), adv]), hist]));
-    if (c.itemName || c.itemDesc) w.appendChild(h('p', {}, [h('b', { text: 'Core item: ' }), c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')]));
-    c.skills.forEach(function (sk) {
-      var out = h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }), h('b', { text: sk.name }), sk.cooldown && h('small', { text: '  (' + sk.cooldown + ')' }), h('p', { text: sk.text })]);
+    w.appendChild(sec('Dice', [quick, h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, go]), h('div', { className: 'ef' }, [h('small', { text: 'd20 and saving throws:' }), adv]), hist]));
+
+    w.appendChild(sec('Skills', c.skills.map(function (sk) {
+      var out = h('div', { className: 'pv-skill' }, [h('p', { className: 'mono', text: sk.label }), h('h3', { text: sk.name || sk.label }), sk.cooldown && h('small', { className: 'mono', text: sk.cooldown }), h('p', { className: 'pre', text: sk.text })]);
       sk.effects.forEach(function (e) {
         var res = h('span', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + e.type + ' ' + rollText(e) });
-        b.onclick = function () { var x = plain(e.n, e.d, e.flat); res.textContent = ' ' + x; logRoll((sk.name || sk.label) + ' ' + e.type + ' ' + rollText(e), x); };
+        b.onclick = function () { var x = plain(e.n, e.d, e.flat), lab = (sk.name || sk.label) + ' ' + e.type + ' ' + rollText(e); b.disabled = true; res.textContent = ''; tumble(x, lab, function () { res.textContent = ' ' + x.txt; logRoll(lab, x.txt); b.disabled = false; }); };
         out.appendChild(h('div', { className: 'ef' }, [b, res, e.note && h('small', { text: e.note })]));
       });
-      w.appendChild(out);
-    });
-    if (c.quirk) w.appendChild(h('p', {}, [h('b', { text: 'Quirk: ' }), c.quirk]));
+      return out;
+    })));
+
+    var inv = c.items || [];
+    w.appendChild(sec('Inventory', inv.length ? inv.map(function (it) { return h('div', { className: 'pv-item' }, [h('b', { text: it.name }), h('span', { className: 'mono', text: 'x' + it.qty }), it.desc && h('p', { text: it.desc })]); }) : [h('p', { className: 'adm-empty', text: 'Nothing here yet. The headmaster adds items as you earn them.' })]));
     pv.appendChild(w);
   }
 
