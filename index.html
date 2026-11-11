@@ -305,6 +305,23 @@
   .adm-main pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--f-mono); font-size: 0.85rem; line-height: 1.55; }
   .adm-empty { color: var(--muted); padding: 1rem 0; }
   @media (max-width: 700px) { .adm-grid { grid-template-columns: 1fr; } }
+  /* Image upload, character editor, player profile */
+  .img-up { display: grid; gap: 0.5rem; margin-top: 0.8rem; justify-items: start; }
+  .img-up input[type=file] { color: var(--muted); max-width: 100%; }
+  #img-prev, .portrait { max-width: min(100%, 18rem); max-height: 22rem; border: 1px solid var(--line); object-fit: contain; }
+  .adm-login .sep { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 1rem 0 0; }
+  .tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; } .tabs .btn { padding: 0.55rem 0.8rem; } .tabs .btn[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+  .btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .ed { display: grid; gap: 0.9rem; } .ed h4 { margin-top: 0.8rem; border-top: 1px solid var(--line); padding-top: 0.9rem; font-size: 1.3rem; }
+  .fl { display: grid; gap: 0.25rem; min-width: 0; } .fl span { font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .ed input, .ed textarea, .ed select { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 0.5rem 0.6rem; font: inherit; border-radius: 0; }
+  .g2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 0.8rem; }
+  .g6 { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 0.6rem; }
+  .stbox { display: grid; gap: 0.4rem; border: 1px solid var(--line); padding: 0.6rem; background: var(--bg); } .stbox .big { font-family: var(--f-display); font-size: 1.8rem; }
+  .keybox { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.7rem; border: 1px solid var(--red); } .keybox code { font-family: var(--f-mono); font-size: 1rem; letter-spacing: 0.08em; }
+  .skill { display: grid; gap: 0.6rem; padding: 0.9rem; border: 1px solid var(--line); background: var(--surface-2); }
+  .fxs { display: grid; gap: 0.5rem; } .ef { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; } .ef select { width: auto; } .ef .ni { width: 4.5rem; } .ef > input:not(.ni) { flex: 1 1 10rem; width: auto; }
+  .pl-view { max-width: 44rem; margin: 0 auto; padding: 1rem max(16px, env(safe-area-inset-left, 0px)) 4rem; } .pv { display: grid; gap: 0.9rem; } .pv h2 { font-size: 2.2rem; }
 </style>
 
 
@@ -434,6 +451,7 @@
             <div class="field">
               <div class="label-row"><label for="f-appearance">Appearance Description</label></div>
               <textarea id="f-appearance" data-key="appearance" rows="4" placeholder="What your character looks like."></textarea>
+              <div class="img-up"><label class="mono" for="f-image">Appearance image (optional)</label><input type="file" id="f-image" accept="image/*"><img id="img-prev" alt="Preview of your character image" hidden><button type="button" class="link" id="img-clear" hidden>Remove image</button><p class="send-status" id="img-msg" aria-live="polite"></p></div>
             </div>
           </div>
 
@@ -583,12 +601,13 @@
   <input name="bot-field">
   <input name="name">
   <textarea name="sheet"></textarea>
+  <textarea name="image"></textarea>
 </form>
 
 
 <div class="adm" id="adm" hidden role="dialog" aria-modal="true" aria-label="Headmaster admin">
   <div class="adm-bar">
-    <h2>Headmaster</h2>
+    <h2 id="adm-title">Headmaster</h2>
     <div class="btns">
       <button type="button" class="btn" id="adm-refresh" hidden>Refresh</button>
       <button type="button" class="btn" id="adm-out" hidden>Log out</button>
@@ -601,7 +620,13 @@
     <input type="password" id="adm-pass" placeholder="Password" autocomplete="current-password">
     <button type="button" class="btn primary" id="adm-go">Log in</button>
     <p id="adm-msg" aria-live="polite"></p>
+    <hr class="sep">
+    <p class="mono red">Player login</p>
+    <input type="text" id="pl-key" placeholder="Your key (GEH-XXXX-XXXX-XXXX)" autocomplete="off" autocapitalize="characters">
+    <button type="button" class="btn primary" id="pl-go">Open my profile</button>
+    <p id="pl-msg" aria-live="polite"></p>
   </div>
+  <div class="pl-view" id="pl-view" hidden></div>
   <div class="adm-grid" id="adm-grid" hidden>
     <div class="adm-side" id="adm-side"></div>
     <div class="adm-main" id="adm-main"></div>
@@ -789,6 +814,7 @@
       armed = false;
       clearBtn.textContent = 'Clear sheet';
       fields.forEach(function (f) { f.value = ''; });
+      if (window.gehClearImg) window.gehClearImg();
       ORDER.forEach(function (k) { stats[k] = 0; });
       copyStatus.textContent = '';
       refresh();
@@ -911,6 +937,37 @@
 
 
 <script>
+// Appearance image: shrunk in the browser to a small JPEG so it travels with the sheet.
+(function () {
+  var f = document.getElementById('f-image'), prev = document.getElementById('img-prev'), clr = document.getElementById('img-clear'), msg = document.getElementById('img-msg'), K = 'gehenna-img';
+  function set(d) {
+    window.gehImg = d || ''; prev.hidden = !d; clr.hidden = !d; if (d) prev.src = d; else f.value = '';
+    try { if (d) localStorage.setItem(K, d); else localStorage.removeItem(K); } catch (e) {}
+  }
+  window.gehClearImg = function () { set(''); msg.textContent = ''; };
+  f.addEventListener('change', function () {
+    var file = f.files && f.files[0]; if (!file) return;
+    if (!/^image\//.test(file.type)) { msg.textContent = 'That is not an image.'; return; }
+    var r = new FileReader();
+    r.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        var m = 640, k = Math.min(1, m / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+        set(c.toDataURL('image/jpeg', 0.8)); msg.textContent = 'Image added. It is sent with your sheet.';
+      };
+      im.onerror = function () { msg.textContent = 'Could not read that image.'; };
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+  clr.addEventListener('click', window.gehClearImg);
+  try { var d = localStorage.getItem(K); if (d) set(d); } catch (e) {}
+})();
+</script>
+
+<script>
 // Send the finished sheet to Netlify Forms.
 (function () {
   var btn = document.getElementById('send'), status = document.getElementById('sendstatus');
@@ -921,7 +978,7 @@
     if (!name) { status.textContent = 'Give your character a name before sending.'; return; }
     status.textContent = 'Sending…';
     btn.disabled = true;
-    var body = new URLSearchParams({ 'form-name': 'gehenna-sheet', 'bot-field': '', name: name, sheet: sheet }).toString();
+    var body = new URLSearchParams({ 'form-name': 'gehenna-sheet', 'bot-field': '', name: name, sheet: sheet, image: window.gehImg || '' }).toString();
     fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
       .then(function (r) {
         if (!r.ok) throw new Error('bad');
@@ -934,86 +991,189 @@
 </script>
 
 <script>
-// Headmaster login: talks to the Netlify function, which checks the password and reads the form submissions.
+// Headmaster + player login. Talks to /.netlify/functions/admin (headmaster) and /player (key login).
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg');
-  var creds = null, items = [], current = null, armed = false, armTimer = null;
+  var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
+  var creds = null, inbox = [], chars = [], tab = 'inbox', cur = null, pchar = null;
+  var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
 
+  function h(t, a, kids) {
+    var e = document.createElement(t);
+    for (var k in (a || {})) { if (k === 'text') e.textContent = a[k]; else if (k in e) e[k] = a[k]; else e.setAttribute(k, a[k]); }
+    (kids || []).forEach(function (c) { if (c != null && c !== false) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function two(btn, label, fn) { var t; btn.onclick = function () { if (btn.dataset.a) { clearTimeout(t); delete btn.dataset.a; btn.textContent = label; fn(); return; } btn.dataset.a = '1'; btn.textContent = 'Click again to confirm'; t = setTimeout(function () { delete btn.dataset.a; btn.textContent = label; }, 4000); }; }
+  function copy(btn, text) { btn.onclick = function () { try { navigator.clipboard.writeText(text).then(function () { btn.textContent = 'Copied'; }, function () { btn.textContent = 'Copy blocked'; }); } catch (e) { btn.textContent = 'Copy blocked'; } }; }
   function api(body) {
     return fetch('/.netlify/functions/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, creds, body)) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
   }
-  function show(loggedIn) {
-    login.hidden = loggedIn; grid.hidden = !loggedIn;
-    $('adm-out').hidden = !loggedIn; $('adm-refresh').hidden = !loggedIn;
+  function show(m) {
+    login.hidden = m !== 'login'; grid.hidden = m !== 'admin'; pv.hidden = m !== 'player';
+    $('adm-out').hidden = m === 'login'; $('adm-refresh').hidden = m !== 'admin';
+    $('adm-title').textContent = m === 'player' ? 'Your soul' : 'Headmaster';
   }
-  function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) load(); else { show(false); $('adm-email').focus(); } }
+  function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) show('admin'); else if (pchar) show('player'); else { show('login'); $('adm-email').focus(); } }
   function closeAdm() { adm.hidden = true; document.body.style.overflow = ''; }
+  var rollText = function (e) { return e.n + 'd' + e.d + (e.flat ? (e.flat > 0 ? '+' : '') + e.flat : ''); };
 
-  function renderMain() {
-    main.textContent = '';
-    var it = items.filter(function (x) { return x.id === current; })[0];
-    if (!it) { var e = document.createElement('p'); e.className = 'adm-empty'; e.textContent = items.length ? 'Pick a sheet on the left.' : 'No sheets yet.'; main.appendChild(e); return; }
-    var h = document.createElement('h3'); h.textContent = it.name;
-    var t = document.createElement('p'); t.className = 'mono'; t.textContent = new Date(it.at).toLocaleString();
-    var pre = document.createElement('pre'); pre.textContent = it.sheet;
-    var row = document.createElement('div'); row.className = 'btns'; row.style.display = 'flex'; row.style.gap = '0.5rem';
-    var cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn'; cp.textContent = 'Copy sheet';
-    cp.onclick = function () { try { navigator.clipboard.writeText(it.sheet).then(function () { cp.textContent = 'Copied'; }, function () { cp.textContent = 'Copy blocked'; }); } catch (e) { cp.textContent = 'Copy blocked'; } };
-    var del = document.createElement('button'); del.type = 'button'; del.className = 'btn'; del.textContent = 'Delete';
-    del.onclick = function () {
-      if (!armed) { armed = true; del.textContent = 'Click again to delete'; armTimer = setTimeout(function () { armed = false; del.textContent = 'Delete'; }, 4000); return; }
-      clearTimeout(armTimer); armed = false; del.disabled = true; del.textContent = 'Deleting…';
-      api({ action: 'delete', id: it.id }).then(function (r) {
-        if (!r.ok) { del.disabled = false; del.textContent = (r.j && r.j.error) || 'Delete failed'; return; }
-        items = items.filter(function (x) { return x.id !== it.id; });
-        current = items.length ? items[0].id : null; renderSide(); renderMain();
+  /* ---------- Inbox ---------- */
+  function inboxView(it) {
+    var st = h('p', { className: 'mono' });
+    var acc = h('button', { type: 'button', className: 'btn primary', text: 'Accept and save character' });
+    acc.onclick = function () {
+      acc.disabled = true; st.textContent = 'Saving…';
+      api({ action: 'accept', id: it.id }).then(function (r) {
+        if (!r.ok) { acc.disabled = false; st.textContent = (r.j && r.j.error) || 'Accept failed'; return; }
+        inbox = inbox.filter(function (x) { return x.id !== it.id; }); chars.push(r.j.char); tab = 'chars'; cur = r.j.char.id; render();
       });
     };
-    row.appendChild(cp); row.appendChild(del);
-    main.appendChild(h); main.appendChild(t); main.appendChild(pre); main.appendChild(row);
+    var cp = h('button', { type: 'button', className: 'btn', text: 'Copy sheet' }); copy(cp, it.sheet);
+    var del = h('button', { type: 'button', className: 'btn', text: 'Delete' });
+    two(del, 'Delete', function () {
+      api({ action: 'delete', id: it.id }).then(function (r) {
+        if (!r.ok) { st.textContent = (r.j && r.j.error) || 'Delete failed'; return; }
+        inbox = inbox.filter(function (x) { return x.id !== it.id; }); cur = null; render();
+      });
+    });
+    return [h('h3', { text: it.name }), h('p', { className: 'mono', text: new Date(it.at).toLocaleString() }),
+      it.image && h('img', { src: it.image, className: 'portrait', alt: '' }), h('pre', { text: it.sheet }),
+      h('div', { className: 'btns' }, [acc, cp, del]), st];
   }
+
+  /* ---------- Character editor ---------- */
+  function editor(src) {
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' });
+    function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
+    function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
+    function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
+    function draw() {
+      box.textContent = '';
+      var kc = h('button', { type: 'button', className: 'btn', text: 'Copy key' }); copy(kc, c.key);
+      var nk = h('button', { type: 'button', className: 'btn', text: 'New key' });
+      two(nk, 'New key', function () { api({ action: 'newkey', id: c.id }).then(function (r) { if (r.ok) { c.key = r.j.char.key; src.key = c.key; draw(); } }); });
+      box.appendChild(h('div', { className: 'keybox' }, [h('span', { className: 'mono red', text: 'Login key' }), h('code', { text: c.key }), kc, nk]));
+      if (c.image) { var rm = h('button', { type: 'button', className: 'link', text: 'Remove image' }); rm.onclick = function () { c.image = ''; draw(); }; box.appendChild(h('div', {}, [h('img', { src: c.image, className: 'portrait', alt: '' }), rm])); }
+      box.appendChild(h('h4', { text: 'Details' }));
+      box.appendChild(h('div', { className: 'g2' }, [txt('Name', c, 'name'), txt('Gender', c, 'gender'), txt('Born - Died', c, 'dates'), txt('Karma', c, 'karma')]));
+      ['persona', 'destiny', 'appearance'].forEach(function (k) { box.appendChild(txt(k[0].toUpperCase() + k.slice(1), c, k, 3)); });
+      box.appendChild(h('h4', { text: 'Vitals and stats' }));
+      box.appendChild(h('div', { className: 'g2' }, [num('Health points', c, 'hp'), num('Speed', c, 'speed')]));
+      box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { return h('div', { className: 'stbox' }, [h('b', { text: k }), num('Score', c.stats[k], 'score'), num('Modifier', c.stats[k], 'mod')]); })));
+      box.appendChild(h('h4', { text: 'Core item' }));
+      box.appendChild(txt('Item name', c, 'itemName')); box.appendChild(txt('Item description', c, 'itemDesc', 3));
+      box.appendChild(h('h4', { text: 'Skills and dice' }));
+      c.skills.forEach(function (sk) {
+        var fx = h('div', { className: 'fxs' });
+        sk.effects.forEach(function (e, j) {
+          var sel = h('select', {}, TYPES.map(function (t) { return h('option', { text: t, value: t, selected: t === e.type }); })); sel.onchange = function () { e.type = sel.value; };
+          var note = h('input', { value: e.note || '', placeholder: 'Note (e.g. 1 ally, 2 turns)' }); note.oninput = function () { e.note = note.value; };
+          var x = h('button', { type: 'button', className: 'link', text: 'Remove' }); x.onclick = function () { sk.effects.splice(j, 1); draw(); };
+          fx.appendChild(h('div', { className: 'ef' }, [sel, ni(e, 'n'), 'd', ni(e, 'd'), '+', ni(e, 'flat'), note, x]));
+        });
+        var add = h('button', { type: 'button', className: 'btn', text: '+ Add effect (damage, heal, shield…)' });
+        add.onclick = function () { sk.effects.push({ type: 'Damage', n: 1, d: 6, flat: 0, note: '' }); draw(); };
+        box.appendChild(h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }),
+          h('div', { className: 'g2' }, [txt('Skill name', sk, 'name'), txt('Cooldown / limit', sk, 'cooldown')]), txt('Description', sk, 'text', 3), fx, add]));
+      });
+      box.appendChild(txt('Quirk', c, 'quirk', 2));
+      var st = h('p', { className: 'mono' });
+      var save = h('button', { type: 'button', className: 'btn primary', text: 'Save changes' });
+      save.onclick = function () {
+        save.disabled = true; st.textContent = 'Saving…';
+        api({ action: 'save', char: c }).then(function (r) {
+          save.disabled = false;
+          if (!r.ok) { st.textContent = (r.j && r.j.error) || 'Save failed'; return; }
+          st.textContent = 'Saved.'; chars = chars.map(function (x) { return x.id === c.id ? r.j.char : x; }); src = r.j.char; renderSide();
+        });
+      };
+      var del = h('button', { type: 'button', className: 'btn', text: 'Delete character' });
+      two(del, 'Delete character', function () { api({ action: 'delchar', id: c.id }).then(function (r) { if (r.ok) { chars = chars.filter(function (x) { return x.id !== c.id; }); cur = null; render(); } else st.textContent = 'Delete failed'; }); });
+      box.appendChild(h('div', { className: 'btns' }, [save, del])); box.appendChild(st);
+    }
+    draw(); return [box];
+  }
+
+  /* ---------- Player profile (read-only, with dice roller) ---------- */
+  function profile(c) {
+    pv.textContent = '';
+    var w = h('div', { className: 'pv' }, [h('h2', { text: c.name }), c.image && h('img', { src: c.image, className: 'portrait', alt: '' })]);
+    [['Gender', c.gender], ['Born - Died', c.dates], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance]].forEach(function (p) { if (p[1]) w.appendChild(h('p', {}, [h('b', { text: p[0] + ': ' }), p[1]])); });
+    w.appendChild(h('p', {}, [h('b', { text: 'HP: ' }), String(c.hp), '   ', h('b', { text: 'Speed: ' }), String(c.speed)]));
+    w.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { var s = c.stats[k]; return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'mod ' + (s.mod >= 0 ? '+' : '') + s.mod })]); })));
+    if (c.itemName || c.itemDesc) w.appendChild(h('p', {}, [h('b', { text: 'Core item: ' }), c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')]));
+    c.skills.forEach(function (sk) {
+      var out = h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }), h('b', { text: sk.name }), sk.cooldown && h('small', { text: '  (' + sk.cooldown + ')' }), h('p', { text: sk.text })]);
+      sk.effects.forEach(function (e) {
+        var res = h('span', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + e.type + ' ' + rollText(e) });
+        b.onclick = function () { var r = [], t = e.flat; for (var i = 0; i < e.n; i++) { var x = 1 + Math.floor(Math.random() * Math.max(1, e.d)); r.push(x); t += x; } res.textContent = ' [' + r.join(', ') + ']' + (e.flat ? ' ' + (e.flat > 0 ? '+' : '') + e.flat : '') + ' = ' + t; };
+        out.appendChild(h('div', { className: 'ef' }, [b, res, e.note && h('small', { text: e.note })]));
+      });
+      w.appendChild(out);
+    });
+    if (c.quirk) w.appendChild(h('p', {}, [h('b', { text: 'Quirk: ' }), c.quirk]));
+    pv.appendChild(w);
+  }
+
+  /* ---------- Admin shell ---------- */
   function renderSide() {
     side.textContent = '';
-    items.forEach(function (it) {
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'adm-row';
-      b.setAttribute('aria-current', String(it.id === current));
-      var n = document.createElement('b'); n.textContent = it.name;
-      var d = document.createElement('small'); d.textContent = (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString();
-      b.appendChild(n); b.appendChild(d);
-      b.onclick = function () { current = it.id; armed = false; renderSide(); renderMain(); };
+    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')']].map(function (t) {
+      return h('button', { type: 'button', className: 'btn', text: t[1], 'aria-pressed': String(tab === t[0]), onclick: function () { tab = t[0]; cur = null; pick(); } });
+    }));
+    side.appendChild(tabs);
+    (tab === 'inbox' ? inbox : chars).forEach(function (it) {
+      var b = h('button', { type: 'button', className: 'adm-row', 'aria-current': String(it.id === cur) }, [h('b', { text: it.name || 'Unnamed' }),
+        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : 'Key ' + it.key })]);
+      b.onclick = function () { cur = it.id; render(); };
       side.appendChild(b);
     });
   }
+  function renderMain() {
+    main.textContent = '';
+    var list = tab === 'inbox' ? inbox : chars, it = list.filter(function (x) { return x.id === cur; })[0];
+    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : 'No accepted characters yet.') })); return; }
+    (tab === 'inbox' ? inboxView(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
+  }
+  function pick() { var list = tab === 'inbox' ? inbox : chars; if (!list.some(function (x) { return x.id === cur; })) cur = list.length ? list[0].id : null; render(); }
+  function render() { renderSide(); renderMain(); }
   function load() {
-    show(true); main.textContent = 'Loading…';
-    api({ action: 'list' }).then(function (r) {
-      if (r.j && r.j.error && !r.ok) {
-        if (r.j.error.indexOf('Wrong') === 0) { creds = null; show(false); msg.textContent = r.j.error; } else { main.textContent = r.j.error; }
+    show('admin'); main.textContent = 'Loading…';
+    Promise.all([api({ action: 'list' }), api({ action: 'chars' })]).then(function (rs) {
+      var a = rs[0], b = rs[1];
+      if (!a.ok) {
+        if ((a.j.error || '').indexOf('Wrong') === 0) { creds = null; show('login'); msg.textContent = a.j.error; } else main.textContent = a.j.error || 'Something went wrong.';
         return;
       }
-      items = r.j.items || []; if (!items.some(function (x) { return x.id === current; })) current = items.length ? items[0].id : null;
-      renderSide(); renderMain();
+      msg.textContent = ''; $('adm-pass').value = '';
+      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; pick();
+      if (!b.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load saved characters: ' + (b.j.error || '') }), main.firstChild);
     }).catch(function () { main.textContent = 'Could not reach the server.'; });
   }
   function submitLogin() {
     var em = $('adm-email').value.trim(), pw = $('adm-pass').value;
     if (!em || !pw) { msg.textContent = 'Enter your email and password.'; return; }
-    msg.textContent = 'Checking…'; creds = { email: em, password: pw };
-    api({ action: 'list' }).then(function (r) {
-      if (!r.ok) { creds = null; msg.textContent = (r.j && r.j.error) || 'Could not log in.'; return; }
-      msg.textContent = ''; $('adm-pass').value = '';
-      items = r.j.items || []; current = items.length ? items[0].id : null; show(true); renderSide(); renderMain();
-    }).catch(function () { creds = null; msg.textContent = 'Could not reach the server.'; });
+    msg.textContent = 'Checking…'; creds = { email: em, password: pw }; load();
+  }
+  function playerLogin() {
+    var k = $('pl-key').value.trim(), pm = $('pl-msg'); if (!k) { pm.textContent = 'Enter your key.'; return; }
+    pm.textContent = 'Checking…';
+    fetch('/.netlify/functions/player', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) { if (!r.ok) { pm.textContent = r.j.error || 'Could not log in.'; return; } pm.textContent = ''; $('pl-key').value = ''; pchar = r.j.char; profile(pchar); show('player'); })
+      .catch(function () { pm.textContent = 'Could not reach the server.'; });
   }
 
   $('login-link').addEventListener('click', function (e) { e.preventDefault(); openAdm(); });
   $('adm-close').addEventListener('click', closeAdm);
   $('adm-go').addEventListener('click', submitLogin);
+  $('pl-go').addEventListener('click', playerLogin);
   $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
+  $('pl-key').addEventListener('keydown', function (e) { if (e.key === 'Enter') playerLogin(); });
   $('adm-refresh').addEventListener('click', load);
-  $('adm-out').addEventListener('click', function () { creds = null; items = []; current = null; show(false); msg.textContent = 'Logged out.'; });
+  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; inbox = []; chars = []; cur = null; show('login'); msg.textContent = 'Logged out.'; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
 })();
 </script>
