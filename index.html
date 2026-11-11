@@ -1,0 +1,1020 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Gehenna</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;500;700&family=Hanken+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@700&text=%E7%85%89%E7%8D%84&display=swap">
+<style>
+  /* Layout: ink-black page, red disc and vertical kanji in the hero, ledger-style sections, form on the left with a live sheet beside it. Single dark look by design. */
+  :root {
+    --bg: #0a0808;
+    --surface: #140f0f;
+    --surface-2: #1e1515;
+    --line: #3a2727;
+    --fg: #f3efec;
+    --muted: #b3a5a3;
+    --red: #e3151f;
+    --red-hi: #ff4d4d;
+    --f-display: 'Bodoni Moda', 'Didot', 'Bodoni 72', Georgia, serif;
+    --f-body: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --f-kanji: 'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--f-body);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--red-hi); outline-offset: 3px; }
+  ::selection { background: var(--red); color: #fff; }
+
+  .wrap {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .mono {
+    font-family: var(--f-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+  .mono.red { color: var(--red-hi); }
+  h1, h2, h3, h4 { font-family: var(--f-display); font-weight: 500; margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+
+  /* Top bar */
+  .topbar { display: flex; flex-wrap: wrap; gap: 0.6rem 2rem; justify-content: space-between; padding-block: 1.1rem; }
+  .topbar nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; }
+  .topbar a { text-decoration: none; color: var(--muted); font-family: var(--f-mono); font-size: 0.76rem; letter-spacing: 0.14em; text-transform: uppercase; }
+  .topbar a:hover { color: var(--fg); }
+
+  /* Hero */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(70% 60% at 50% 115%, color-mix(in srgb, var(--red) 42%, transparent), transparent 70%),
+      radial-gradient(60% 70% at 62% 35%, #2b2323, var(--bg) 72%);
+    border-top: 1px solid var(--line);
+  }
+  .hero::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.12;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .bars {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 12px;
+    background: linear-gradient(90deg, var(--red) 0 6px, transparent 6px 8px, var(--red) 8px 9px, transparent 9px);
+  }
+  .sun-wrap {
+    position: absolute;
+    top: clamp(0.5rem, 3vw, 2.5rem);
+    right: clamp(-4rem, 8vw, 12%);
+    width: clamp(13rem, 38vw, 28rem);
+    aspect-ratio: 1;
+  }
+  .rays {
+    position: absolute; inset: -70%;
+    background: repeating-conic-gradient(from 3deg, rgba(255, 255, 255, 0.09) 0 1.1deg, transparent 1.1deg 8deg);
+    -webkit-mask-image: radial-gradient(circle, #000 10%, transparent 62%);
+    mask-image: radial-gradient(circle, #000 10%, transparent 62%);
+  }
+  .sun { position: absolute; inset: 0; border-radius: 50%; background: var(--red); filter: url(#rough); }
+  .splat {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 8% 72%, var(--red) 0 2px, transparent 3px),
+      radial-gradient(circle at 22% 18%, #fff 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 77% 84%, var(--red) 0 4px, transparent 5px),
+      radial-gradient(circle at 91% 28%, #fff 0 2px, transparent 3px),
+      radial-gradient(circle at 56% 90%, var(--red) 0 2.5px, transparent 3.5px),
+      radial-gradient(circle at 41% 10%, #fff 0 1px, transparent 2px),
+      radial-gradient(circle at 96% 76%, var(--red) 0 3px, transparent 4px),
+      radial-gradient(circle at 14% 46%, #fff 0 1px, transparent 2px);
+  }
+  .hero-grid {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(0.75rem, 3vw, 2.5rem);
+    padding-block: clamp(2.5rem, 8vw, 6rem) clamp(3rem, 9vw, 7rem);
+  }
+  .kanji {
+    writing-mode: vertical-rl;
+    font-family: var(--f-kanji);
+    font-weight: 700;
+    font-size: clamp(3.2rem, 11vw, 8rem);
+    line-height: 1.08;
+    letter-spacing: 0.04em;
+    color: var(--fg);
+    text-shadow: 0.05em 0.05em 0 var(--red);
+    margin: 0;
+    user-select: none;
+  }
+  .hero-copy { display: grid; gap: 1rem; align-content: center; min-width: 0; }
+  .hero-copy .mono { color: var(--fg); }
+  .title {
+    font-size: clamp(2.5rem, 12vw, 9rem);
+    line-height: 0.95;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    font-weight: 400;
+    text-shadow: 0 0 40px rgba(0, 0, 0, 0.45);
+  }
+  .lede { font-family: var(--f-display); font-size: clamp(1.3rem, 3.2vw, 2rem); line-height: 1.25; max-width: 30rem; }
+  .verse { display: grid; gap: 0.2rem; max-width: 30rem; padding-left: clamp(1rem, 4vw, 3rem); font-size: clamp(1.05rem, 2.2vw, 1.25rem); line-height: 1.5; margin-top: 0.4rem; color: var(--fg); }
+  .verse span { display: block; }
+  .verse strong { font-weight: 700; color: #fff; }
+  .lede, .verse { text-shadow: 0 1px 14px rgba(0, 0, 0, 0.6); }
+  .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
+
+  .btn {
+    font-family: var(--f-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 0.85rem 1.3rem;
+    border: 1px solid var(--fg);
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
+    border-radius: 0;
+  }
+  .btn.primary { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn:hover { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+
+  /* Sections */
+  section { padding-block: clamp(3rem, 8vw, 5.5rem); }
+  .section-head { display: grid; gap: 0.6rem; margin-bottom: 2.25rem; max-width: 42rem; }
+  .section-head h2 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.1; }
+  .section-head p:last-child { color: var(--muted); }
+
+  /* The trial */
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .panel { background: var(--bg); padding: clamp(1.25rem, 3vw, 2rem); display: grid; gap: 0.7rem; align-content: start; min-width: 0; }
+  .panel h3 { font-size: 1.55rem; line-height: 1.15; }
+  .panel p:last-child { color: var(--muted); }
+
+  /* Create */
+  #create { background: var(--surface); border-block: 1px solid var(--line); }
+  .create-grid { display: grid; gap: 2.5rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 68rem) { .create-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); } .sheet { position: sticky; top: 1rem; } }
+  .form { display: grid; gap: 2rem; min-width: 0; }
+  .group { display: grid; gap: 1.4rem; padding: clamp(1.1rem, 3vw, 1.8rem); border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+  .group > h3 { font-size: 1.7rem; line-height: 1.15; }
+  .field { display: grid; gap: 0.1rem; min-width: 0; }
+  .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 1.4rem; }
+  .label-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
+  .label-row label, .label-row .label-text {
+    font-family: var(--f-mono); font-size: 0.76rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg);
+  }
+  .q {
+    position: relative;
+    flex: none;
+    width: 1.35rem; height: 1.35rem;
+    display: inline-grid; place-items: center;
+    padding: 0;
+    border: 1px solid var(--red-hi); border-radius: 50%;
+    background: transparent; color: var(--red-hi);
+    font: 600 0.78rem/1 var(--f-mono);
+    cursor: pointer;
+  }
+  .q::after { content: ""; position: absolute; inset: -0.6rem; }
+  .q:hover, .q[aria-expanded="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+  .help { display: grid; gap: 0.4rem; margin-bottom: 0.7rem; padding: 0.8rem 1rem; background: var(--surface-2); border: 1px solid var(--line); line-height: 1.5; }
+  .help p + p { margin-top: 0.4rem; }
+  input[type="text"], textarea {
+    width: 100%;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 0.7rem 0.8rem;
+    font: inherit;
+  }
+  textarea { min-height: 5.5rem; resize: vertical; }
+  input::placeholder, textarea::placeholder { color: #7d6f6d; }
+  input[type="text"]:focus, textarea:focus { border-color: var(--red-hi); }
+  .stack { display: grid; gap: 0.6rem; }
+  .locked { padding: 0.7rem 0.8rem; border: 1px dashed var(--line); color: var(--muted); font-style: italic; }
+  .banned { border: 1px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--bg)); padding: 1rem 1.2rem; display: grid; gap: 0.6rem; }
+  .banned ol { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
+
+  .fixed { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .fixed div { background: var(--bg); padding: 0.8rem 1rem; display: grid; gap: 0.2rem; }
+  .fixed dt { font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .fixed dd { margin: 0; font-family: var(--f-display); font-size: 1.7rem; line-height: 1.1; }
+
+  .stats-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+  .stats-head h4 { font-size: 1.3rem; display: flex; align-items: center; gap: 0.6rem; }
+  .points { font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg); }
+  .points.open { color: var(--red-hi); }
+  .stat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem 1rem; align-items: center; padding-block: 0.7rem; border-bottom: 1px solid var(--line); }
+  .stat:first-of-type { border-top: 1px solid var(--line); }
+  .stat .help { grid-column: 1 / -1; margin: 0; }
+  .stat-name { display: flex; align-items: center; gap: 0.6rem; }
+  .stat-name span { font-family: var(--f-display); font-size: 1.2rem; }
+  .stat-name small { font-family: var(--f-mono); font-size: 0.72rem; letter-spacing: 0.1em; color: var(--muted); }
+  .stat-main { display: grid; gap: 0.2rem; min-width: 0; }
+  .calc { margin: 0; font-family: var(--f-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .calc b { color: var(--fg); font-weight: 500; }
+  .stepper { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .stepper button { width: 2.3rem; height: 2.3rem; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 500 1.1rem/1 var(--f-mono); cursor: pointer; border-radius: 0; }
+  .stepper button:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: #fff; }
+  .stepper button:disabled { opacity: 0.3; cursor: default; }
+  .stepper .val { min-width: 2rem; text-align: center; font-family: var(--f-mono); font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+  .link { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; font-size: 0.9rem; text-decoration: underline; cursor: pointer; justify-self: start; }
+  .link:hover { color: var(--fg); }
+
+  /* Sheet preview */
+  .sheet { display: grid; gap: 0.9rem; padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+  .sheet-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; }
+  .sheet-pre {
+    margin: 0;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-family: var(--f-mono), 'Noto Sans Math', 'Cambria Math', system-ui, sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 70vh;
+    overflow: auto;
+  }
+  .sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.2rem; }
+  .sheet-actions .note { color: var(--muted); font-size: 0.9rem; }
+
+  footer { padding-block: 2rem 5rem; display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; justify-content: space-between; }
+
+  /* Sound toggle */
+  .sound {
+    position: fixed;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+    display: inline-flex; align-items: center; gap: 0.7rem;
+    padding: 0.7rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--red);
+    color: var(--fg);
+    font-family: var(--f-mono); font-size: 0.76rem; letter-spacing: 0.12em; text-transform: uppercase;
+    cursor: pointer; border-radius: 0;
+  }
+  .sound:hover, .sound.on { background: var(--red); color: #fff; }
+  .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+  .eq i { display: block; width: 3px; height: 4px; background: currentColor; }
+  .sound.on .eq i { animation: eq 1.1s ease-in-out infinite; }
+  .sound.on .eq i:nth-child(2) { animation-delay: -0.4s; }
+  .sound.on .eq i:nth-child(3) { animation-delay: -0.8s; }
+  @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 14px; } }
+  @media (prefers-reduced-motion: reduce) { .sound.on .eq i { animation: none; height: 10px; } }
+  /* Submit + admin */
+  .send-status { color: var(--muted); font-size: 0.9rem; min-height: 1.3em; }
+  /* Admin */
+  .adm { position: fixed; inset: 0; z-index: 100; background: var(--bg); overflow: auto; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .adm[hidden] { display: none !important; }
+  .adm-bar { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.9rem max(16px, env(safe-area-inset-left, 0px)); background: var(--bg); border-bottom: 1px solid var(--line); }
+  .adm-bar h2 { font-size: 1.5rem; }
+  .adm-bar .btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .adm-login { max-width: 24rem; margin: 12vh auto 0; padding: 0 16px; display: grid; gap: 0.9rem; }
+  .adm-login input { width: 100%; padding: 0.7rem 0.8rem; background: var(--surface); color: var(--fg); border: 1px solid var(--line); font: inherit; }
+  .adm-login p { color: var(--muted); min-height: 1.3em; }
+  .adm-grid { display: grid; grid-template-columns: minmax(13rem, 20rem) minmax(0, 1fr); gap: 1rem; padding: 1rem max(16px, env(safe-area-inset-left, 0px)); max-width: 80rem; margin: 0 auto; align-items: start; }
+  .adm-side { display: grid; gap: 0.5rem; }
+  .adm-row { text-align: left; padding: 0.7rem 0.9rem; background: var(--surface); color: var(--fg); border: 1px solid var(--line); font: inherit; cursor: pointer; display: grid; gap: 0.15rem; }
+  .adm-row[aria-current="true"] { border-color: var(--red); background: var(--surface-2); }
+  .adm-row b { font-family: var(--f-display); font-weight: 500; font-size: 1.1rem; }
+  .adm-row small { font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: 0.1em; color: var(--muted); }
+  .adm-main { background: var(--surface); border: 1px solid var(--line); padding: 1rem; display: grid; gap: 0.8rem; min-width: 0; }
+  .adm-main pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--f-mono); font-size: 0.85rem; line-height: 1.55; }
+  .adm-empty { color: var(--muted); padding: 1rem 0; }
+  @media (max-width: 700px) { .adm-grid { grid-template-columns: 1fr; } }
+</style>
+
+
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="rough" x="-15%" y="-15%" width="130%" height="130%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="4" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<header class="wrap topbar">
+  <span class="mono">Gehenna</span>
+  <nav aria-label="Sections">
+    <a href="#trial">The trial</a>
+    <a href="#create">Create your soul</a>
+  <a href="#login" id="login-link">Login</a></nav>
+</header>
+
+<div class="hero">
+  <div class="bars" aria-hidden="true"></div>
+  <div class="sun-wrap" aria-hidden="true"><div class="rays"></div><div class="sun"></div></div>
+  <div class="splat" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
+    <div class="kanji" role="img" aria-label="Rengoku, meaning purgatory">煉獄</div>
+    <div class="hero-copy">
+      <p class="mono">A dice-driven roleplay of souls on trial</p>
+      <h1 class="title">Gehenna</h1>
+      <p class="lede">Welcome to Gehenna</p>
+      <p class="verse">
+        <span>As long as <strong>death</strong> exists</span>
+        <span>Every flame is borrowed <strong>time</strong></span>
+        <span>Such is the <strong>grave’s</strong> vow</span>
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="#create">Create your soul</a>
+        <a class="btn" href="#trial">How the trial works</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <section id="trial">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="mono red">The setting</p>
+        <h2>Everyone arrives the same way.</h2>
+        <p>Gehenna has no heaven and no hell. It has a trial, and every soul has to stand in it.</p>
+      </div>
+      <div class="panels">
+        <article class="panel">
+          <p class="mono red">The judge</p>
+          <h3>The headmaster</h3>
+          <p>The headmaster calculates your accumulated karma and decides whether you are a sinner or a savior. A punishment or a reward is given to the souls who lived their life.</p>
+        </article>
+        <article class="panel">
+          <p class="mono red">The treasure</p>
+          <h3>Your core item</h3>
+          <p>Once you play through the prologue, your most treasured item is given to you. It carries the abilities your soul needs to survive.</p>
+        </article>
+        <article class="panel">
+          <p class="mono red">The rules of chance</p>
+          <h3>Dice decide</h3>
+          <p>This roleplay relies heavily on dice. Your six stats are used for saving throw checks.</p>
+        </article>
+        <article class="panel">
+          <p class="mono red">The world</p>
+          <h3>Human souls only</h3>
+          <p>Your character must be human, from any year you like. Magic doesn't exist in this world, so your lore has to fit that.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="create">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="mono red">Character creation</p>
+        <h2>Create your soul.</h2>
+        <p>Fill in the sheet. Tap the (?) next to a field to read its guideline. Your finished sheet builds as you type.</p>
+      </div>
+
+      <div class="create-grid">
+        <form class="form" onsubmit="return false" autocomplete="off">
+
+          <div class="group" role="group" aria-labelledby="g1">
+            <h3 id="g1">Soul's Personal Details</h3>
+
+            <div class="field">
+              <div class="label-row"><label for="f-name">Name</label></div>
+              <input type="text" id="f-name" data-key="name" placeholder="Your character's name">
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-gender">Gender</label></div>
+              <input type="text" id="f-gender" data-key="gender">
+            </div>
+            <div class="row2">
+              <div class="field">
+                <div class="label-row"><label for="f-born">Date of Birth</label></div>
+                <input type="text" id="f-born" data-key="born" placeholder="Any date, any year">
+              </div>
+              <div class="field">
+                <div class="label-row"><label for="f-died">Date of Death</label></div>
+                <input type="text" id="f-died" data-key="died" placeholder="Any date, any year">
+              </div>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-persona">Persona</label><button type="button" class="q" aria-expanded="false" aria-controls="h-persona" aria-label="Guideline for Persona">?</button></div>
+              <div class="help" id="h-persona" hidden><p class="mono red">Guideline</p><p>Your character's personality.</p></div>
+              <textarea id="f-persona" data-key="persona" rows="3" placeholder="How your character thinks, speaks and acts."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-destiny">Destiny</label><button type="button" class="q" aria-expanded="false" aria-controls="h-destiny" aria-label="Guideline for Destiny">?</button></div>
+              <div class="help" id="h-destiny" hidden>
+                <p class="mono red">Guideline</p>
+                <p>Share your character's lore before they died and how they died. Your lore can be anything, but it must fit this world. For example, you can be a king from the past, but there is no magic, since magic doesn't exist in this world.</p>
+                <p>Your character must be human, and the year can be any time you like.</p>
+              </div>
+              <textarea id="f-destiny" data-key="destiny" rows="5" placeholder="Who they were before they died, and how they died."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><span class="label-text">Accumulated Karma</span><button type="button" class="q" aria-expanded="false" aria-controls="h-karma" aria-label="Guideline for Accumulated Karma">?</button></div>
+              <div class="help" id="h-karma" hidden><p class="mono red">Guideline</p><p>The headmaster will calculate whether you're a sinner or a savior. A punishment or reward will be given to the souls who lived their life.</p></div>
+              <p class="locked">Left blank. The headmaster fills this in.</p>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-appearance">Appearance Description</label></div>
+              <textarea id="f-appearance" data-key="appearance" rows="4" placeholder="What your character looks like."></textarea>
+            </div>
+          </div>
+
+          <div class="group" role="group" aria-labelledby="g2">
+            <h3 id="g2">Soul's Core</h3>
+
+            <div class="banned">
+              <p class="mono red">Banned abilities</p>
+              <ol>
+                <li>Continuous or follow-up attacks (attacks that do 2 or more hits in one turn).</li>
+                <li>Luck-related abilities. This roleplay relies heavily on dice, so this saves everyone the hassle.</li>
+                <li>Abilities that are obviously banned, such as one-shot, nullify, steal or copy. If you feel uncertain, ask the headmaster.</li>
+              </ol>
+            </div>
+
+            <div class="field">
+              <div class="label-row"><span class="label-text" id="l-item">Core Most Treasured Item</span><button type="button" class="q" aria-expanded="false" aria-controls="h-item" aria-label="Guideline for Core Most Treasured Item">?</button></div>
+              <div class="help" id="h-item" hidden>
+                <p class="mono red">Guideline</p>
+                <p>The item that will eventually be given once you play through the prologue. This item gives the soul the abilities you need to survive.</p>
+                <p>The item must be your most prized possession from before you died. There is no hidden ability here, only the item and its description. Extra lore is allowed.</p>
+              </div>
+              <div class="stack">
+                <input type="text" id="f-item" data-key="item" aria-labelledby="l-item" placeholder="Item name">
+                <textarea id="f-itemdesc" data-key="itemdesc" rows="3" aria-label="Core Most Treasured Item description" placeholder="What it is, and any lore behind it."></textarea>
+              </div>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-basic">Basic Skill</label><button type="button" class="q" aria-expanded="false" aria-controls="h-basic" aria-label="Guideline for Basic Skill">?</button></div>
+              <div class="help" id="h-basic" hidden><p class="mono red">Guideline</p><p>A skill that is spammable.</p></div>
+              <textarea id="f-basic" data-key="basic" rows="3" placeholder="Name and what it does."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-skill1">Skill 1</label><button type="button" class="q" aria-expanded="false" aria-controls="h-skill1" aria-label="Guideline for Skill 1">?</button></div>
+              <div class="help" id="h-skill1" hidden><p class="mono red">Guideline</p><p>A special skill of your character. Include its limitation and cooldown.</p></div>
+              <textarea id="f-skill1" data-key="skill1" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-skill2">Skill 2</label><button type="button" class="q" aria-expanded="false" aria-controls="h-skill2" aria-label="Guideline for Skill 2">?</button></div>
+              <div class="help" id="h-skill2" hidden><p class="mono red">Guideline</p><p>A second special skill of your character. Include its limitation and cooldown.</p></div>
+              <textarea id="f-skill2" data-key="skill2" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-ultimate">Ultimate</label><button type="button" class="q" aria-expanded="false" aria-controls="h-ultimate" aria-label="Guideline for Ultimate">?</button></div>
+              <div class="help" id="h-ultimate" hidden><p class="mono red">Guideline</p><p>Your character's ultimate. It must include a heavy cooldown or limitation, based on what the ultimate can do.</p></div>
+              <textarea id="f-ultimate" data-key="ultimate" rows="3" placeholder="Name, what it does, heavy cooldown or limitation."></textarea>
+            </div>
+            <div class="field">
+              <div class="label-row"><label for="f-quirk">Quirk</label><button type="button" class="q" aria-expanded="false" aria-controls="h-quirk" aria-label="Guideline for Quirk">?</button></div>
+              <div class="help" id="h-quirk" hidden><p class="mono red">Guideline</p><p>Your character's natural talent that was learned.</p></div>
+              <textarea id="f-quirk" data-key="quirk" rows="2" placeholder="A natural talent your character learned."></textarea>
+            </div>
+          </div>
+
+          <div class="group" role="group" aria-labelledby="g3">
+            <h3 id="g3">Soul's Physiology</h3>
+            <dl class="fixed">
+              <div><dt>Health Points</dt><dd>20</dd></div>
+              <div><dt>Speed</dt><dd>30</dd></div>
+              <div><dt>Size</dt><dd>Medium</dd></div>
+              <div><dt>Language</dt><dd>Common</dd></div>
+            </dl>
+
+            <div class="stats">
+              <div class="stats-head">
+                <h4>Stats <button type="button" class="q" aria-expanded="false" aria-controls="h-stats" aria-label="Guideline for Stats">?</button></h4>
+                <p class="points" id="points" aria-live="polite"></p>
+              </div>
+              <div class="help" id="h-stats" hidden style="margin-top:0.8rem;"><p class="mono red">Guideline</p><p>Stats are used to do saving throw checks. The base stats below are set. You can add another 20 points across the six stats, with a maximum of 7 added to any one stat, so all 20 can't go into a single stat.</p></div>
+
+              <div class="stat" data-stat="STR">
+                <div class="stat-main">
+                  <div class="stat-name"><span>Strength</span><small>STR</small><button type="button" class="q" aria-expanded="false" aria-controls="h-str" aria-label="Guideline for Strength">?</button></div>
+                  <p class="calc">Base 3 &middot; Final <b class="total">3</b></p>
+                </div>
+                <div class="stepper"><button type="button" class="dec" aria-label="Remove a point from Strength">&minus;</button><output class="val" aria-label="Points added to Strength">+0</output><button type="button" class="inc" aria-label="Add a point to Strength">+</button></div>
+                <div class="help" id="h-str" hidden><p>Your character's raw physical power.</p></div>
+              </div>
+              <div class="stat" data-stat="INT">
+                <div class="stat-main">
+                  <div class="stat-name"><span>Intelligence</span><small>INT</small><button type="button" class="q" aria-expanded="false" aria-controls="h-int" aria-label="Guideline for Intelligence">?</button></div>
+                  <p class="calc">Base 4 &middot; Final <b class="total">4</b></p>
+                </div>
+                <div class="stepper"><button type="button" class="dec" aria-label="Remove a point from Intelligence">&minus;</button><output class="val" aria-label="Points added to Intelligence">+0</output><button type="button" class="inc" aria-label="Add a point to Intelligence">+</button></div>
+                <div class="help" id="h-int" hidden><p>Your character's ability to resist mental interference through reasoning and knowledge.</p></div>
+              </div>
+              <div class="stat" data-stat="DEX">
+                <div class="stat-main">
+                  <div class="stat-name"><span>Dexterity</span><small>DEX</small><button type="button" class="q" aria-expanded="false" aria-controls="h-dex" aria-label="Guideline for Dexterity">?</button></div>
+                  <p class="calc">Base 3 &middot; Final <b class="total">3</b></p>
+                </div>
+                <div class="stepper"><button type="button" class="dec" aria-label="Remove a point from Dexterity">&minus;</button><output class="val" aria-label="Points added to Dexterity">+0</output><button type="button" class="inc" aria-label="Add a point to Dexterity">+</button></div>
+                <div class="help" id="h-dex" hidden><p>Your character's reflexes, agility, and coordination.</p></div>
+              </div>
+              <div class="stat" data-stat="WIS">
+                <div class="stat-main">
+                  <div class="stat-name"><span>Wisdom</span><small>WIS</small><button type="button" class="q" aria-expanded="false" aria-controls="h-wis" aria-label="Guideline for Wisdom">?</button></div>
+                  <p class="calc">Base 3 &middot; Final <b class="total">3</b></p>
+                </div>
+                <div class="stepper"><button type="button" class="dec" aria-label="Remove a point from Wisdom">&minus;</button><output class="val" aria-label="Points added to Wisdom">+0</output><button type="button" class="inc" aria-label="Add a point to Wisdom">+</button></div>
+                <div class="help" id="h-wis" hidden><p>Your character's awareness, intuition, willpower, and mental fortitude.</p></div>
+              </div>
+              <div class="stat" data-stat="CHA">
+                <div class="stat-main">
+                  <div class="stat-name"><span>Charisma</span><small>CHA</small><button type="button" class="q" aria-expanded="false" aria-controls="h-cha" aria-label="Guideline for Charisma">?</button></div>
+                  <p class="calc">Base 3 &middot; Final <b class="total">3</b></p>
+                </div>
+                <div class="stepper"><button type="button" class="dec" aria-label="Remove a point from Charisma">&minus;</button><output class="val" aria-label="Points added to Charisma">+0</output><button type="button" class="inc" aria-label="Add a point to Charisma">+</button></div>
+                <div class="help" id="h-cha" hidden><p>Your character's force of personality, self-identity, and spiritual presence.</p></div>
+              </div>
+              <div class="stat" data-stat="CON">
+                <div class="stat-main">
+                  <div class="stat-name"><span>Constitution</span><small>CON</small><button type="button" class="q" aria-expanded="false" aria-controls="h-con" aria-label="Guideline for Constitution">?</button></div>
+                  <p class="calc">Base 4 &middot; Final <b class="total">4</b></p>
+                </div>
+                <div class="stepper"><button type="button" class="dec" aria-label="Remove a point from Constitution">&minus;</button><output class="val" aria-label="Points added to Constitution">+0</output><button type="button" class="inc" aria-label="Add a point to Constitution">+</button></div>
+                <div class="help" id="h-con" hidden><p>Your character's physical endurance, resilience, and ability to withstand bodily harm.</p></div>
+              </div>
+            </div>
+            <button type="button" class="link" id="reset-stats">Reset added points</button>
+          </div>
+        </form>
+
+        <aside class="sheet" aria-label="Your character sheet">
+          <div class="sheet-top">
+            <p class="mono red">Your sheet</p>
+            <button type="button" class="btn primary" id="copy">Copy sheet</button>
+          </div>
+          <pre class="sheet-pre" id="sheet"></pre>
+          <p class="mono" id="copystatus" aria-live="polite"></p>
+          <p class="send-status" id="sendstatus" aria-live="polite"></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn primary" id="send">Send to headmaster</button>
+            <button type="button" class="btn" id="clear">Clear sheet</button>
+            <span class="note">Done? Copy the sheet and send it to the headmaster. Your draft is saved in this browser.</span>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+
+<form name="gehenna-sheet" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input type="hidden" name="form-name" value="gehenna-sheet">
+  <input name="bot-field">
+  <input name="name">
+  <textarea name="sheet"></textarea>
+</form>
+
+
+<div class="adm" id="adm" hidden role="dialog" aria-modal="true" aria-label="Headmaster admin">
+  <div class="adm-bar">
+    <h2>Headmaster</h2>
+    <div class="btns">
+      <button type="button" class="btn" id="adm-refresh" hidden>Refresh</button>
+      <button type="button" class="btn" id="adm-out" hidden>Log out</button>
+      <button type="button" class="btn" id="adm-close">Close</button>
+    </div>
+  </div>
+  <div class="adm-login" id="adm-login">
+    <p class="mono red">Headmaster login</p>
+    <input type="email" id="adm-email" placeholder="Email" autocomplete="username">
+    <input type="password" id="adm-pass" placeholder="Password" autocomplete="current-password">
+    <button type="button" class="btn primary" id="adm-go">Log in</button>
+    <p id="adm-msg" aria-live="polite"></p>
+  </div>
+  <div class="adm-grid" id="adm-grid" hidden>
+    <div class="adm-side" id="adm-side"></div>
+    <div class="adm-main" id="adm-main"></div>
+  </div>
+</div>
+
+<button type="button" class="sound" id="sound">
+  <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+  <span id="sound-label">Sound off</span>
+</button>
+
+<footer class="wrap">
+  <span class="mono">Gehenna</span>
+  <span class="mono">Unsure about a rule or an ability? Ask the headmaster.</span>
+</footer>
+
+<script>
+  (function () {
+    var KEY = 'gehenna-sheet-v2';
+    var TOTAL = 20;   // points a player can add on top of the base stats
+    var MAX_ADD = 7;  // most points that can go into one stat
+    var ORDER = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'];
+    var BASE = { STR: 3, INT: 4, DEX: 3, WIS: 3, CHA: 3, CON: 4 };
+    var stats = {};   // points added to each stat
+    ORDER.forEach(function (k) { stats[k] = 0; });
+
+    var fields = document.querySelectorAll('[data-key]');
+    var sheet = document.getElementById('sheet');
+    var pointsEl = document.getElementById('points');
+    var copyBtn = document.getElementById('copy');
+    var copyStatus = document.getElementById('copystatus');
+    var clearBtn = document.getElementById('clear');
+
+    // Guideline (?) toggles
+    document.querySelectorAll('.q').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var panel = document.getElementById(btn.getAttribute('aria-controls'));
+        var open = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!open));
+        if (panel) panel.hidden = open;
+      });
+    });
+
+    function read() {
+      var o = {};
+      fields.forEach(function (f) { o[f.dataset.key] = f.value; });
+      return o;
+    }
+
+    function line(label, val) {
+      val = (val || '').trim();
+      return val ? label + ': ' + val : label + ':';
+    }
+
+    function build(v) {
+      var born = (v.born || '').trim(), died = (v.died || '').trim();
+      var dates = (born || died) ? (born || '?') + ' - ' + (died || '?') : '';
+      var item = (v.item || '').trim(), desc = (v.itemdesc || '').trim();
+      var itemText = item + (item && desc ? '\n' : '') + desc;
+      var L = [];
+      L.push("𝐒𝐨𝐮𝐥'𝐬 𝐏𝐞𝐫𝐬𝐨𝐧𝐚𝐥 𝐃𝐞𝐭𝐚𝐢𝐥𝐬");
+      L.push(line('Name', v.name));
+      L.push(line('Gender', v.gender));
+      L.push(line('Date of Birth and Date of Death', dates));
+      L.push(line('Persona', v.persona));
+      L.push(line('Destiny', v.destiny));
+      L.push('Accumulated Karma: (judged by the headmaster)');
+      L.push(line('Appearance Description', v.appearance));
+      L.push('ㅤ');
+      L.push("𝐒𝐨𝐮𝐥'𝐬 𝐂𝐨𝐫𝐞");
+      L.push(line('Core Most Treasured Item', itemText));
+      L.push(line('Basic Skill', v.basic));
+      L.push(line('Skill 1', v.skill1));
+      L.push(line('Skill 2', v.skill2));
+      L.push(line('Ultimate', v.ultimate));
+      L.push(line('Quirk', v.quirk));
+      L.push('ㅤ');
+      L.push("𝐒𝐨𝐮𝐥'𝐬 𝐏𝐡𝐲𝐬𝐢𝐨𝐥𝐨𝐠𝐲");
+      L.push('Health Points: 20');
+      L.push('Speed: 30');
+      L.push('Size: Medium');
+      L.push('Language: Common');
+      L.push('');
+      ORDER.forEach(function (k) { L.push(k + ': ' + (BASE[k] + stats[k]) + ' (' + BASE[k] + ' base + ' + stats[k] + ' added)'); });
+      return L.join('\n');
+    }
+
+    function renderStats() {
+      var sum = 0;
+      ORDER.forEach(function (k) { sum += stats[k]; });
+      var left = TOTAL - sum;
+      ORDER.forEach(function (k) {
+        var row = document.querySelector('.stat[data-stat="' + k + '"]');
+        row.querySelector('.val').textContent = '+' + stats[k];
+        row.querySelector('.total').textContent = BASE[k] + stats[k];
+        row.querySelector('.dec').disabled = stats[k] <= 0;
+        row.querySelector('.inc').disabled = left <= 0 || stats[k] >= MAX_ADD;
+      });
+      pointsEl.textContent = left === 0 ? 'All 20 points added' : left + ' of 20 points left to add (max 7 per stat)';
+      pointsEl.classList.toggle('open', left > 0);
+    }
+
+    function save() {
+      try { localStorage.setItem(KEY, JSON.stringify({ v: read(), s: stats })); } catch (e) {}
+    }
+
+    function refresh() {
+      renderStats();
+      sheet.textContent = build(read());
+      save();
+    }
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (!raw) return;
+        var d = JSON.parse(raw);
+        if (d && d.v) {
+          fields.forEach(function (f) {
+            if (typeof d.v[f.dataset.key] === 'string') f.value = d.v[f.dataset.key];
+          });
+        }
+        if (d && d.s) {
+          var next = {}, sum = 0, ok = true;
+          ORDER.forEach(function (k) {
+            var n = Number(d.s[k]);
+            if (!isFinite(n) || n < 0 || n > MAX_ADD) ok = false;
+            next[k] = Math.floor(n);
+            sum += next[k];
+          });
+          if (ok && sum <= TOTAL) stats = next;
+        }
+      } catch (e) {}
+    }
+
+    // Stat steppers
+    document.querySelectorAll('.stat').forEach(function (row) {
+      var k = row.dataset.stat;
+      row.querySelector('.inc').addEventListener('click', function () {
+        var sum = 0; ORDER.forEach(function (x) { sum += stats[x]; });
+        if (sum < TOTAL && stats[k] < MAX_ADD) { stats[k] += 1; refresh(); }
+      });
+      row.querySelector('.dec').addEventListener('click', function () {
+        if (stats[k] > 0) { stats[k] -= 1; refresh(); }
+      });
+    });
+
+    document.getElementById('reset-stats').addEventListener('click', function () {
+      ORDER.forEach(function (k) { stats[k] = 0; });
+      refresh();
+    });
+
+    fields.forEach(function (f) { f.addEventListener('input', refresh); });
+
+    // Copy
+    copyBtn.addEventListener('click', function () {
+      var text = sheet.textContent;
+      function done(ok) {
+        if (ok) {
+          copyStatus.textContent = 'Copied to your clipboard.';
+        } else {
+          copyStatus.textContent = 'Copying is blocked here. The sheet is selected, so copy it by hand.';
+          var r = document.createRange();
+          r.selectNodeContents(sheet);
+          var s = window.getSelection();
+          s.removeAllRanges();
+          s.addRange(r);
+        }
+      }
+      try {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+      } catch (e) { done(false); }
+    });
+
+    // Clear (two-step, since confirm dialogs are not available)
+    var armed = false, timer = null;
+    clearBtn.addEventListener('click', function () {
+      if (!armed) {
+        armed = true;
+        clearBtn.textContent = 'Click again to clear everything';
+        timer = setTimeout(function () { armed = false; clearBtn.textContent = 'Clear sheet'; }, 4000);
+        return;
+      }
+      clearTimeout(timer);
+      armed = false;
+      clearBtn.textContent = 'Clear sheet';
+      fields.forEach(function (f) { f.value = ''; });
+      ORDER.forEach(function (k) { stats[k] = 0; });
+      copyStatus.textContent = '';
+      refresh();
+    });
+
+    load();
+    refresh();
+  })();
+
+  // Ambient sound: original, generated in the browser, starts only when the button is pressed.
+  (function () {
+    var btn = document.getElementById('sound');
+    var label = document.getElementById('sound-label');
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { btn.hidden = true; return; }
+    var ctx = null, master = null, bus = null, timer = null, on = false;
+    // Hirajoshi-style scale on D (D E F A Bb), two octaves, in semitones above D4.
+    var NOTES = [0, 2, 3, 7, 8, 12, 14, 15, 19, 20];
+
+    function impulse(c, seconds) {
+      var rate = c.sampleRate, len = Math.floor(rate * seconds);
+      var buf = c.createBuffer(2, len, rate);
+      for (var ch = 0; ch < 2; ch++) {
+        var d = buf.getChannelData(ch);
+        for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+      }
+      return buf;
+    }
+
+    function build() {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0;
+      var lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2600;
+      var verb = ctx.createConvolver();
+      verb.buffer = impulse(ctx, 3.2);
+      var wet = ctx.createGain(); wet.gain.value = 0.55;
+      var dry = ctx.createGain(); dry.gain.value = 0.7;
+      bus = ctx.createGain();
+      bus.connect(dry); bus.connect(verb); verb.connect(wet);
+      dry.connect(lp); wet.connect(lp); lp.connect(master); master.connect(ctx.destination);
+
+      // Low drone: three soft tones with slow swells.
+      [[73.42, 0.10, 'sine'], [110.0, 0.06, 'sine'], [146.83, 0.035, 'triangle']].forEach(function (d, i) {
+        var o = ctx.createOscillator();
+        o.type = d[2]; o.frequency.value = d[0]; o.detune.value = (i - 1) * 6;
+        var g = ctx.createGain(); g.gain.value = d[1];
+        var lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + i * 0.03;
+        var lg = ctx.createGain(); lg.gain.value = d[1] * 0.5;
+        lfo.connect(lg); lg.connect(g.gain);
+        o.connect(g); g.connect(lp);
+        o.start(); lfo.start();
+      });
+
+      // Thin wind: filtered noise with a drifting band.
+      var nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      var nd = nb.getChannelData(0);
+      for (var i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      var ns = ctx.createBufferSource(); ns.buffer = nb; ns.loop = true;
+      var bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 500; bp.Q.value = 0.8;
+      var ng = ctx.createGain(); ng.gain.value = 0.035;
+      var wl = ctx.createOscillator(); wl.frequency.value = 0.07;
+      var wg = ctx.createGain(); wg.gain.value = 250;
+      wl.connect(wg); wg.connect(bp.frequency);
+      ns.connect(bp); bp.connect(ng); ng.connect(lp);
+      ns.start(); wl.start();
+    }
+
+    // Sparse bell-like plucks, one every few seconds.
+    function pluck() {
+      if (!on || !ctx) return;
+      var f = 293.66 * Math.pow(2, NOTES[Math.floor(Math.random() * NOTES.length)] / 12);
+      var t = ctx.currentTime + 0.05;
+      var vol = 0.10 + Math.random() * 0.08;
+      [[1, 1], [2.76, 0.28], [5.4, 0.1]].forEach(function (p) {
+        var o = ctx.createOscillator();
+        o.type = 'sine'; o.frequency.value = f * p[0];
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol * p[1], t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2 / p[0]);
+        o.connect(g); g.connect(bus);
+        o.start(t); o.stop(t + 3.4);
+      });
+      timer = setTimeout(pluck, 1800 + Math.random() * 3800);
+    }
+
+    btn.addEventListener('click', function () {
+      if (!on) {
+        try { if (!ctx) build(); } catch (e) { label.textContent = 'Sound unavailable'; return; }
+        on = true;
+        if (ctx.resume) ctx.resume();
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.setTargetAtTime(0.6, ctx.currentTime, 1.2);
+        btn.classList.add('on');
+        label.textContent = 'Sound on';
+        clearTimeout(timer);
+        timer = setTimeout(pluck, 600);
+      } else {
+        on = false;
+        clearTimeout(timer);
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
+        btn.classList.remove('on');
+        label.textContent = 'Sound off';
+        setTimeout(function () { if (!on && ctx && ctx.suspend) ctx.suspend(); }, 2000);
+      }
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (!ctx) return;
+      if (document.hidden) { if (ctx.suspend) ctx.suspend(); }
+      else if (on && ctx.resume) { ctx.resume(); }
+    });
+  })();
+</script>
+
+
+
+<script>
+// Send the finished sheet to Netlify Forms.
+(function () {
+  var btn = document.getElementById('send'), status = document.getElementById('sendstatus');
+  btn.addEventListener('click', function () {
+    var nameEl = document.getElementById('f-name');
+    var name = (nameEl && nameEl.value.trim()) || '';
+    var sheet = document.getElementById('sheet').textContent;
+    if (!name) { status.textContent = 'Give your character a name before sending.'; return; }
+    status.textContent = 'Sending…';
+    btn.disabled = true;
+    var body = new URLSearchParams({ 'form-name': 'gehenna-sheet', 'bot-field': '', name: name, sheet: sheet }).toString();
+    fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+      .then(function (r) {
+        if (!r.ok) throw new Error('bad');
+        status.textContent = 'Sent to the headmaster. You can keep this sheet or copy it.';
+      })
+      .catch(function () { status.textContent = 'Could not send. Copy your sheet and send it to the headmaster by hand.'; })
+      .then(function () { btn.disabled = false; });
+  });
+})();
+</script>
+
+<script>
+// Headmaster login: talks to the Netlify function, which checks the password and reads the form submissions.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg');
+  var creds = null, items = [], current = null, armed = false, armTimer = null;
+
+  function api(body) {
+    return fetch('/.netlify/functions/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, creds, body)) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+  function show(loggedIn) {
+    login.hidden = loggedIn; grid.hidden = !loggedIn;
+    $('adm-out').hidden = !loggedIn; $('adm-refresh').hidden = !loggedIn;
+  }
+  function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) load(); else { show(false); $('adm-email').focus(); } }
+  function closeAdm() { adm.hidden = true; document.body.style.overflow = ''; }
+
+  function renderMain() {
+    main.textContent = '';
+    var it = items.filter(function (x) { return x.id === current; })[0];
+    if (!it) { var e = document.createElement('p'); e.className = 'adm-empty'; e.textContent = items.length ? 'Pick a sheet on the left.' : 'No sheets yet.'; main.appendChild(e); return; }
+    var h = document.createElement('h3'); h.textContent = it.name;
+    var t = document.createElement('p'); t.className = 'mono'; t.textContent = new Date(it.at).toLocaleString();
+    var pre = document.createElement('pre'); pre.textContent = it.sheet;
+    var row = document.createElement('div'); row.className = 'btns'; row.style.display = 'flex'; row.style.gap = '0.5rem';
+    var cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn'; cp.textContent = 'Copy sheet';
+    cp.onclick = function () { try { navigator.clipboard.writeText(it.sheet).then(function () { cp.textContent = 'Copied'; }, function () { cp.textContent = 'Copy blocked'; }); } catch (e) { cp.textContent = 'Copy blocked'; } };
+    var del = document.createElement('button'); del.type = 'button'; del.className = 'btn'; del.textContent = 'Delete';
+    del.onclick = function () {
+      if (!armed) { armed = true; del.textContent = 'Click again to delete'; armTimer = setTimeout(function () { armed = false; del.textContent = 'Delete'; }, 4000); return; }
+      clearTimeout(armTimer); armed = false; del.disabled = true; del.textContent = 'Deleting…';
+      api({ action: 'delete', id: it.id }).then(function (r) {
+        if (!r.ok) { del.disabled = false; del.textContent = (r.j && r.j.error) || 'Delete failed'; return; }
+        items = items.filter(function (x) { return x.id !== it.id; });
+        current = items.length ? items[0].id : null; renderSide(); renderMain();
+      });
+    };
+    row.appendChild(cp); row.appendChild(del);
+    main.appendChild(h); main.appendChild(t); main.appendChild(pre); main.appendChild(row);
+  }
+  function renderSide() {
+    side.textContent = '';
+    items.forEach(function (it) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'adm-row';
+      b.setAttribute('aria-current', String(it.id === current));
+      var n = document.createElement('b'); n.textContent = it.name;
+      var d = document.createElement('small'); d.textContent = new Date(it.at).toLocaleString();
+      b.appendChild(n); b.appendChild(d);
+      b.onclick = function () { current = it.id; armed = false; renderSide(); renderMain(); };
+      side.appendChild(b);
+    });
+  }
+  function load() {
+    show(true); main.textContent = 'Loading…';
+    api({ action: 'list' }).then(function (r) {
+      if (r.j && r.j.error && !r.ok) {
+        if (r.j.error.indexOf('Wrong') === 0) { creds = null; show(false); msg.textContent = r.j.error; } else { main.textContent = r.j.error; }
+        return;
+      }
+      items = r.j.items || []; if (!items.some(function (x) { return x.id === current; })) current = items.length ? items[0].id : null;
+      renderSide(); renderMain();
+    }).catch(function () { main.textContent = 'Could not reach the server.'; });
+  }
+  function submitLogin() {
+    var em = $('adm-email').value.trim(), pw = $('adm-pass').value;
+    if (!em || !pw) { msg.textContent = 'Enter your email and password.'; return; }
+    msg.textContent = 'Checking…'; creds = { email: em, password: pw };
+    api({ action: 'list' }).then(function (r) {
+      if (!r.ok) { creds = null; msg.textContent = (r.j && r.j.error) || 'Could not log in.'; return; }
+      msg.textContent = ''; $('adm-pass').value = '';
+      items = r.j.items || []; current = items.length ? items[0].id : null; show(true); renderSide(); renderMain();
+    }).catch(function () { creds = null; msg.textContent = 'Could not reach the server.'; });
+  }
+
+  $('login-link').addEventListener('click', function (e) { e.preventDefault(); openAdm(); });
+  $('adm-close').addEventListener('click', closeAdm);
+  $('adm-go').addEventListener('click', submitLogin);
+  $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
+  $('adm-refresh').addEventListener('click', load);
+  $('adm-out').addEventListener('click', function () { creds = null; items = []; current = null; show(false); msg.textContent = 'Logged out.'; });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
+})();
+</script>
+</body></html>
