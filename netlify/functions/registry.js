@@ -20,7 +20,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET' && b.img) {
       const id = String(b.img);
       const e = ID.test(id) && await store.get(id, { type: 'json' });
-      const m = e && e.listed && e.image && canOpen(e, null).open && /^data:(image\/[a-z]+);base64,(.+)$/.exec(e.image);
+      const m = e && e.listed && e.image && (canOpen(e, null).open || !e.hideImage) && /^data:(image\/[a-z]+);base64,(.+)$/.exec(e.image);
       if (!m) return reply(404, { error: 'No image' });
       return { statusCode: 200, isBase64Encoded: true, headers: { 'Content-Type': m[1], 'Cache-Control': 'public, max-age=86400' }, body: m[2] };
     }

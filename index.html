@@ -1864,10 +1864,10 @@
 
   /* ---------- Registry (Players / NPCs / Monsters) ---------- */
   var KINDS = { player: 'Player', npc: 'NPC', shadow: 'Monster' };
-  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
+  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.undisclosed && it.hideImage ? ' · Appearance hidden' : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
   function newEntry(ch) {
     reg = reg.filter(function (x) { return !x.isNew; });
-    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
+    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, hideImage: false, revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
     if (ch && ch.id) {
       var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; }, by = function (l) { return sk.filter(function (x) { return x.label === l; })[0]; };
       e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0; e.speed = ch.speed == null ? 30 : ch.speed; e.initiative = ch.initiative != null ? ch.initiative : ((ch.stats && ch.stats.DEX && ch.stats.DEX.mod) || 0); e.size = ch.size || 'Medium'; e.languages = ch.languages || '';
@@ -1941,8 +1941,9 @@
       box.appendChild(chk('Listed to players (untick to hide this entry completely)', c.listed !== false, function (v) { c.listed = v; }));
       box.appendChild(crop);
       if (c.type === 'npc') {
-        box.appendChild(chk('Undisclosed: players only see the name, until you allow them below', c.undisclosed, function (v) { c.undisclosed = v; draw(); }));
+        box.appendChild(chk('Undisclosed: players only see the name and picture (all details sealed), until you allow them below', c.undisclosed, function (v) { c.undisclosed = v; draw(); }));
         if (c.undisclosed) {
+          box.appendChild(chk('Hide the appearance too (the picture is sealed as well, and shows as “?”)', c.hideImage, function (v) { c.hideImage = v; }));
           var pk = h('div', { className: 'pick' }, [h('span', { className: 'mono red', text: 'Players allowed to see this NPC' })]);
           if (!chars.length) pk.appendChild(h('p', { className: 'mono', text: 'No accepted characters yet.' }));
           chars.forEach(function (ch) {
