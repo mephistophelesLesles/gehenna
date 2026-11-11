@@ -363,6 +363,56 @@
   .pv-skill { display: grid; gap: 0.5rem; padding: 0.9rem 1rem 0.9rem 1.3rem; border: 1px solid var(--line); border-left: 4px solid var(--red); background: var(--surface); }
   .pv-skill h3 { font-size: 1.5rem; line-height: 1.1; } .pv-skill > .mono:first-child { color: var(--red-hi); }
   .pv-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); } .pv-item p { flex-basis: 100%; color: var(--muted); margin: 0; }
+  /* Gehenna's Gate cards and the storyline book */
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .panel .desc { color: var(--muted); }
+  .panel .btn { justify-self: start; margin-top: 0.4rem; }
+  .panel .tag { justify-self: start; font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.3rem 0.55rem; border: 1px solid var(--line); color: var(--muted); }
+  .panel.soon { background: color-mix(in srgb, var(--bg) 60%, #000); }
+  .panel.soon h3, .panel.soon .mono.red { color: var(--muted); }
+  .panel.open-card { background: linear-gradient(160deg, color-mix(in srgb, var(--red) 18%, var(--bg)), var(--bg) 72%); }
+
+  #storyline { background: var(--bg); border-top: 1px solid var(--line); }
+  #storyline[hidden] { display: none !important; }
+  .book-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.5rem; margin-bottom: 1.25rem; }
+  .book-banner { margin: 0 0 1.5rem; border: 1px solid var(--line); background: #000; }
+  .book-banner img { display: block; width: 100%; height: auto; }
+  .book { position: relative; display: grid; grid-template-columns: minmax(12rem, 17rem) minmax(0, 1fr); border: 1px solid var(--line); background: var(--surface); }
+  .book::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: linear-gradient(90deg, var(--red) 0 6px, transparent 6px 8px, var(--red) 8px 9px, transparent 9px); }
+  .book-toc { display: grid; gap: 0.9rem; align-content: start; padding: clamp(1.1rem, 3vw, 1.75rem) clamp(1rem, 2.5vw, 1.5rem) clamp(1.1rem, 3vw, 1.75rem) calc(12px + clamp(1rem, 2.5vw, 1.5rem)); border-right: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 55%, var(--surface)); }
+  .toc { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+  .toc-btn { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; text-align: left; padding: 0.65rem 0.8rem; background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: 0; font-family: var(--f-display); font-size: 1.1rem; line-height: 1.2; cursor: pointer; }
+  .toc-btn small { flex: none; font-family: var(--f-mono); font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .toc-btn:hover:not(:disabled) { border-color: var(--red); }
+  .toc-btn[aria-current="page"] { background: var(--red); border-color: var(--red); color: #fff; }
+  .toc-btn:disabled { color: var(--muted); cursor: not-allowed; }
+  .book-page { min-width: 0; padding: clamp(1.5rem, 5vw, 3.5rem); outline-offset: -4px; }
+  .book-page.turn { animation: turn 0.35s ease-out; }
+  @keyframes turn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .ch-title { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.05; margin-bottom: 1.5rem; }
+  .ch-body { max-width: 38rem; display: grid; gap: 1.15rem; font-size: 1.14rem; line-height: 1.75; }
+  .ch-body p { overflow-wrap: anywhere; }
+  .ch-body .emph { text-align: center; font-family: var(--f-display); font-size: clamp(1.4rem, 3.4vw, 1.9rem); letter-spacing: 0.04em; color: var(--red-hi); padding-block: 0.4rem; }
+  .ch-body .emph strong { font-weight: 500; }
+  .ch-fig { margin: 1.5rem 0 0; max-width: 38rem; display: grid; gap: 0.5rem; }
+  .ch-fig img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); }
+  .ch-nav { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem; margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); max-width: 38rem; }
+  .ch-nav .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .ch-nav .btn:disabled:hover { background: transparent; color: var(--fg); border-color: var(--fg); }
+  @media (max-width: 52rem) {
+    .book { grid-template-columns: minmax(0, 1fr); }
+    .book-toc { border-right: 0; border-bottom: 1px solid var(--line); }
+    .toc { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .book-page.turn { animation: none; } }
+
+  /* Storyline editor in the headmaster panel */
+  .ed .chk { display: flex; align-items: center; gap: 0.6rem; } .ed .chk input { width: auto; }
+  .ed input[type=file] { padding: 0.4rem; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 0.9rem; }
+  .imgrow { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: 0.8rem; align-items: start; padding: 0.6rem; border: 1px solid var(--line); background: var(--bg); }
+  .imgrow .thumb { width: 7rem; height: 5rem; object-fit: cover; border: 1px solid var(--line); }
+  .imgctl { display: grid; gap: 0.5rem; min-width: 0; }
 </style>
 
 
@@ -377,7 +427,6 @@
 <header class="wrap topbar">
   <span class="mono">Gehenna</span>
   <nav aria-label="Sections">
-    <a href="#trial">The trial</a>
     <a href="#create">Create your soul</a>
   <a href="#login" id="login-link">Login</a></nav>
 </header>
@@ -399,40 +448,62 @@
       </p>
       <div class="cta">
         <a class="btn primary" href="#create">Create your soul</a>
-        <a class="btn" href="#trial">How the trial works</a>
+        <a class="btn" href="#gate">Gehenna’s Gate</a>
       </div>
     </div>
   </div>
 </div>
 
 <main>
-  <section id="trial">
+  <section id="gate">
     <div class="wrap">
       <div class="section-head">
         <p class="mono red">The setting</p>
-        <h2>Everyone arrives the same way.</h2>
-        <p>Gehenna has no heaven and no hell. It has a trial, and every soul has to stand in it.</p>
+        <h2>Gehenna’s Gate</h2>
+        <p>Navigate Gehenna from here.</p>
       </div>
       <div class="panels">
-        <article class="panel">
-          <p class="mono red">The judge</p>
-          <h3>The headmaster</h3>
-          <p>The headmaster calculates your accumulated karma and decides whether you are a sinner or a savior. A punishment or a reward is given to the souls who lived their life.</p>
+        <article class="panel open-card">
+          <p class="mono red">The story</p>
+          <h3>Storyline</h3>
+          <p class="desc">Read how souls arrive in Gehenna. New chapters open as the story goes on.</p>
+          <button type="button" class="btn primary" id="open-book" aria-controls="storyline" aria-expanded="false">Open the book</button>
         </article>
-        <article class="panel">
-          <p class="mono red">The treasure</p>
-          <h3>Your core item</h3>
-          <p>Once you play through the prologue, your most treasured item is given to you. It carries the abilities your soul needs to survive.</p>
+        <article class="panel soon">
+          <p class="mono red">The souls</p>
+          <h3>Players / NPC</h3>
+          <span class="tag">Unavailable for now</span>
         </article>
         <article class="panel">
           <p class="mono red">The rules of chance</p>
-          <h3>Dice decide</h3>
-          <p>This roleplay relies heavily on dice. Your six stats are used for saving throw checks.</p>
+          <h3>Dice System</h3>
         </article>
-        <article class="panel">
+        <article class="panel soon">
           <p class="mono red">The world</p>
-          <h3>Human souls only</h3>
-          <p>Your character must be human, from any year you like. Magic doesn't exist in this world, so your lore has to fit that.</p>
+          <h3>Locations and Items Registered</h3>
+          <span class="tag">Unavailable for now</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="storyline" hidden aria-label="Storyline">
+    <div class="wrap">
+      <div class="book-top">
+        <p class="mono red">Gehenna’s Gate &middot; Storyline</p>
+        <button type="button" class="btn" id="book-close">Close the book</button>
+      </div>
+      <h2 class="sr-only">Storyline</h2>
+      <figure class="book-banner">
+        <img src="storyline-banner.jpg" width="1500" height="500" alt="Storyline. Two silhouettes stand beneath a red sun, beside the kanji 煉獄." loading="lazy">
+      </figure>
+      <div class="book" id="book">
+        <nav class="book-toc" aria-label="Chapters">
+          <p class="mono red">Contents</p>
+          <ol class="toc" id="toc"></ol>
+        </nav>
+        <article class="book-page" id="page" tabindex="-1" aria-live="polite">
+          <p class="mono">Opening the book…</p>
         </article>
       </div>
     </div>
@@ -1068,11 +1139,131 @@
 </script>
 
 <script>
+// Storyline book: lists the chapters and opens one at a time. Locked chapters stay closed.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var sec = $('storyline'), openBtn = $('open-book'), closeBtn = $('book-close'), toc = $('toc'), page = $('page'), book = $('book');
+  var chapters = [], cur = null, cache = {}, loaded = false, loading = false;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function call(body) {
+    return fetch('/.netlify/functions/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  // **bold** and *italic* inside a line. Everything else is plain text.
+  function inline(parent, text) {
+    text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/).forEach(function (part) {
+      var m;
+      if (!part) return;
+      if ((m = /^\*\*([^*]+)\*\*$/.exec(part))) parent.appendChild(el('strong', '', m[1]));
+      else if ((m = /^\*([^*\n]+)\*$/.exec(part))) parent.appendChild(el('em', '', m[1]));
+      else parent.appendChild(document.createTextNode(part));
+    });
+  }
+  // A blank line starts a new paragraph. A paragraph that is only bold becomes a centred line.
+  function body(text) {
+    var wrap = el('div', 'ch-body');
+    String(text || '').replace(/[ㅤᅠ]/g, '').replace(/\r/g, '').replace(/\n[ \t]+(?=\n)/g, '\n').split(/\n{2,}/).forEach(function (para) {
+      para = para.trim();
+      if (!para) return;
+      var p = el('p', /^\*\*[^*]+\*\*$/.test(para) ? 'emph' : '');
+      para.split('\n').forEach(function (ln, i) { if (i) p.appendChild(document.createElement('br')); inline(p, ln.trim()); });
+      wrap.appendChild(p);
+    });
+    if (!wrap.children.length) wrap.appendChild(el('p', 'mono', 'Nothing has been written here yet.'));
+    return wrap;
+  }
+  function figs(list) {
+    return (list || []).filter(function (im) { return im && /^data:image\/(jpeg|png|webp);base64,/.test(im.src || ''); }).map(function (im) {
+      var f = el('figure', 'ch-fig'), i = document.createElement('img');
+      i.src = im.src; i.alt = im.caption ? '' : 'Story illustration'; i.loading = 'lazy'; f.appendChild(i);
+      if (im.caption) f.appendChild(el('figcaption', 'mono', im.caption));
+      return f;
+    });
+  }
+
+  function showError(msg, retry) {
+    page.textContent = '';
+    page.appendChild(el('p', '', msg));
+    if (retry) { var b = el('button', 'btn', 'Try again'); b.type = 'button'; b.style.marginTop = '1rem'; b.addEventListener('click', retry); page.appendChild(b); }
+  }
+  function renderToc() {
+    toc.textContent = '';
+    chapters.forEach(function (c) {
+      var li = document.createElement('li'), b = el('button', 'toc-btn');
+      b.type = 'button';
+      b.appendChild(el('span', '', c.title || 'Untitled'));
+      if (c.locked) { b.disabled = true; b.appendChild(el('small', '', 'Locked')); }
+      if (c.id === cur) b.setAttribute('aria-current', 'page');
+      b.addEventListener('click', function () { openChapter(c.id, true); });
+      li.appendChild(b); toc.appendChild(li);
+    });
+  }
+  function renderPage(c, focus) {
+    var i = 0; chapters.forEach(function (x, n) { if (x.id === c.id) i = n; });
+    var prev = chapters[i - 1], next = chapters[i + 1], nav = el('div', 'ch-nav');
+    function step(label, ch) {
+      var b = el('button', 'btn', label); b.type = 'button';
+      if (!ch || ch.locked) b.disabled = true; else b.addEventListener('click', function () { openChapter(ch.id, true); });
+      return b;
+    }
+    nav.appendChild(step(prev ? '← ' + (prev.title || 'Previous') : '← Start of the book', prev));
+    nav.appendChild(step(next ? (next.locked ? 'Next chapter locked' : (next.title || 'Next') + ' →') : 'To be continued', next));
+    page.textContent = '';
+    page.appendChild(el('h3', 'ch-title', c.title || 'Untitled'));
+    page.appendChild(body(c.body));
+    figs(c.images).forEach(function (f) { page.appendChild(f); });
+    page.appendChild(nav);
+    page.classList.remove('turn'); void page.offsetWidth; page.classList.add('turn');
+    if (focus) { page.focus({ preventScroll: true }); if (book.getBoundingClientRect().top < 0) book.scrollIntoView({ block: 'start' }); }
+  }
+  function openChapter(id, focus) {
+    cur = id; renderToc();
+    if (cache[id]) { renderPage(cache[id], focus); return; }
+    page.textContent = ''; page.appendChild(el('p', 'mono', 'Turning the page…'));
+    call({ id: id }).then(function (r) {
+      if (cur !== id) return;
+      if (!r.ok || !r.j.chapter) { showError((r.j && r.j.error) || 'This chapter could not be opened.', function () { openChapter(id, focus); }); return; }
+      cache[id] = r.j.chapter; renderPage(r.j.chapter, focus);
+    }).catch(function () { if (cur === id) showError('Could not reach the server. Try again in a moment.', function () { openChapter(id, focus); }); });
+  }
+  function loadList() {
+    if (loading) return;
+    loading = true;
+    call({}).then(function (r) {
+      loading = false;
+      if (!r.ok || !r.j.chapters) { showError((r.j && r.j.error) || 'The story could not be loaded.', loadList); return; }
+      chapters = r.j.chapters; loaded = true;
+      var first = chapters.filter(function (c) { return !c.locked; })[0];
+      if (first) openChapter(first.id, false); else { renderToc(); showError('No chapters are open yet.'); }
+    }).catch(function () { loading = false; showError('Could not reach the server. Try again in a moment.', loadList); });
+  }
+
+  function openBook() {
+    sec.hidden = false; openBtn.setAttribute('aria-expanded', 'true');
+    if (!loaded) loadList();
+    sec.scrollIntoView({ block: 'start' });
+    page.focus({ preventScroll: true });
+  }
+  function closeBook() {
+    sec.hidden = true; openBtn.setAttribute('aria-expanded', 'false');
+    var g = $('gate'); if (g) g.scrollIntoView({ block: 'start' });
+    openBtn.focus({ preventScroll: true });
+  }
+  openBtn.addEventListener('click', openBook);
+  closeBtn.addEventListener('click', closeBook);
+  if (location.hash === '#storyline') openBook();
+  window.addEventListener('hashchange', function () { if (location.hash === '#storyline') openBook(); });
+})();
+</script>
+
+<script>
 // Headmaster + player login. Talks to /.netlify/functions/admin (headmaster) and /player (key login).
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
-  var creds = null, inbox = [], chars = [], tab = 'inbox', cur = null, pchar = null;
+  var creds = null, inbox = [], chars = [], story = [], tab = 'inbox', cur = null, pchar = null;
   var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
 
   function h(t, a, kids) {
@@ -1249,39 +1440,139 @@
     pv.appendChild(w);
   }
 
+  /* ---------- Storyline editor ---------- */
+  function listFor(t) { return t === 'inbox' ? inbox : t === 'chars' ? chars : story; }
+  function newChapter() {
+    story = story.filter(function (x) { return !x.isNew; });
+    story.push({ id: 'new', isNew: true, title: 'Chapter ' + story.length, locked: true, body: '', images: [] });
+    tab = 'story'; cur = 'new'; render();
+  }
+  // Pictures are shrunk in the browser so a chapter stays small.
+  function shrink(file, cb) {
+    var r = new FileReader();
+    r.onerror = function () { cb(null); };
+    r.onload = function () {
+      var im = new Image();
+      im.onerror = function () { cb(null); };
+      im.onload = function () {
+        var max = 1100, q = 0.82, out = '';
+        for (var n = 0; n < 6; n++) {
+          var k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+          var x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+          out = c.toDataURL('image/jpeg', q);
+          if (out.length < 420000) break;
+          q -= 0.08; max -= 150;
+        }
+        cb(out.length < 480000 ? out : null);
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  }
+  function storyEditor(src) {
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }), st = h('p', { className: 'mono' });
+    c.images = c.images || [];
+    function swap(arr, i, j) { if (j < 0 || j >= arr.length) return; var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    function move(dir) {
+      if (c.isNew) { st.textContent = 'Save the chapter first.'; return; }
+      var i = -1; story.forEach(function (x, n) { if (x.id === c.id) i = n; });
+      var j = i + dir;
+      if (i < 0 || j < 0 || j >= story.length || story[j].isNew) return;
+      api({ action: 'storymove', id: c.id, dir: dir }).then(function (r) {
+        if (!r.ok) { st.textContent = (r.j && r.j.error) || 'Could not move it'; return; }
+        swap(story, i, j); renderSide();
+      });
+    }
+    function draw() {
+      box.textContent = '';
+      var ttl = h('input', { value: c.title || '' }); ttl.oninput = function () { c.title = ttl.value; };
+      box.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Chapter title' }), ttl]));
+      var op = h('input', { type: 'checkbox', checked: !c.locked }); op.onchange = function () { c.locked = !op.checked; };
+      box.appendChild(h('label', { className: 'chk' }, [op, h('span', { text: 'Open to players (leave unticked to keep the chapter locked)' })]));
+      var tx = h('textarea', { value: c.body || '' }); tx.rows = 18; tx.oninput = function () { c.body = tx.value; };
+      box.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Story text' }), tx]));
+      box.appendChild(h('p', { className: 'hint', text: 'Leave a blank line between paragraphs. **Double stars** make bold, *single stars* make italic. A paragraph that is only bold shows as a centred line.' }));
+      box.appendChild(h('h4', { text: 'Pictures' }));
+      c.images.forEach(function (im, j) {
+        var cap = h('input', { value: im.caption || '', placeholder: 'Caption (optional)' }); cap.oninput = function () { im.caption = cap.value; };
+        var up = h('button', { type: 'button', className: 'btn', text: 'Up' }); up.onclick = function () { swap(c.images, j, j - 1); draw(); };
+        var dn = h('button', { type: 'button', className: 'btn', text: 'Down' }); dn.onclick = function () { swap(c.images, j, j + 1); draw(); };
+        var rm = h('button', { type: 'button', className: 'btn', text: 'Remove' }); rm.onclick = function () { c.images.splice(j, 1); draw(); };
+        box.appendChild(h('div', { className: 'imgrow' }, [h('img', { src: im.src, alt: '', className: 'thumb' }), h('div', { className: 'imgctl' }, [cap, h('div', { className: 'btns' }, [up, dn, rm])])]));
+      });
+      var pic = h('input', { type: 'file', accept: 'image/*' });
+      pic.onchange = function () {
+        var f = pic.files && pic.files[0]; if (!f) return;
+        if (c.images.length >= 6) { st.textContent = 'A chapter can hold up to 6 pictures.'; pic.value = ''; return; }
+        st.textContent = 'Preparing the picture…';
+        shrink(f, function (d) { if (!d) { st.textContent = 'Could not use that picture. Try a smaller one.'; return; } c.images.push({ src: d, caption: '' }); st.textContent = ''; draw(); });
+      };
+      box.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Add a picture (up to 6, shown after the text)' }), pic]));
+      var save = h('button', { type: 'button', className: 'btn primary', text: 'Save chapter' });
+      save.onclick = function () {
+        if (!(c.title || '').trim()) { st.textContent = 'Give the chapter a title first.'; return; }
+        save.disabled = true; st.textContent = 'Saving…';
+        var send = JSON.parse(JSON.stringify(c)); if (send.isNew) delete send.id; delete send.isNew;
+        api({ action: 'storysave', chapter: send }).then(function (r) {
+          save.disabled = false;
+          if (!r.ok) { st.textContent = (r.j && r.j.error) || 'Save failed'; return; }
+          var saved = r.j.chapter, was = c.id;
+          story = story.map(function (x) { return x.id === was ? saved : x; });
+          c.id = saved.id; delete c.isNew; cur = saved.id;
+          st.textContent = saved.locked ? 'Saved. This chapter is still locked.' : 'Saved. Players can read it now.';
+          renderSide();
+        });
+      };
+      var mu = h('button', { type: 'button', className: 'btn', text: 'Move up' }); mu.onclick = function () { move(-1); };
+      var md = h('button', { type: 'button', className: 'btn', text: 'Move down' }); md.onclick = function () { move(1); };
+      var del = h('button', { type: 'button', className: 'btn', text: 'Delete chapter' });
+      two(del, 'Delete chapter', function () {
+        function gone() { story = story.filter(function (x) { return x.id !== c.id; }); cur = null; pick(); }
+        if (c.isNew) { gone(); return; }
+        api({ action: 'storydelete', id: c.id }).then(function (r) { if (r.ok) gone(); else st.textContent = (r.j && r.j.error) || 'Delete failed'; });
+      });
+      box.appendChild(h('div', { className: 'btns' }, [save, mu, md, del]));
+      box.appendChild(st);
+    }
+    draw(); return [box];
+  }
+
   /* ---------- Admin shell ---------- */
   function renderSide() {
     side.textContent = '';
-    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')']].map(function (t) {
+    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')'], ['story', 'Storyline (' + story.length + ')']].map(function (t) {
       return h('button', { type: 'button', className: 'btn', text: t[1], 'aria-pressed': String(tab === t[0]), onclick: function () { tab = t[0]; cur = null; pick(); } });
     }));
     side.appendChild(tabs);
-    (tab === 'inbox' ? inbox : chars).forEach(function (it) {
-      var b = h('button', { type: 'button', className: 'adm-row', 'aria-current': String(it.id === cur) }, [h('b', { text: it.name || 'Unnamed' }),
-        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : 'Key ' + it.key })]);
+    if (tab === 'story') { var nb = h('button', { type: 'button', className: 'btn', text: '+ New chapter' }); nb.onclick = newChapter; side.appendChild(nb); }
+    listFor(tab).forEach(function (it) {
+      var b = h('button', { type: 'button', className: 'adm-row', 'aria-current': String(it.id === cur) }, [h('b', { text: (tab === 'story' ? it.title : it.name) || (tab === 'story' ? 'Untitled chapter' : 'Unnamed') }),
+        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : tab === 'story' ? (it.locked ? 'Locked' : 'Open to players') : 'Key ' + it.key })]);
       b.onclick = function () { cur = it.id; render(); };
       side.appendChild(b);
     });
   }
   function renderMain() {
     main.textContent = '';
-    var list = tab === 'inbox' ? inbox : chars, it = list.filter(function (x) { return x.id === cur; })[0];
-    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : 'No accepted characters yet.') })); return; }
-    (tab === 'inbox' ? inboxView(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
+    var list = listFor(tab), it = list.filter(function (x) { return x.id === cur; })[0];
+    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : tab === 'story' ? 'No chapters yet. Add one on the left.' : 'No accepted characters yet.') })); return; }
+    (tab === 'inbox' ? inboxView(it) : tab === 'story' ? storyEditor(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
   }
-  function pick() { var list = tab === 'inbox' ? inbox : chars; if (!list.some(function (x) { return x.id === cur; })) cur = list.length ? list[0].id : null; render(); }
+  function pick() { var list = listFor(tab); if (!list.some(function (x) { return x.id === cur; })) cur = list.length ? list[0].id : null; render(); }
   function render() { renderSide(); renderMain(); }
   function load() {
     show('admin'); main.textContent = 'Loading…';
-    Promise.all([api({ action: 'list' }), api({ action: 'chars' })]).then(function (rs) {
-      var a = rs[0], b = rs[1];
+    Promise.all([api({ action: 'list' }), api({ action: 'chars' }), api({ action: 'storylist' })]).then(function (rs) {
+      var a = rs[0], b = rs[1], sl = rs[2];
       if (!a.ok) {
         if ((a.j.error || '').indexOf('Wrong') === 0) { creds = null; show('login'); msg.textContent = a.j.error; } else main.textContent = a.j.error || 'Something went wrong.';
         return;
       }
       msg.textContent = ''; $('adm-pass').value = '';
-      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; pick();
+      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; pick();
       if (!b.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load saved characters: ' + (b.j.error || '') }), main.firstChild);
+      if (!sl.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load the storyline: ' + (sl.j.error || '') }), main.firstChild);
     }).catch(function () { main.textContent = 'Could not reach the server.'; });
   }
   function submitLogin() {
@@ -1305,7 +1596,7 @@
   $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
   $('pl-key').addEventListener('keydown', function (e) { if (e.key === 'Enter') playerLogin(); });
   $('adm-refresh').addEventListener('click', load);
-  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; inbox = []; chars = []; cur = null; show('login'); msg.textContent = 'Logged out.'; });
+  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; inbox = []; chars = []; story = []; cur = null; show('login'); msg.textContent = 'Logged out.'; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
 })();
 </script>

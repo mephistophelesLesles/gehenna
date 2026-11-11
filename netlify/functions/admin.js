@@ -1,10 +1,11 @@
-// Admin API: reads Netlify Forms submissions, accepts them into saved characters (Netlify Blobs), edits them, makes login keys.
+// Admin API: reads Netlify Forms submissions, accepts them into saved characters (Netlify Blobs), edits them, makes login keys, and edits the storyline chapters.
 // Env vars: NETLIFY_TOKEN, ADMIN_PASSWORD, (optional) ADMIN_EMAIL, FORM_NAME, GEHENNA_SITE_ID.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
+const { storyAdmin } = require('./lib/story');
 const API = 'https://api.netlify.com/api/v1';
 const FORM = process.env.FORM_NAME || 'gehenna-sheet';
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'pleasenevercookagain@gmail.com').trim().toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Mephisto').trim().toLowerCase();
 const ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
 const ALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -33,7 +34,7 @@ function fromSheet(d) {
   const karma = val(5);
   return {
     name: val(0) || S(d.name, 100), gender: val(1), dates: val(2), persona: val(3), destiny: val(4), karma: /judged by the headmaster/i.test(karma) ? '' : karma,
-    appearance: val(6), itemName: item[0] || '', itemDesc: item.slice(1).join('\n').trim(), quirk: val(12), hp: 20, speed: 30, stats,
+    appearance: val(6), itemName: item[0] || '', itemDesc: item.slice(1).join('\n').trim(), quirk: val(12), hp: 20, speed: 30, items: [], stats,
     skills: [skill('Basic Skill', 8), skill('Skill 1', 9), skill('Skill 2', 10), skill('Ultimate', 11)],
   };
 }
@@ -43,7 +44,8 @@ function clean(c, old) {
   return {
     id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '',
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
-    itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc), quirk: S(c.quirk), hp: N(c.hp, 0, 9999), speed: N(c.speed, 0, 999),
+    itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
+    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: S(c.quirk), hp: N(c.hp, 0, 9999), speed: N(c.speed, 0, 999),
     stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; o[k] = { score: N(s.score, 0, 99), mod: N(s.mod, -99, 99) }; return o; }, {}),
     skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 8).map(s => ({
       label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100),
@@ -58,11 +60,13 @@ exports.handler = async (event) => {
   let b; try { b = JSON.parse(event.body || '{}'); } catch (e) { return reply(400, { error: 'Bad request' }); }
   const okEmail = same(String(b.email || '').trim().toLowerCase(), ADMIN_EMAIL);
   const okPass = same(b.password || '', process.env.ADMIN_PASSWORD);
-  if (!(okEmail && okPass)) { await new Promise(r => setTimeout(r, 900)); return reply(401, { error: 'Wrong email or password.' }); }
+  if (!(okEmail && okPass)) { await new Promise(r => setTimeout(r, 900)); return reply(401, { error: 'Wrong Secret ID or Secret Key.' }); }
   try {
     connectLambda(event);
     const chars = getStore('gehenna-characters'), keys = getStore('gehenna-keys');
     const goodId = /^[a-f0-9-]{8,40}$/i.test(String(b.id || ''));
+    const sr = await storyAdmin(b, getStore('gehenna-story'));
+    if (sr) return reply(sr[0], sr[1]);
 
     if (b.action === 'delete') {
       if (!goodId) return reply(400, { error: 'Bad id' });
