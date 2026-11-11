@@ -1,8 +1,9 @@
-// Admin API: reads Netlify Forms submissions, accepts them into saved characters (Netlify Blobs), edits them, makes login keys, and edits the storyline chapters.
+// Admin API: reads Netlify Forms submissions, accepts them into saved characters (Netlify Blobs), edits them, makes login keys, edits the storyline chapters, and edits the Players / NPCs / Monsters registry.
 // Env vars: NETLIFY_TOKEN, ADMIN_PASSWORD, (optional) ADMIN_EMAIL, FORM_NAME, GEHENNA_SITE_ID.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { storyAdmin } = require('./lib/story');
+const { registryAdmin } = require('./lib/registry');
 const API = 'https://api.netlify.com/api/v1';
 const FORM = process.env.FORM_NAME || 'gehenna-sheet';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Mephisto').trim().toLowerCase();
@@ -67,6 +68,8 @@ exports.handler = async (event) => {
     const goodId = /^[a-f0-9-]{8,40}$/i.test(String(b.id || ''));
     const sr = await storyAdmin(b, getStore('gehenna-story'));
     if (sr) return reply(sr[0], sr[1]);
+    const rr = await registryAdmin(b, getStore('gehenna-registry'));
+    if (rr) return reply(rr[0], rr[1]);
 
     if (b.action === 'delete') {
       if (!goodId) return reply(400, { error: 'Bad id' });

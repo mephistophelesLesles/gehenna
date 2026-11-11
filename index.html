@@ -374,6 +374,48 @@
 
   #storyline { background: var(--bg); border-top: 1px solid var(--line); }
   #storyline[hidden] { display: none !important; }
+
+  /* Registry: Players / NPCs / Monsters */
+  #registry { background: var(--bg); border-top: 1px solid var(--line); }
+  #registry[hidden] { display: none !important; }
+  .reg { position: relative; display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); border: 1px solid var(--line); background: var(--surface); min-height: 26rem; }
+  .reg::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: linear-gradient(90deg, var(--red) 0 6px, transparent 6px 8px, var(--red) 8px 9px, transparent 9px); }
+  .reg-nav { display: grid; gap: 2rem; align-content: start; padding: clamp(1.1rem, 3vw, 1.75rem) 1.2rem clamp(1.1rem, 3vw, 1.75rem) calc(12px + 1.4rem); border-right: 1px solid var(--line); }
+  .reg-tabs { display: grid; gap: 0.7rem; justify-items: start; }
+  .reg-tab { background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 0.15rem 0; color: var(--muted); font-family: var(--f-display); font-size: 1.6rem; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; }
+  .reg-tab:hover { color: var(--fg); }
+  .reg-tab[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--red); }
+  .reg-key { display: grid; gap: 0.5rem; }
+  .reg-key p { margin: 0; color: var(--muted); font-size: 0.7rem; }
+  .reg-key input, .reg-bar input { width: 100%; padding: 0.6rem 0.7rem; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 0; font: inherit; }
+  .reg-key .btn { justify-self: start; padding: 0.5rem 0.8rem; }
+  .reg-main { padding: clamp(1rem, 3vw, 1.75rem); min-width: 0; }
+  .reg-bar { display: flex; justify-content: flex-end; margin-bottom: 1.4rem; } .reg-bar input { width: min(100%, 16rem); }
+  .reg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 1.6rem 1.3rem; align-items: start; }
+  .reg-card { display: grid; gap: 0.5rem; justify-items: center; text-align: center; background: none; border: 0; padding: 0; color: var(--fg); font: inherit; cursor: pointer; }
+  .reg-card b { font-family: var(--f-display); font-weight: 500; font-size: 1.25rem; line-height: 1.15; overflow-wrap: anywhere; }
+  .reg-card small { font-family: var(--f-mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .reg-card:hover .reg-img, .reg-card:focus-visible .reg-img { border-color: var(--red-hi); box-shadow: 6px 6px 0 color-mix(in srgb, var(--red) 40%, transparent); }
+  .reg-img { width: 100%; aspect-ratio: 1; border: 3px solid var(--red); background: #000; display: grid; place-items: center; overflow: hidden; font-family: var(--f-display); font-size: 3.4rem; color: var(--muted); }
+  .reg-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .reg-det { display: grid; grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem 2rem; align-items: start; }
+  .reg-det .reg-back { grid-column: 1 / -1; justify-self: start; }
+  .reg-who { display: grid; gap: 0.7rem; justify-items: center; text-align: center; } .reg-who h3 { font-size: 1.6rem; line-height: 1.1; overflow-wrap: anywhere; }
+  .reg-col { display: grid; gap: 1.4rem; align-content: start; min-width: 0; }
+  .reg-sec { display: grid; gap: 0.15rem; } .reg-sec h4 { font-family: var(--f-body); font-weight: 700; font-size: 1.05rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  .reg-sec p { margin: 0; text-transform: uppercase; overflow-wrap: anywhere; white-space: pre-wrap; } .reg-sec p.dim { color: var(--muted); }
+  .reg-sec ul { margin: 0; padding-left: 1.2rem; text-transform: uppercase; } .reg-sec li::marker { color: var(--red-hi); }
+  .reg-sealed { padding: 1rem 1.2rem; border: 1px dashed var(--red); }
+  @media (max-width: 56rem) { .reg-det { grid-template-columns: minmax(0, 1fr); } .reg-who { justify-items: start; text-align: left; } .reg-who .reg-img { max-width: 14rem; } }
+  @media (max-width: 40rem) { .reg { grid-template-columns: minmax(0, 1fr); } .reg-nav { border-right: 0; border-bottom: 1px solid var(--line); gap: 1.2rem; } .reg-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; } }
+
+  /* Registry editor (headmaster) */
+  .cropper { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+  .crop-cv { width: 12rem; height: 12rem; border: 1px solid var(--red); background: #000; flex: none; }
+  .cropper .ctl { display: grid; gap: 0.5rem; flex: 1 1 14rem; min-width: 0; }
+  .ed input[type="range"] { padding: 0; }
+  .chk { display: flex; align-items: center; gap: 0.55rem; } .ed .chk input { width: auto; } .chk span { font-size: 0.95rem; }
+  .pick { display: grid; gap: 0.35rem; padding: 0.7rem; border: 1px solid var(--line); background: var(--bg); }
   .book-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.5rem; margin-bottom: 1.25rem; }
   .book-banner { margin: 0 0 1.5rem; border: 1px solid var(--line); background: #000; }
   .book-banner img { display: block; width: 100%; height: auto; }
@@ -469,10 +511,11 @@
           <p class="desc">Read how souls arrive in Gehenna. New chapters open as the story goes on.</p>
           <button type="button" class="btn primary" id="open-book" aria-controls="storyline" aria-expanded="false">Open the book</button>
         </article>
-        <article class="panel soon">
+        <article class="panel open-card">
           <p class="mono red">The souls</p>
-          <h3>Players / NPC</h3>
-          <span class="tag">Unavailable for now</span>
+          <h3>Players / NPCs / Monsters</h3>
+          <p class="desc">See who walks Gehenna, and what the headmaster lets everyone know about them.</p>
+          <button type="button" class="btn primary" id="open-registry" aria-controls="registry" aria-expanded="false">Open the registry</button>
         </article>
         <article class="panel">
           <p class="mono red">The rules of chance</p>
@@ -505,6 +548,38 @@
         <article class="book-page" id="page" tabindex="-1" aria-live="polite">
           <p class="mono">Opening the book…</p>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="registry" hidden aria-label="Players, NPCs and Monsters">
+    <div class="wrap">
+      <div class="book-top">
+        <p class="mono red">Gehenna’s Gate &middot; Players / NPCs / Monsters</p>
+        <button type="button" class="btn" id="reg-close">Close the registry</button>
+      </div>
+      <h2 class="sr-only">Players, NPCs and Monsters</h2>
+      <div class="reg">
+        <nav class="reg-nav" aria-label="Registry sections">
+          <div class="reg-tabs">
+            <button type="button" class="reg-tab" data-t="player" aria-pressed="true">Players</button>
+            <button type="button" class="reg-tab" data-t="npc" aria-pressed="false">NPCs</button>
+            <button type="button" class="reg-tab" data-t="shadow" aria-pressed="false">Shadows</button>
+          </div>
+          <div class="reg-key">
+            <p class="mono">Have a soul key? It can unlock sealed entries meant for you.</p>
+            <input type="text" id="reg-key" placeholder="GEH-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" aria-label="Your soul key">
+            <button type="button" class="btn" id="reg-unlock">Unlock</button>
+            <p class="mono" id="reg-keymsg" aria-live="polite"></p>
+          </div>
+        </nav>
+        <div class="reg-main" id="reg-main" tabindex="-1" aria-live="polite">
+          <div id="reg-list">
+            <div class="reg-bar"><input type="search" id="reg-search" placeholder="Search name" aria-label="Search name"></div>
+            <div class="reg-grid" id="reg-grid"></div>
+          </div>
+          <div class="reg-det" id="reg-det" hidden></div>
+        </div>
       </div>
     </div>
   </section>
@@ -1259,11 +1334,116 @@
 </script>
 
 <script>
+// Registry: Players / NPCs / Monsters. A card opens that entry's public details. Sealed NPCs stay sealed unless the
+// player's key (optional) was allowed by the headmaster. The server decides what each person may see.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var sec = $('registry'), openBtn = $('open-registry'), closeBtn = $('reg-close'), list = $('reg-list'), grid = $('reg-grid'), det = $('reg-det'), main = $('reg-main'),
+      q = $('reg-search'), keyIn = $('reg-key'), keyMsg = $('reg-keymsg'), tabs = document.querySelectorAll('.reg-tab');
+  var entries = [], type = 'player', key = '', loaded = false, SK = 'gehenna-reg-key', ORDER = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function call(body) {
+    if (key) body.key = key;
+    return fetch('/.netlify/functions/registry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+  function thumb(e) {
+    var d = el('div', 'reg-img');
+    if (e.image) { var i = el('img'); i.src = e.image; i.alt = ''; i.loading = 'lazy'; d.appendChild(i); } else d.textContent = e.undisclosed ? '?' : '';
+    return d;
+  }
+  function renderList() {
+    grid.textContent = '';
+    var s = q.value.trim().toLowerCase(), ofType = entries.filter(function (e) { return e.type === type; });
+    var rows = ofType.filter(function (e) { return !s || e.name.toLowerCase().indexOf(s) >= 0; });
+    if (!rows.length) { grid.appendChild(el('p', 'mono', ofType.length ? 'No one by that name.' : 'No one has been registered here yet.')); return; }
+    rows.forEach(function (e) {
+      var b = el('button', 'reg-card'); b.type = 'button';
+      b.appendChild(thumb(e)); b.appendChild(el('b', null, e.name)); b.appendChild(el('small', null, e.undisclosed ? 'Undisclosed' : 'Details'));
+      b.onclick = function () { openEntry(e.id); };
+      grid.appendChild(b);
+    });
+  }
+  function showList() { det.hidden = true; list.hidden = false; }
+  function load() {
+    grid.textContent = ''; grid.appendChild(el('p', 'mono', 'Opening the registry…'));
+    try { if (!key) key = sessionStorage.getItem(SK) || ''; } catch (e) {}
+    call({}).then(function (r) {
+      if (r.ok) { entries = r.j.entries || []; loaded = true; if (key && r.j.viewer) keyMsg.textContent = 'Unlocked as ' + r.j.viewer + '.'; renderList(); return; }
+      if (key) { key = ''; try { sessionStorage.removeItem(SK); } catch (e) {} return load(); }
+      grid.textContent = ''; grid.appendChild(el('p', 'mono', (r.j && r.j.error) || 'Could not open the registry.'));
+    }).catch(function () { grid.textContent = ''; grid.appendChild(el('p', 'mono', 'Could not reach the server.')); });
+  }
+  function unlock() {
+    var k = keyIn.value.trim(); if (!k) { keyMsg.textContent = 'Enter your key.'; return; }
+    keyMsg.textContent = 'Checking…'; var old = key; key = k;
+    call({}).then(function (r) {
+      if (!r.ok) { key = old; keyMsg.textContent = (r.j && r.j.error) || 'Could not unlock.'; return; }
+      keyIn.value = ''; entries = r.j.entries || []; keyMsg.textContent = 'Unlocked as ' + (r.j.viewer || 'a soul') + '.';
+      try { sessionStorage.setItem(SK, k); } catch (e) {}
+      showList(); renderList();
+    }).catch(function () { key = old; keyMsg.textContent = 'Could not reach the server.'; });
+  }
+  function block(title, kids) { var d = el('div', 'reg-sec'); d.appendChild(el('h4', null, title)); kids.forEach(function (k) { d.appendChild(k); }); return d; }
+  function bullets(arr) {
+    var items = (arr || []).filter(Boolean); if (!items.length) return [el('p', 'dim', '—')];
+    var ul = el('ul'); items.forEach(function (t) { ul.appendChild(el('li', null, t)); }); return [ul];
+  }
+  function renderDet(e) {
+    list.hidden = true; det.hidden = false; det.textContent = '';
+    var back = el('button', 'btn reg-back', 'Back to the list'); back.type = 'button'; back.onclick = function () { showList(); main.focus({ preventScroll: true }); };
+    det.appendChild(back);
+    var who = el('div', 'reg-who'); who.appendChild(thumb(e)); who.appendChild(el('h3', null, e.name)); det.appendChild(who);
+    var c1 = el('div', 'reg-col'), c2 = el('div', 'reg-col');
+    if (e.undisclosed) {
+      var sealed = el('div', 'reg-sealed'); sealed.appendChild(el('h4', null, 'Undisclosed')); sealed.appendChild(el('p', 'dim', 'The headmaster has sealed this entry.'));
+      c1.appendChild(sealed);
+    } else {
+      if ('stats' in e) c1.appendChild(block('Stats', ORDER.map(function (k) { return el('p', null, k + ': ' + (e.stats && e.stats[k] != null ? e.stats[k] : '—')); })));
+      if ('basic' in e) c1.appendChild(block('Basic skill', bullets([e.basic])));
+      if ('skills' in e) c1.appendChild(block('Skills', bullets(e.skills)));
+      if ('ultimate' in e) c1.appendChild(block('Ultimate', bullets([e.ultimate])));
+      if ('quirk' in e) c1.appendChild(block('Quirk', [el('p', e.quirk ? '' : 'dim', e.quirk || '—')]));
+      if ('karma' in e) c2.appendChild(block('Accumulated karma: ' + (e.karma || '—'), []));
+      if ('notes' in e) c2.appendChild(block('Headmaster notes', [el('p', e.notes ? '' : 'dim', e.notes || '—')]));
+      if ('risk' in e) c2.appendChild(block('Assessment', [el('p', e.risk ? '' : 'dim', e.risk ? '* Risk LVL ' + e.risk : '—')]));
+    }
+    det.appendChild(c1); det.appendChild(c2);
+    main.focus({ preventScroll: true });
+  }
+  function openEntry(id) {
+    call({ id: id }).then(function (r) {
+      if (!r.ok) { grid.textContent = ''; grid.appendChild(el('p', 'mono', (r.j && r.j.error) || 'Could not open that entry.')); return; }
+      renderDet(r.j.entry);
+    }).catch(function () { grid.textContent = ''; grid.appendChild(el('p', 'mono', 'Could not reach the server.')); });
+  }
+  function openReg() { sec.hidden = false; openBtn.setAttribute('aria-expanded', 'true'); if (!loaded) load(); sec.scrollIntoView({ block: 'start' }); main.focus({ preventScroll: true }); }
+  function closeReg() { sec.hidden = true; openBtn.setAttribute('aria-expanded', 'false'); var g = $('gate'); if (g) g.scrollIntoView({ block: 'start' }); openBtn.focus({ preventScroll: true }); }
+
+  Array.prototype.forEach.call(tabs, function (t) {
+    t.addEventListener('click', function () {
+      type = t.getAttribute('data-t');
+      Array.prototype.forEach.call(tabs, function (x) { x.setAttribute('aria-pressed', String(x === t)); });
+      showList(); renderList();
+    });
+  });
+  q.addEventListener('input', renderList);
+  $('reg-unlock').addEventListener('click', unlock);
+  keyIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') unlock(); });
+  openBtn.addEventListener('click', openReg);
+  closeBtn.addEventListener('click', closeReg);
+  if (location.hash === '#registry') openReg();
+  window.addEventListener('hashchange', function () { if (location.hash === '#registry') openReg(); });
+})();
+</script>
+
+<script>
 // Headmaster + player login. Talks to /.netlify/functions/admin (headmaster) and /player (key login).
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
-  var creds = null, inbox = [], chars = [], story = [], tab = 'inbox', cur = null, pchar = null;
+  var creds = null, inbox = [], chars = [], story = [], reg = [], regTpl = null, tab = 'inbox', cur = null, pchar = null;
   var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
 
   function h(t, a, kids) {
@@ -1441,7 +1621,7 @@
   }
 
   /* ---------- Storyline editor ---------- */
-  function listFor(t) { return t === 'inbox' ? inbox : t === 'chars' ? chars : story; }
+  function listFor(t) { return t === 'inbox' ? inbox : t === 'chars' ? chars : t === 'reg' ? reg : story; }
   function newChapter() {
     story = story.filter(function (x) { return !x.isNew; });
     story.push({ id: 'new', isNew: true, title: 'Chapter ' + story.length, locked: true, body: '', images: [] });
@@ -1538,17 +1718,155 @@
     draw(); return [box];
   }
 
+  /* ---------- Registry (Players / NPCs / Monsters) ---------- */
+  var KINDS = { player: 'Player', npc: 'NPC', shadow: 'Monster' };
+  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : ''); }
+  function newEntry(ch) {
+    reg = reg.filter(function (x) { return !x.isNew; });
+    var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, revealTo: [], stats: {}, basic: '', skills: [], ultimate: '', quirk: '', karma: '', notes: '', risk: '' };
+    if (ch && ch.id) {
+      var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; };
+      e.name = ch.name || ''; e.image = ch.image || ''; e.quirk = ch.quirk || ''; e.karma = ch.karma || '';
+      ST.forEach(function (k) { e.stats[k] = (ch.stats && ch.stats[k] && ch.stats[k].score) || 0; });
+      e.basic = nm(sk[0]); e.skills = [nm(sk[1]), nm(sk[2])].filter(Boolean); e.ultimate = nm(sk[3]);
+    }
+    reg.push(e); tab = 'reg'; cur = 'new'; render();
+  }
+  // Square picture: the image is cropped (never squashed) to 512 x 512 and saved as a JPEG.
+  function cropper(c) {
+    var wrap = h('div', { className: 'cropper' }), cv = h('canvas', { className: 'crop-cv' }), im = null, z = 1, px = 0, py = 0, msg = h('p', { className: 'mono' });
+    cv.width = 512; cv.height = 512;
+    function paint() {
+      var x = cv.getContext('2d'); x.fillStyle = '#0d0b0c'; x.fillRect(0, 0, 512, 512);
+      if (!im) return;
+      x.imageSmoothingQuality = 'high';
+      var s = Math.min(im.width, im.height) / z;
+      x.drawImage(im, (im.width - s) / 2 * (1 + px), (im.height - s) / 2 * (1 + py), s, s, 0, 0, 512, 512);
+    }
+    function commit() {
+      if (!im) return;
+      var q = 0.9, out = '';
+      for (var n = 0; n < 5; n++) { out = cv.toDataURL('image/jpeg', q); if (out.length < 200000) break; q -= 0.1; }
+      c.image = out;
+    }
+    function sl(label, min, max, val, on) {
+      var i = h('input', { type: 'range', min: min, max: max, step: 0.01, value: val });
+      i.oninput = function () { on(Number(i.value)); paint(); }; i.onchange = commit;
+      return { box: h('label', { className: 'fl' }, [h('span', { text: label }), i]), input: i };
+    }
+    var zs = sl('Zoom', 1, 3, 1, function (v) { z = v; }), xs = sl('Move left / right', -1, 1, 0, function (v) { px = v; }), ys = sl('Move up / down', -1, 1, 0, function (v) { py = v; });
+    function use(src, fresh) {
+      var i = new Image();
+      i.onerror = function () { msg.textContent = 'Could not read that image.'; };
+      i.onload = function () {
+        im = i; z = 1; px = 0; py = 0; zs.input.value = 1; xs.input.value = 0; ys.input.value = 0; paint();
+        var m = Math.min(i.width, i.height);
+        msg.textContent = fresh && m < 512 ? 'That image is ' + i.width + '×' + i.height + ', smaller than 512×512, so it gets enlarged and looks soft. A bigger one is better.' : 'Saved as a 512×512 square. To re-crop, choose the original file again.';
+        if (fresh || i.width !== 512 || i.height !== 512) commit();
+      };
+      i.src = src;
+    }
+    var f = h('input', { type: 'file', accept: 'image/*' });
+    f.onchange = function () {
+      var file = f.files && f.files[0]; if (!file) return;
+      if (!/^image\//.test(file.type)) { msg.textContent = 'That is not an image.'; return; }
+      var r = new FileReader(); r.onload = function () { use(r.result, true); }; r.readAsDataURL(file);
+    };
+    var rm = h('button', { type: 'button', className: 'link', text: 'Remove image' });
+    rm.onclick = function () { c.image = ''; im = null; f.value = ''; msg.textContent = ''; paint(); };
+    wrap.appendChild(cv);
+    wrap.appendChild(h('div', { className: 'ctl' }, [h('label', { className: 'fl' }, [h('span', { text: 'Picture (cropped to a square, 512 × 512)' }), f]), zs.box, xs.box, ys.box, rm, msg]));
+    paint(); if (c.image) use(c.image, false);
+    return wrap;
+  }
+  function regEditor(src) {
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }), st = h('p', { className: 'mono' }), crop = cropper(c);
+    c.stats = c.stats || {}; c.skills = c.skills || []; c.revealTo = c.revealTo || [];
+    function has(k) { return !regTpl || (regTpl[c.type] || []).indexOf(k) >= 0; }
+    function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
+    function chk(label, on, set) { var i = h('input', { type: 'checkbox', checked: !!on }); i.onchange = function () { set(i.checked); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); }
+    function draw() {
+      box.textContent = '';
+      var ts = h('select', {}, [['player', 'Player'], ['npc', 'NPC'], ['shadow', 'Monster / Shadow']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: c.type === o[0] }); }));
+      ts.onchange = function () { c.type = ts.value; draw(); };
+      box.appendChild(h('div', { className: 'g2' }, [h('label', { className: 'fl' }, [h('span', { text: 'Type' }), ts]), txt('Name', c, 'name')]));
+      box.appendChild(chk('Listed to players (untick to hide this entry completely)', c.listed !== false, function (v) { c.listed = v; }));
+      box.appendChild(crop);
+      if (c.type === 'npc') {
+        box.appendChild(chk('Undisclosed: players only see the name, until you allow them below', c.undisclosed, function (v) { c.undisclosed = v; draw(); }));
+        if (c.undisclosed) {
+          var pk = h('div', { className: 'pick' }, [h('span', { className: 'mono red', text: 'Players allowed to see this NPC' })]);
+          if (!chars.length) pk.appendChild(h('p', { className: 'mono', text: 'No accepted characters yet.' }));
+          chars.forEach(function (ch) {
+            pk.appendChild(chk(ch.name || 'Unnamed', c.revealTo.indexOf(ch.id) >= 0, function (v) {
+              c.revealTo = c.revealTo.filter(function (x) { return x !== ch.id; }); if (v) c.revealTo.push(ch.id);
+            }));
+          });
+          box.appendChild(pk);
+        }
+      }
+      box.appendChild(h('h4', { text: 'Public details' }));
+      if (has('stats')) {
+        box.appendChild(h('div', { className: 'g6' }, ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'].map(function (k) {
+          var i = h('input', { type: 'number', value: c.stats[k] || 0, className: 'ni' }); i.oninput = function () { c.stats[k] = Number(i.value) || 0; };
+          return h('label', { className: 'fl sm' }, [h('span', { text: k }), i]);
+        })));
+      }
+      if (has('basic')) box.appendChild(txt('Basic skill', c, 'basic'));
+      if (has('skills')) {
+        c.skills.forEach(function (sk, j) {
+          var i = h('input', { value: sk, placeholder: 'Skill name' }); i.oninput = function () { c.skills[j] = i.value; };
+          var x = h('button', { type: 'button', className: 'link', text: 'Remove' }); x.onclick = function () { c.skills.splice(j, 1); draw(); };
+          box.appendChild(h('div', { className: 'ef' }, [h('span', { className: 'mono', text: 'Skill ' + (j + 1) }), i, x]));
+        });
+        var addk = h('button', { type: 'button', className: 'btn', text: '+ Add skill' }); addk.onclick = function () { c.skills.push(''); draw(); }; box.appendChild(addk);
+      }
+      if (has('ultimate')) box.appendChild(txt('Ultimate', c, 'ultimate'));
+      if (has('quirk')) box.appendChild(txt('Quirk', c, 'quirk'));
+      if (has('karma') || has('risk')) box.appendChild(h('div', { className: 'g2' }, [has('karma') ? txt('Accumulated karma', c, 'karma') : null, has('risk') ? txt('Risk level (shown as “Risk LVL …”)', c, 'risk') : null]));
+      if (has('notes')) box.appendChild(txt('Headmaster notes', c, 'notes', 3));
+      var save = h('button', { type: 'button', className: 'btn primary', text: 'Save entry' });
+      save.onclick = function () {
+        save.disabled = true; st.textContent = 'Saving…';
+        var body = JSON.parse(JSON.stringify(c)); if (c.isNew) delete body.id; delete body.isNew;
+        api({ action: 'regsave', entry: body }).then(function (r) {
+          save.disabled = false;
+          if (!r.ok) { st.textContent = (r.j && r.j.error) || 'Save failed'; return; }
+          var e = r.j.entry; st.textContent = 'Saved.';
+          reg = reg.filter(function (x) { return x.id !== c.id && x.id !== e.id; }); reg.push(e); reg.sort(function (a, b) { return a.name.localeCompare(b.name); });
+          c.id = e.id; c.isNew = false; cur = e.id; renderSide();
+        }).catch(function () { save.disabled = false; st.textContent = 'Could not reach the server.'; });
+      };
+      var del = h('button', { type: 'button', className: 'btn', text: 'Delete entry' });
+      two(del, 'Delete entry', function () {
+        function gone() { reg = reg.filter(function (x) { return x.id !== c.id; }); cur = null; pick(); }
+        if (c.isNew) { gone(); return; }
+        api({ action: 'regdelete', id: c.id }).then(function (r) { if (r.ok) gone(); else st.textContent = (r.j && r.j.error) || 'Delete failed'; });
+      });
+      box.appendChild(h('div', { className: 'btns' }, [save, del])); box.appendChild(st);
+    }
+    draw(); return [box];
+  }
+
   /* ---------- Admin shell ---------- */
   function renderSide() {
     side.textContent = '';
-    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')'], ['story', 'Storyline (' + story.length + ')']].map(function (t) {
+    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')'], ['story', 'Storyline (' + story.length + ')'], ['reg', 'Registry (' + reg.length + ')']].map(function (t) {
       return h('button', { type: 'button', className: 'btn', text: t[1], 'aria-pressed': String(tab === t[0]), onclick: function () { tab = t[0]; cur = null; pick(); } });
     }));
     side.appendChild(tabs);
     if (tab === 'story') { var nb = h('button', { type: 'button', className: 'btn', text: '+ New chapter' }); nb.onclick = newChapter; side.appendChild(nb); }
+    if (tab === 'reg') {
+      var rb = h('button', { type: 'button', className: 'btn', text: '+ New entry' }); rb.onclick = newEntry; side.appendChild(rb);
+      if (chars.length) {
+        var imp = h('select', { 'aria-label': 'Import a saved character' }, [h('option', { value: '', text: 'Import a saved character…' })].concat(chars.map(function (ch) { return h('option', { value: ch.id, text: ch.name || 'Unnamed' }); })));
+        imp.onchange = function () { var ch = chars.filter(function (x) { return x.id === imp.value; })[0]; if (ch) newEntry(ch); };
+        side.appendChild(imp);
+      }
+    }
     listFor(tab).forEach(function (it) {
       var b = h('button', { type: 'button', className: 'adm-row', 'aria-current': String(it.id === cur) }, [h('b', { text: (tab === 'story' ? it.title : it.name) || (tab === 'story' ? 'Untitled chapter' : 'Unnamed') }),
-        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : tab === 'story' ? (it.locked ? 'Locked' : 'Open to players') : 'Key ' + it.key })]);
+        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : tab === 'story' ? (it.locked ? 'Locked' : 'Open to players') : tab === 'reg' ? regLabel(it) : 'Key ' + it.key })]);
       b.onclick = function () { cur = it.id; render(); };
       side.appendChild(b);
     });
@@ -1556,22 +1874,23 @@
   function renderMain() {
     main.textContent = '';
     var list = listFor(tab), it = list.filter(function (x) { return x.id === cur; })[0];
-    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : tab === 'story' ? 'No chapters yet. Add one on the left.' : 'No accepted characters yet.') })); return; }
-    (tab === 'inbox' ? inboxView(it) : tab === 'story' ? storyEditor(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
+    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : tab === 'story' ? 'No chapters yet. Add one on the left.' : tab === 'reg' ? 'Nothing registered yet. Add an entry on the left.' : 'No accepted characters yet.') })); return; }
+    (tab === 'inbox' ? inboxView(it) : tab === 'story' ? storyEditor(it) : tab === 'reg' ? regEditor(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
   }
   function pick() { var list = listFor(tab); if (!list.some(function (x) { return x.id === cur; })) cur = list.length ? list[0].id : null; render(); }
   function render() { renderSide(); renderMain(); }
   function load() {
     show('admin'); main.textContent = 'Loading…';
-    Promise.all([api({ action: 'list' }), api({ action: 'chars' }), api({ action: 'storylist' })]).then(function (rs) {
-      var a = rs[0], b = rs[1], sl = rs[2];
+    Promise.all([api({ action: 'list' }), api({ action: 'chars' }), api({ action: 'storylist' }), api({ action: 'reglist' })]).then(function (rs) {
+      var a = rs[0], b = rs[1], sl = rs[2], rl = rs[3];
       if (!a.ok) {
         if ((a.j.error || '').indexOf('Wrong') === 0) { creds = null; show('login'); msg.textContent = a.j.error; } else main.textContent = a.j.error || 'Something went wrong.';
         return;
       }
       msg.textContent = ''; $('adm-pass').value = '';
-      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; pick();
+      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; reg = (rl.ok && rl.j.entries) || []; regTpl = (rl.ok && rl.j.template) || null; pick();
       if (!b.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load saved characters: ' + (b.j.error || '') }), main.firstChild);
+      if (!rl.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load the registry: ' + (rl.j.error || '') }), main.firstChild);
       if (!sl.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load the storyline: ' + (sl.j.error || '') }), main.firstChild);
     }).catch(function () { main.textContent = 'Could not reach the server.'; });
   }
@@ -1596,7 +1915,7 @@
   $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
   $('pl-key').addEventListener('keydown', function (e) { if (e.key === 'Enter') playerLogin(); });
   $('adm-refresh').addEventListener('click', load);
-  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; inbox = []; chars = []; story = []; cur = null; show('login'); msg.textContent = 'Logged out.'; });
+  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; inbox = []; chars = []; story = []; reg = []; cur = null; show('login'); msg.textContent = 'Logged out.'; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
 })();
 </script>
