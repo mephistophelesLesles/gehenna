@@ -778,16 +778,6 @@
               <textarea id="f-skill2" data-key="skill2" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
             </div>
             <div class="field">
-              <div class="label-row"><label for="f-skill3">Skill 3 <span class="mono">(optional)</span></label><button type="button" class="q" aria-expanded="false" aria-controls="h-skill3" aria-label="Guideline for Skill 3">?</button></div>
-              <div class="help" id="h-skill3" hidden><p class="mono red">Guideline</p><p>Another special skill of your character. Include its limitation and cooldown. Leave it empty if you don't have one.</p></div>
-              <textarea id="f-skill3" data-key="skill3" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
-            </div>
-            <div class="field">
-              <div class="label-row"><label for="f-skill4">Skill 4 <span class="mono">(optional)</span></label><button type="button" class="q" aria-expanded="false" aria-controls="h-skill4" aria-label="Guideline for Skill 4">?</button></div>
-              <div class="help" id="h-skill4" hidden><p class="mono red">Guideline</p><p>Another special skill of your character. Include its limitation and cooldown. Leave it empty if you don't have one.</p></div>
-              <textarea id="f-skill4" data-key="skill4" rows="3" placeholder="Name, what it does, limitation, cooldown."></textarea>
-            </div>
-            <div class="field">
               <div class="label-row"><label for="f-ultimate">Ultimate</label><button type="button" class="q" aria-expanded="false" aria-controls="h-ultimate" aria-label="Guideline for Ultimate">?</button></div>
               <div class="help" id="h-ultimate" hidden><p class="mono red">Guideline</p><p>Your character's ultimate. It must include a heavy cooldown or limitation, based on what the ultimate can do.</p></div>
               <textarea id="f-ultimate" data-key="ultimate" rows="3" placeholder="Name, what it does, heavy cooldown or limitation."></textarea>
@@ -804,6 +794,7 @@
           <div class="group" role="group" aria-labelledby="g3">
             <h3 id="g3">Soul's Physiology</h3>
             <dl class="fixed">
+              <div><dt>Level</dt><dd>1</dd></div>
               <div><dt>Health Points</dt><dd>20</dd></div>
               <div><dt>Armor</dt><dd>0</dd></div>
               <div><dt>Initiative</dt><dd>Your DEX modifier</dd></div>
@@ -998,12 +989,11 @@
       L.push(line('Basic Skill', v.basic));
       L.push(line('Skill 1', v.skill1));
       L.push(line('Skill 2', v.skill2));
-      if ((v.skill3 || '').trim()) L.push(line('Skill 3', v.skill3));
-      if ((v.skill4 || '').trim()) L.push(line('Skill 4', v.skill4));
       L.push(line('Ultimate', v.ultimate));
       L.push(line('Quirk', [v.quirk1, v.quirk2, v.quirk3].map(function (q) { return (q || '').replace(/\s+/g, ' ').trim(); }).filter(Boolean).slice(0, 3).join('\n')));
       L.push('ㅤ');
       L.push("𝐒𝐨𝐮𝐥'𝐬 𝐏𝐡𝐲𝐬𝐢𝐨𝐥𝐨𝐠𝐲");
+      L.push('Level: 1');
       L.push('Health Points: 20');
       L.push('Armor: 0');
       L.push('Speed: 30');
@@ -1645,7 +1635,7 @@
 
   /* ---------- Character editor ---------- */
   function editor(src) {
-    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; if (c.level == null) c.level = 1; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
     function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
@@ -1660,7 +1650,7 @@
       box.appendChild(h('div', { className: 'g2' }, [txt('Name', c, 'name'), txt('Gender', c, 'gender'), txt('Born - Died', c, 'dates'), txt('Karma', c, 'karma')]));
       ['persona', 'destiny', 'appearance'].forEach(function (k) { box.appendChild(txt(k[0].toUpperCase() + k.slice(1), c, k, 3)); });
       box.appendChild(h('h4', { text: 'Vitals and stats' }));
-      box.appendChild(h('div', { className: 'g6' }, [num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed'), num('Initiative', c, 'initiative')]));
+      box.appendChild(h('div', { className: 'g6' }, [num('Level', c, 'level'), num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed'), num('Initiative', c, 'initiative')]));
       box.appendChild(h('div', { className: 'g2' }, [txt('Size', c, 'size'), txt('Languages', c, 'languages')]));
       box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { return h('div', { className: 'stbox' }, [h('b', { text: k }), num('Score', c.stats[k], 'score'), num('Modifier', c.stats[k], 'mod')]); })));
       box.appendChild(h('h4', { text: 'Core item' }));
@@ -1685,9 +1675,18 @@
         });
         var add = h('button', { type: 'button', className: 'btn', text: '+ Add effect (damage, heal, shield…)' });
         add.onclick = function () { sk.effects.push({ type: 'Damage', n: 1, d: 6, flat: 0, note: '' }); draw(); };
-        box.appendChild(h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }),
+        var rmk = /^Skill \d+$/.test(sk.label) ? h('button', { type: 'button', className: 'link', text: 'Remove this skill' }) : null;
+        if (rmk) rmk.onclick = function () { var j = c.skills.indexOf(sk); if (j >= 0) c.skills.splice(j, 1); draw(); };
+        box.appendChild(h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }), rmk,
           h('div', { className: 'g2' }, [txt('Skill name', sk, 'name'), txt('Cooldown / limit', sk, 'cooldown')]), txt('Description', sk, 'text', 3), fx, add]));
       });
+      var addsk = h('button', { type: 'button', className: 'btn', text: '+ Add skill (for when they level up)' });
+      addsk.onclick = function () {
+        var n = 0; c.skills.forEach(function (s) { var m = /^Skill (\d+)$/.exec(s.label); if (m) n = Math.max(n, +m[1]); });
+        var u = c.skills.map(function (s) { return s.label; }).indexOf('Ultimate'), ns = { label: 'Skill ' + (n + 1), name: '', text: '', cooldown: '', effects: [] };
+        if (u >= 0) c.skills.splice(u, 0, ns); else c.skills.push(ns); draw();
+      };
+      box.appendChild(addsk);
       var qs = String(c.quirk || '').split('\n').slice(0, 3); while (qs.length < 3) qs.push('');
       box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'Quirks (up to 3)' })].concat(qs.map(function (q, j) {
         var i = h('input', { value: q, placeholder: 'Quirk ' + (j + 1), maxLength: 80 }); i.oninput = function () { qs[j] = i.value; c.quirk = qs.map(function (x) { return x.trim(); }).filter(Boolean).join('\n'); };
@@ -1743,9 +1742,9 @@
       return { vals: b === null ? [a] : [a, b], d: 20, txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
     }
     w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
-      h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
+      h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), h('p', { className: 'mono', text: 'Level ' + (c.level || 1) }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
     var init = c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0);
-    var rows = [['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
+    var rows = [['Level', String(c.level || 1)], ['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
       .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), h('dd', { text: p[1] })]); });
     w.appendChild(h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, rows)]));
 
@@ -1888,7 +1887,7 @@
     var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, hideImage: false, category: '', teaser: '', revealFields: [], revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
     if (ch && ch.id) {
       var sk = ch.skills || [], nm = function (x) { return (x && x.name) || ''; }, by = function (l) { return sk.filter(function (x) { return x.label === l; })[0]; };
-      e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0; e.speed = ch.speed == null ? 30 : ch.speed; e.initiative = ch.initiative != null ? ch.initiative : ((ch.stats && ch.stats.DEX && ch.stats.DEX.mod) || 0); e.size = ch.size || 'Medium'; e.languages = ch.languages || '';
+      e.name = ch.name || ''; e.image = ch.image || ''; e.karma = ch.karma || ''; e.hp = ch.hp || 0; e.armor = ch.armor || 0; e.speed = ch.speed == null ? 30 : ch.speed; e.initiative = ch.initiative != null ? ch.initiative : ((ch.stats && ch.stats.DEX && ch.stats.DEX.mod) || 0); e.size = ch.size || 'Medium'; e.level = ch.level ? String(ch.level) : ''; e.languages = ch.languages || '';
       e.quirks = String(ch.quirk || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 3);
       ST.forEach(function (k) { e.stats[k] = (ch.stats && ch.stats[k] && ch.stats[k].score) || 0; });
       e.basic = nm(by('Basic Skill')); e.skills = sk.filter(function (x) { return /^Skill/.test(x.label); }).map(nm).filter(Boolean); e.ultimate = nm(by('Ultimate'));

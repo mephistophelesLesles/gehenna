@@ -68,7 +68,7 @@ function clean(e, old) {
     resistances: S(e.resistances, 300),
     stats: STATS.reduce((o, k) => { o[k] = N((e.stats || {})[k], 0, 99); return o; }, {}),
     basic: S(e.basic, 200),
-    skills: (Array.isArray(e.skills) ? e.skills : []).slice(0, 12).map((x) => S(x, 200)).filter(Boolean),
+    skills: (Array.isArray(e.skills) ? e.skills : []).slice(0, 40).map((x) => S(x, 200)).filter(Boolean),
     ultimate: S(e.ultimate, 200),
     quirks: quirksOf(e),
     karma: S(e.karma, 40),
