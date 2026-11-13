@@ -357,6 +357,9 @@
   .pv-dl > div { background: var(--bg); padding: 0.7rem 1rem; display: grid; gap: 0.15rem; }
   .pv-dl dt { font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-hi); }
   .pv-dl dd, .pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .foldwrap { display: grid; gap: 0.3rem; }
+  .fold.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+  .fold-btn { justify-self: start; background: none; border: 0; padding: 0.25rem 0; color: var(--red-hi); font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: underline; cursor: pointer; }
   .pv-sec { display: grid; gap: 0.8rem; padding: 1.1rem; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 82%, transparent); }
   .pv-sec > .mono.red { padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
   .pv .stbox { border-top: 2px solid var(--red); background: var(--surface); }
@@ -1587,6 +1590,9 @@
   var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
   var creds = null, inbox = [], chars = [], story = [], reg = [], regTpl = null, tab = 'inbox', cur = null, pchar = null;
   var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
+  // Stat modifier: the D&D steps (one point per two points of score), moved so that a score of 10 gives +1, and never below 0.
+  var MOD_BASE = 8;
+  function modOf(s) { return Math.max(0, Math.floor(((Number(s) || 0) - MOD_BASE) / 2)); }
 
   function h(t, a, kids) {
     var e = document.createElement(t);
@@ -1607,7 +1613,9 @@
   }
   function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) show('admin'); else if (pchar) show('player'); else { show('login'); $('adm-email').focus(); } }
   function closeAdm() { adm.hidden = true; document.body.style.overflow = ''; }
-  var rollText = function (e) { return e.n + 'd' + e.d + (e.flat ? (e.flat > 0 ? '+' : '') + e.flat : ''); };
+  // An effect's bonus = the chosen stat's modifier (worked out from the character's score) + the custom number.
+  var effFlat = function (e, c) { return (Number(e.flat) || 0) + (e.stat && c && c.stats && c.stats[e.stat] ? modOf(c.stats[e.stat].score) : 0); };
+  var rollText = function (e, c) { var f = effFlat(e, c); return e.n + 'd' + e.d + (f ? (f > 0 ? '+' : '') + f : ''); };
 
   /* ---------- Inbox ---------- */
   function inboxView(it) {
@@ -1635,12 +1643,13 @@
 
   /* ---------- Character editor ---------- */
   function editor(src) {
-    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; if (c.level == null) c.level = 1; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; if (c.level == null) c.level = 1; c.stats = c.stats || {}; ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].mod = modOf(c.stats[k].score); }); var statSels = []; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
     function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
+    function syncStats() { statSels.forEach(function (ss) { Array.prototype.forEach.call(ss.options, function (o) { if (o.value) o.textContent = o.value + ' (+' + modOf(c.stats[o.value].score) + ')'; }); }); }
     function draw() {
-      box.textContent = '';
+      box.textContent = ''; statSels.length = 0;
       var kc = h('button', { type: 'button', className: 'btn', text: 'Copy key' }); copy(kc, c.key);
       var nk = h('button', { type: 'button', className: 'btn', text: 'New key' });
       two(nk, 'New key', function () { api({ action: 'newkey', id: c.id }).then(function (r) { if (r.ok) { c.key = r.j.char.key; src.key = c.key; draw(); } }); });
@@ -1652,7 +1661,11 @@
       box.appendChild(h('h4', { text: 'Vitals and stats' }));
       box.appendChild(h('div', { className: 'g6' }, [num('Level', c, 'level'), num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed'), num('Initiative', c, 'initiative')]));
       box.appendChild(h('div', { className: 'g2' }, [txt('Size', c, 'size'), txt('Languages', c, 'languages')]));
-      box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) { return h('div', { className: 'stbox' }, [h('b', { text: k }), num('Score', c.stats[k], 'score'), num('Modifier', c.stats[k], 'mod')]); })));
+      box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) {
+        var sc = ni(c.stats[k], 'score'), md = h('input', { type: 'number', className: 'ni', readOnly: true, value: modOf(c.stats[k].score), title: 'Worked out from the score' });
+        sc.oninput = function () { c.stats[k].score = Number(sc.value) || 0; c.stats[k].mod = modOf(c.stats[k].score); md.value = c.stats[k].mod; syncStats(); };
+        return h('div', { className: 'stbox' }, [h('b', { text: k }), h('label', { className: 'fl sm' }, [h('span', { text: 'Score' }), sc]), h('label', { className: 'fl sm' }, [h('span', { text: 'Modifier (automatic)' }), md])]);
+      })));
       box.appendChild(h('h4', { text: 'Core item' }));
       box.appendChild(txt('Item name', c, 'itemName')); box.appendChild(txt('Item description', c, 'itemDesc', 3));
       box.appendChild(h('h4', { text: 'Inventory (items gained in the story)' }));
@@ -1671,10 +1684,13 @@
           var sel = h('select', {}, TYPES.map(function (t) { return h('option', { text: t, value: t, selected: t === e.type }); })); sel.onchange = function () { e.type = sel.value; };
           var note = h('input', { value: e.note || '', placeholder: 'Note (e.g. 1 ally, 2 turns)' }); note.oninput = function () { e.note = note.value; };
           var x = h('button', { type: 'button', className: 'link', text: 'Remove' }); x.onclick = function () { sk.effects.splice(j, 1); draw(); };
-          fx.appendChild(h('div', { className: 'ef' }, [sel, ni(e, 'n'), 'd', ni(e, 'd'), '+', ni(e, 'flat'), note, x]));
+          var ss = h('select', { title: 'Add a stat modifier automatically', 'aria-label': 'Stat modifier' }, [''].concat(ST).map(function (s) { return h('option', { value: s, text: s ? s + ' (+' + modOf(c.stats[s].score) + ')' : 'no stat', selected: (e.stat || '') === s }); }));
+          ss.onchange = function () { e.stat = ss.value; }; statSels.push(ss);
+          var fl = ni(e, 'flat'); fl.title = 'Custom bonus'; fl.setAttribute('aria-label', 'Custom bonus');
+          fx.appendChild(h('div', { className: 'ef' }, [sel, ni(e, 'n'), 'd', ni(e, 'd'), '+', ss, '+', fl, note, x]));
         });
         var add = h('button', { type: 'button', className: 'btn', text: '+ Add effect (damage, heal, shield…)' });
-        add.onclick = function () { sk.effects.push({ type: 'Damage', n: 1, d: 6, flat: 0, note: '' }); draw(); };
+        add.onclick = function () { sk.effects.push({ type: 'Damage', n: 1, d: 6, flat: 0, stat: '', note: '' }); draw(); };
         var rmk = /^Skill \d+$/.test(sk.label) ? h('button', { type: 'button', className: 'link', text: 'Remove this skill' }) : null;
         if (rmk) rmk.onclick = function () { var j = c.skills.indexOf(sk); if (j >= 0) c.skills.splice(j, 1); draw(); };
         box.appendChild(h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }), rmk,
@@ -1730,9 +1746,20 @@
   }
 
   /* ---------- Player profile (read-only, with dice roller) ---------- */
+  // Long text is shown 3 lines at a time with a See more / See less toggle.
+  function fold(text, cls, limit) {
+    text = String(text || '');
+    var p = h('p', { className: (cls || '') + ' fold', text: text }), wrap = h('div', { className: 'foldwrap' }, [p]);
+    if (text.length <= (limit || 160) && text.split('\n').length <= 3) return wrap;
+    p.classList.add('clamp');
+    var b = h('button', { type: 'button', className: 'fold-btn', text: 'See more', 'aria-expanded': 'false' });
+    b.onclick = function () { var open = !p.classList.toggle('clamp'); b.textContent = open ? 'See less' : 'See more'; b.setAttribute('aria-expanded', String(open)); };
+    wrap.appendChild(b); return wrap;
+  }
   function sec(t, kids) { return h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: t })].concat(kids)); }
   function profile(c) {
     pv.textContent = '';
+    ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].mod = modOf(c.stats[k].score); });
     var w = h('div', { className: 'pv' });
     var hist = h('div', { className: 'hist' });
     var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
@@ -1745,7 +1772,7 @@
       h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), h('p', { className: 'mono', text: 'Level ' + (c.level || 1) }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
     var init = c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0);
     var rows = [['Level', String(c.level || 1)], ['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
-      .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), h('dd', { text: p[1] })]); });
+      .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), (p[1].length > 220 || p[1].split('\n').length > 4) ? h('dd', {}, [fold(p[1], '', 220)]) : h('dd', { text: p[1] })]); });
     w.appendChild(h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, rows)]));
 
     w.appendChild(sec('Stats and saving throws', [h('div', { className: 'g6' }, ST.map(function (k) {
@@ -1767,12 +1794,13 @@
     w.appendChild(sec('Dice', [quick, h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, go]), h('div', { className: 'ef' }, [h('small', { text: 'd20 and saving throws:' }), adv]), hist]));
 
     w.appendChild(sec('Skills', c.skills.map(function (sk) {
-      var out = h('div', { className: 'pv-skill' }, [h('p', { className: 'mono', text: sk.label }), h('h3', { text: sk.name || sk.label }), sk.cooldown && h('small', { className: 'mono', text: sk.cooldown }), h('p', { className: 'pre', text: sk.text })]);
+      var out = h('div', { className: 'pv-skill' }, [h('p', { className: 'mono', text: sk.label }), h('h3', { text: sk.name || sk.label }), sk.cooldown && h('small', { className: 'mono', text: sk.cooldown })]);
       sk.effects.forEach(function (e) {
-        var res = h('span', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + e.type + ' ' + rollText(e) });
-        b.onclick = function () { var x = plain(e.n, e.d, e.flat), lab = (sk.name || sk.label) + ' ' + e.type + ' ' + rollText(e); b.disabled = true; res.textContent = ''; tumble(x, lab, function () { res.textContent = ' ' + x.txt; logRoll(lab, x.txt); b.disabled = false; }); };
+        var res = h('span', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + e.type + ' ' + rollText(e, c) + (e.stat ? ' (incl. ' + e.stat + ')' : '') });
+        b.onclick = function () { var x = plain(e.n, e.d, effFlat(e, c)), lab = (sk.name || sk.label) + ' ' + e.type + ' ' + rollText(e, c); b.disabled = true; res.textContent = ''; tumble(x, lab, function () { res.textContent = ' ' + x.txt; logRoll(lab, x.txt); b.disabled = false; }); };
         out.appendChild(h('div', { className: 'ef' }, [b, res, e.note && h('small', { text: e.note })]));
       });
+      if (sk.text) out.appendChild(fold(sk.text, 'pre', 160));
       return out;
     })));
 

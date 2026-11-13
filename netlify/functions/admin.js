@@ -8,6 +8,9 @@ const API = 'https://api.netlify.com/api/v1';
 const FORM = process.env.FORM_NAME || 'gehenna-sheet';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Mephisto').trim().toLowerCase();
 const ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
+// Stat modifier: the D&D steps (one point per two points of score), moved so that a score of 10 gives +1, and never below 0.
+const MOD_BASE = 8;
+const modOf = (s) => Math.max(0, Math.floor(((Number(s) || 0) - MOD_BASE) / 2));
 const ALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function same(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
@@ -33,7 +36,7 @@ function fromSheet(d) {
   let from = 0; const at = L.map(l => { const i = t.indexOf('\n' + l + ':', from); if (i >= 0) from = i + 1; return i; });
   const val = k => { const i = at[k]; if (i < 0) return ''; let e = t.length; for (let j = k + 1; j < at.length; j++) if (at[j] >= 0) { e = at[j]; break; } return t.slice(i + L[k].length + 2, e).trim(); };
   const item = val(7).split('\n'), stats = {};
-  ST.forEach(k => { const m = t.match(new RegExp('\\n' + k + ': (\\d+) \\((\\d+) base')); const s = m ? +m[1] : 3; stats[k] = { score: s, mod: s }; });
+  ST.forEach(k => { const m = t.match(new RegExp('\\n' + k + ': (\\d+) \\((\\d+) base')); const s = m ? +m[1] : 3; stats[k] = { score: s, mod: modOf(s) }; });
   const skill = (label, k) => { const text = val(k); return { label, name: text.split(/[:\n\-–.,]/)[0].trim().slice(0, 40), text, cooldown: '', effects: [] }; };
   const karma = val(5);
   return {
@@ -50,10 +53,10 @@ function clean(c, old) {
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
     itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
     items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: quirks(c.quirk), level: N(c.level == null ? 1 : c.level, 1, 99), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), initiative: N(c.initiative, -99, 99), size: S(c.size, 40), languages: S(c.languages, 200), speed: N(c.speed, 0, 999),
-    stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; o[k] = { score: N(s.score, 0, 99), mod: N(s.mod, -99, 99) }; return o; }, {}),
+    stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; const sc = N(s.score, 0, 99); o[k] = { score: sc, mod: modOf(sc) }; return o; }, {}),
     skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 40).map(s => ({
       label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100),
-      effects: (Array.isArray(s.effects) ? s.effects : []).slice(0, 10).map(e => ({ type: TYPES.includes(e.type) ? e.type : 'Other', n: N(e.n, 0, 50), d: N(e.d, 0, 1000), flat: N(e.flat, -999, 999), note: S(e.note, 200) })),
+      effects: (Array.isArray(s.effects) ? s.effects : []).slice(0, 10).map(e => ({ type: TYPES.includes(e.type) ? e.type : 'Other', n: N(e.n, 0, 50), d: N(e.d, 0, 1000), flat: N(e.flat, -999, 999), stat: ST.includes(e.stat) ? e.stat : '', note: S(e.note, 200) })),
     })),
   };
 }
