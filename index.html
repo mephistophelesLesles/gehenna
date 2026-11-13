@@ -352,6 +352,14 @@
   .pv-id { position: relative; display: grid; gap: 0.4rem; min-width: 0; } .pv-id .mono { color: var(--fg); }
   .pv .pv-id h2 { font-size: clamp(2.4rem, 9vw, 4.2rem); line-height: 0.98; letter-spacing: 0.03em; text-transform: uppercase; font-weight: 400; text-shadow: 0 0 30px rgba(0, 0, 0, 0.6); overflow-wrap: anywhere; }
   .pv-top { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); } @media (min-width: 40rem) { .pv-top:has(.portrait) { grid-template-columns: auto minmax(0, 1fr); } }
+  .pv-compact { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem 1rem; align-items: center; padding: 0.9rem 1rem; border: 1px solid var(--line); background: var(--surface); }
+  .pv-compact:not(:has(.pv-thumb)) { grid-template-columns: minmax(0, 1fr); }
+  .pv-compact .btn { grid-column: 1 / -1; justify-self: start; }
+  .pv-thumb { width: 64px; height: 80px; object-fit: cover; border: 1px solid var(--red); }
+  .pv-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.6rem 1rem; }
+  .pv-vitals span { display: block; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-hi); }
+  .pv-vitals b { font-weight: 600; font-size: 1.05rem; }
+  .pv-top[hidden] { display: none; }
   .pv .portrait { border: 1px solid var(--red); box-shadow: 8px 8px 0 color-mix(in srgb, var(--red) 40%, transparent); }
   .pv-dl { margin: 0; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); align-content: start; }
   .pv-dl > div { background: var(--bg); padding: 0.7rem 1rem; display: grid; gap: 0.15rem; }
@@ -1771,9 +1779,16 @@
     w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
       h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), h('p', { className: 'mono', text: 'Level ' + (c.level || 1) }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
     var init = c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0);
-    var rows = [['Level', String(c.level || 1)], ['Gender', c.gender], ['Health / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
+    var vit = [['Level', String(c.level || 1)], ['HP / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size]]
+      .filter(function (p) { return p[1] && String(p[1]).trim(); });
+    var det = [['Gender', c.gender], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
       .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), (p[1].length > 220 || p[1].split('\n').length > 4) ? h('dd', {}, [fold(p[1], '', 220)]) : h('dd', { text: p[1] })]); });
-    w.appendChild(h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, rows)]));
+    var body = h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, det)]);
+    body.hidden = true;
+    var tg = h('button', { type: 'button', className: 'btn', text: 'Show personal details', 'aria-expanded': 'false' });
+    tg.onclick = function () { body.hidden = !body.hidden; tg.textContent = body.hidden ? 'Show personal details' : 'Hide personal details'; tg.setAttribute('aria-expanded', String(!body.hidden)); };
+    w.appendChild(h('div', { className: 'pv-compact' }, [c.image && h('img', { src: c.image, className: 'pv-thumb', alt: '' }), h('div', { className: 'pv-vitals' }, vit.map(function (p) { return h('div', {}, [h('span', { className: 'mono', text: p[0] }), h('b', { text: p[1] })]); })), det.length ? tg : null]));
+    w.appendChild(body);
 
     w.appendChild(sec('Stats and saving throws', [h('div', { className: 'g6' }, ST.map(function (k) {
       var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
