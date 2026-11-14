@@ -942,6 +942,7 @@
       <button type="button" data-pane="chat" aria-pressed="false">Chat</button>
       <button type="button" data-pane="note" aria-pressed="false">Notebook</button>
       <button type="button" data-pane="dice" aria-pressed="false">Dice log</button>
+      <button type="button" data-pane="fx" id="nav-fx" aria-pressed="false" hidden>Effects</button>
     </nav>
     <div class="btns">
       <button type="button" class="btn" id="adm-refresh" hidden>Refresh</button>
@@ -974,6 +975,7 @@
   <section class="pane" id="pane-chat" hidden aria-label="Chat"></section>
   <section class="pane" id="pane-note" hidden aria-label="Notebook"></section>
   <section class="pane" id="pane-dice" hidden aria-label="Dice log"></section>
+  <section class="pane" id="pane-fx" hidden aria-label="Effects"></section>
 </div>
 
 <button type="button" class="sound" id="sound">
@@ -1754,12 +1756,13 @@
         var rmk = /^Skill \d+$/.test(sk.label) ? h('button', { type: 'button', className: 'link', text: 'Remove this skill' }) : null;
         if (rmk) rmk.onclick = function () { var j = c.skills.indexOf(sk); if (j >= 0) c.skills.splice(j, 1); draw(); };
         box.appendChild(h('div', { className: 'skill' }, [h('p', { className: 'mono red', text: sk.label }), rmk,
-          h('div', { className: 'g2' }, [txt('Skill name', sk, 'name'), txt('Cooldown / limit', sk, 'cooldown')]), txt('Description', sk, 'text', 3), fx, add]));
+          h('div', { className: 'g2' }, [txt('Skill name', sk, 'name'), txt('Cooldown / limit', sk, 'cooldown')]), txt('Description', sk, 'text', 3), fx, add,
+          h('div', { className: 'fl' }, [h('span', { text: 'Buffs and debuffs this skill gives (optional). You apply and end them from the Effects tab.' }), GEH.fxEditor(sk.buffs = sk.buffs || [], draw)])]));
       });
       var addsk = h('button', { type: 'button', className: 'btn', text: '+ Add skill (for when they level up)' });
       addsk.onclick = function () {
         var n = 0; c.skills.forEach(function (s) { var m = /^Skill (\d+)$/.exec(s.label); if (m) n = Math.max(n, +m[1]); });
-        var u = c.skills.map(function (s) { return s.label; }).indexOf('Ultimate'), ns = { label: 'Skill ' + (n + 1), name: '', text: '', cooldown: '', effects: [] };
+        var u = c.skills.map(function (s) { return s.label; }).indexOf('Ultimate'), ns = { label: 'Skill ' + (n + 1), name: '', text: '', cooldown: '', effects: [], buffs: [] };
         if (u >= 0) c.skills.splice(u, 0, ns); else c.skills.push(ns); draw();
       };
       box.appendChild(addsk);
@@ -1819,7 +1822,11 @@
   function sec(t, kids) { return h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: t })].concat(kids)); }
   function profile(c) {
     pv.textContent = '';
-    ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].mod = modOf(c.stats[k].score); });
+    // Buffs and debuffs sit on top of the saved sheet. The base numbers are never changed, so ending an effect puts everything back.
+    c = JSON.parse(JSON.stringify(c)); var fxl = Array.isArray(c.buffs) ? c.buffs : [];
+    function fxSum(k) { return fxl.reduce(function (a, x) { return a + (x.stat === k ? Number(x.amt) || 0 : 0); }, 0); }
+    ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].base = c.stats[k].score; c.stats[k].score = Math.max(0, c.stats[k].score + fxSum(k)); c.stats[k].mod = modOf(c.stats[k].score); });
+    c.hp = (Number(c.hp) || 0) + fxSum('HP'); c.armor = (Number(c.armor) || 0) + fxSum('Armor'); c.speed = (Number(c.speed) || 0) + fxSum('Speed');
     var w = h('div', { className: 'pv' });
     var hist = h('div', { className: 'hist' });
     var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
@@ -1832,7 +1839,7 @@
     }
     w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
       h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), h('p', { className: 'mono', text: 'Level ' + (c.level || 1) }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
-    var init = c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0);
+    var init = (c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0)) + fxSum('Initiative');
     var vit = [['Level', String(c.level || 1)], ['HP / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size]]
       .filter(function (p) { return p[1] && String(p[1]).trim(); });
     var det = [['Gender', c.gender], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
@@ -1847,7 +1854,7 @@
     w.appendChild(sec('Stats and saving throws', [h('div', { className: 'g6' }, ST.map(function (k) {
       var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
       b.onclick = function () { var x = d20(s.mod); b.disabled = true; res.textContent = ''; tumble(x, k + ' save', function () { res.textContent = x.txt; res.className = 'mono ' + x.cls; logRoll(k + ' save', x.txt, x.cls); b.disabled = false; }); };
-      return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'modifier ' + (s.mod >= 0 ? '+' : '') + s.mod }), b, res]);
+      return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'modifier ' + (s.mod >= 0 ? '+' : '') + s.mod }), s.base !== s.score ? h('small', { className: 'mono red', text: 'base ' + s.base + ', ' + (s.score > s.base ? '+' : '') + (s.score - s.base) + ' from effects' }) : null, b, res]);
     })), (function () {
       var ib = h('button', { type: 'button', className: 'btn', text: 'Roll initiative (' + sgn(init) + ')' }), ir = h('small', { className: 'mono' });
       ib.onclick = function () { var x = d20(init); ib.disabled = true; ir.textContent = ''; tumble(x, 'Initiative', function () { ir.textContent = x.txt; ir.className = 'mono ' + x.cls; logRoll('Initiative', x.txt, x.cls); ib.disabled = false; }); };
@@ -1862,6 +1869,7 @@
     var quick = h('div', { className: 'ef' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { var q = h('button', { type: 'button', className: 'btn', text: 'd' + n }); q.onclick = function () { free(1, n, 0); }; return q; }));
     w.appendChild(sec('Dice', [quick, h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, go]), h('div', { className: 'ef' }, [h('small', { text: 'd20 and saving throws:' }), adv]), hist]));
 
+    if (fxl.length) w.appendChild(sec('Active effects', fxl.map(function (x) { return h('div', { className: 'pv-item' }, [h('b', { text: x.stat === 'Other' ? x.note : (x.amt > 0 ? '+' : '') + x.amt + ' ' + x.stat + (x.note ? ' (' + x.note + ')' : '') }), h('span', { className: 'mono', text: (x.amt < 0 ? 'Debuff' : 'Buff') + ' · ' + x.source + ' · ' + (x.perm ? 'permanent' : 'until the headmaster ends it') })]); })));
     w.appendChild(sec('Skills', c.skills.map(function (sk) {
       var out = h('div', { className: 'pv-skill' }, [h('p', { className: 'mono', text: sk.label }), h('h3', { text: sk.name || sk.label }), sk.cooldown && h('small', { className: 'mono', text: sk.cooldown })]);
       sk.effects.forEach(function (e) {
@@ -1869,6 +1877,7 @@
         b.onclick = function () { var x = plain(e.n, e.d, effFlat(e, c)), lab = (sk.name || sk.label) + ' ' + e.type + ' ' + rollText(e, c); b.disabled = true; res.textContent = ''; tumble(x, lab, function () { res.textContent = ' ' + x.txt; logRoll(lab, x.txt); b.disabled = false; }); };
         out.appendChild(h('div', { className: 'ef' }, [b, res, e.note && h('small', { text: e.note })]));
       });
+      (sk.buffs || []).forEach(function (x) { out.appendChild(h('small', { className: 'mono red', text: (x.kind === 'debuff' ? 'Debuff: ' : 'Buff: ') + (x.stat === 'Other' ? x.note : (x.kind === 'debuff' ? '-' : '+') + x.amt + ' ' + x.stat + (x.note ? ' (' + x.note + ')' : '')) + (x.perm ? ' (permanent)' : ' (until ended)') })); });
       if (sk.text) out.appendChild(fold(sk.text, 'pre', 160));
       return out;
     })));

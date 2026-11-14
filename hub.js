@@ -47,8 +47,28 @@
     return d;
   }
 
+
+  /* ---------- buffs and debuffs (shared by the skill editor, the item editor and the Effects tab) ---------- */
+  var FXS = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON', 'HP', 'Armor', 'Speed', 'Initiative', 'Other'];
+  function fxText(e) { return (e.stat === 'Other' ? e.note : (e.kind === 'debuff' || e.amt < 0 ? '-' : '+') + Math.abs(e.amt) + ' ' + e.stat + (e.note ? ' (' + e.note + ')' : '')) + (e.perm ? ' (permanent)' : ' (until ended)'); }
+  // Rows for writing buffs and debuffs: Buff/Debuff, which stat, how much, permanent or until the headmaster ends it, and a note.
+  G.fxEditor = function (list, redraw) {
+    var box = h('div', { className: 'fxs' });
+    list.forEach(function (e, i) {
+      var k = h('select', { 'aria-label': 'Buff or debuff' }, [['buff', 'Buff'], ['debuff', 'Debuff']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: (e.kind || 'buff') === o[0] }); })); k.onchange = function () { e.kind = k.value; };
+      var st = h('select', { 'aria-label': 'Stat' }, FXS.map(function (n) { return h('option', { value: n, text: n === 'Other' ? 'Other (sense, text)' : n, selected: (e.stat || 'STR') === n }); })); st.onchange = function () { e.stat = st.value; redraw(); };
+      var am = h('input', { type: 'number', min: 0, value: e.amt || 0, className: 'ni', 'aria-label': 'Amount' }); am.oninput = function () { e.amt = Math.max(0, Math.floor(+am.value) || 0); };
+      var du = h('select', { 'aria-label': 'How long' }, [['0', 'Until I end it'], ['1', 'Permanent']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: !!e.perm === (o[0] === '1') }); })); du.onchange = function () { e.perm = du.value === '1'; };
+      var nt = h('input', { value: e.note || '', maxLength: 120, placeholder: e.stat === 'Other' ? 'Describe it (e.g. Darkvision 60 ft)' : 'Note (optional)', 'aria-label': 'Note' }); nt.oninput = function () { e.note = nt.value; };
+      var x = h('button', { type: 'button', className: 'link', text: 'Remove' }); x.onclick = function () { list.splice(i, 1); redraw(); };
+      box.appendChild(h('div', { className: 'ef' }, [k, st, am, du, nt, x]));
+    });
+    var add = h('button', { type: 'button', className: 'btn', text: '+ Add buff or debuff' }); add.onclick = function () { list.push({ kind: 'buff', stat: 'STR', amt: 1, perm: false, note: '' }); redraw(); };
+    box.appendChild(add); return box;
+  };
+
   /* ---------- section tabs ---------- */
-  var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'chat', 'note', 'dice'], current = 'char', lastMode = '';
+  var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'chat', 'note', 'dice', 'fx'], current = 'char', lastMode = '';
   var modules = {};
   function pane(name) {
     if (modules[current] && modules[current].leave) modules[current].leave();
@@ -60,7 +80,7 @@
   }
   Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) { b.addEventListener('click', function () { pane(b.getAttribute('data-pane')); }); });
   G.onMode = function (m) {
-    nav.hidden = m === 'login';
+    nav.hidden = m === 'login'; var fxb = $('nav-fx'); if (fxb) fxb.hidden = m !== 'admin';
     if (m === 'login') { if (modules[current] && modules[current].leave) modules[current].leave(); Object.keys(modules).forEach(function (k) { if (modules[k].reset) modules[k].reset(); }); current = 'char'; lastMode = m; return; }
     if (m !== lastMode) { lastMode = m; pane('char'); }
   };
@@ -390,6 +410,7 @@
       var list = h('div', { className: 'mk-cats' });
       cats.forEach(function (k) { list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: k.name, 'aria-pressed': String(cat === k.id), onclick: function () { cat = k.id; sel = null; adding = false; msg = ''; draw(); } })); });
       if (!dm) list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: 'Pay debt / Loan', 'aria-pressed': String(cat === 'debt'), onclick: function () { cat = 'debt'; sel = null; msg = ''; draw(); } }));
+      if (!dm) list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: 'Sell items', 'aria-pressed': String(cat === 'sell'), onclick: function () { cat = 'sell'; sel = null; adding = false; msg = ''; draw(); } }));
       if (dm) {
         var addc = h('button', { type: 'button', className: 'mk-cat add', text: '(Add category)' });
         addc.onclick = function () { cfg.cats.push({ id: 'new' + Date.now(), name: 'New category', items: [] }); cat = cfg.cats[cfg.cats.length - 1].id; saveCfg(); };
@@ -403,10 +424,26 @@
       var main = h('div', { className: 'mk-main' }, [top]);
       if (msg) main.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
       if (dm && editMammon && cfg) main.appendChild(mammonEditor());
-      if (cat === 'debt' && !dm) main.appendChild(debtPanel());
+      if (cat === 'sell' && !dm) main.appendChild(sellPanel());
+      else if (cat === 'debt' && !dm) main.appendChild(debtPanel());
       else if (c) main.appendChild(shelf(c));
       else main.appendChild(note('No categories yet.'));
       root.appendChild(h('div', { className: 'hb-wrap mk' }, [side, main]));
+    }
+    // Sell your own items to Mammon (the same items and prices as the Items tab: 90% of the shop price).
+    function sellPanel() {
+      var box = h('div', { className: 'mk-sell' }, [note('Mammon buys back the items the headmaster marked as sellable, at 90% of their price.')]);
+      call('market', { action: 'myitems' }).then(function (r) {
+        if (!r.ok) { box.appendChild(note(r.j.error || 'Could not open your items.')); return; }
+        var rows = r.j.items.filter(function (x) { return x.sellable; });
+        if (!rows.length) { box.appendChild(note('You have nothing Mammon will buy right now.')); return; }
+        rows.forEach(function (x) {
+          var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many ' + x.name + ' to sell' }), sb = h('button', { type: 'button', className: 'btn' });
+          G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { after(r2); }); }); sb.textContent = 'Sell';
+          box.appendChild(h('div', { className: 'mk-detail' }, [h('div', { className: 'ef' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: 'x' + x.qty }), h('span', { className: 'bdg on', text: 'Sells for ' + money(x.worth) + ' each' })]), h('div', { className: 'ef' }, [q, sb])]));
+        });
+      });
+      return box;
     }
     // Normal price, crossed out and replaced by the sale price while a sale is on.
     function tag(it) { return it.sale ? h('small', {}, [h('s', { text: money(it.price) }), ' ' + money(it.sale) + ' Karma · SALE']) : h('small', { text: money(it.price) + ' Karma' }); }
@@ -512,10 +549,67 @@
             G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || 'Could not sell.'); if (r2.ok && G.reloadChar) G.reloadChar(); mine(); }); });
             sb.textContent = 'Sell'; kids.push(h('div', { className: 'ef' }, [q, sb]));
           }
+          if (x.usable) {
+            var ub = h('button', { type: 'button', className: 'btn primary' });
+            G.two(ub, 'Use', function () { call('market', { action: 'use', name: x.name }).then(function (r3) { err = !r3.ok; msg = r3.ok ? r3.j.message : (r3.j.error || 'Could not use it.'); if (r3.ok && G.reloadChar) G.reloadChar(); mine(); }); }); ub.textContent = 'Use';
+            kids.push(h('div', { className: 'ef' }, [ub, h('small', { className: 'mono', text: (x.use && x.use.length ? 'Gives: ' + x.use.join(', ') + '. ' : '') + 'The item is used up.' })]));
+          }
           wrap.appendChild(h('div', { className: 'mk-detail' }, kids));
         });
+        wrap.appendChild(tradePanel(r.j));
         root.appendChild(wrap);
       });
+    }
+    // Give or trade with another soul: send items and/or karma as a gift, or offer a swap they can accept.
+    var tf = { mode: 'send', to: '', gname: '', gqty: 1, gkarma: 0, wname: '', wqty: 1, wkarma: 0 }, tmsg = '', terr = false;
+    function tradePanel(inv) {
+      var box = h('div', { className: 'mk-detail', id: 'it-trade' }), td = null;
+      function act(body) {
+        call('trade', body).then(function (r) { terr = !r.ok; tmsg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) { td = r.j; if (G.reloadChar) G.reloadChar(); mine(); return; } drawT(); });
+      }
+      function num(k, ph) { var i = h('input', { type: 'number', min: 0, className: 'ni', value: tf[k], 'aria-label': ph }); i.oninput = function () { tf[k] = i.value; }; return i; }
+      function drawT() {
+        clear(box); box.appendChild(h('h4', { text: 'Give or trade with another soul' }));
+        if (tmsg) box.appendChild(h('p', { className: 'mk-msg' + (terr ? ' bad' : ''), text: tmsg, role: 'status' }));
+        if (!td) { box.appendChild(note('Loading…')); return; }
+        var ms = h('select', { 'aria-label': 'Mode' }, [['send', 'Give (a gift, arrives at once)'], ['offer', 'Trade (they must accept)']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: tf.mode === o[0] }); })); ms.onchange = function () { tf.mode = ms.value; drawT(); };
+        var to = h('select', { 'aria-label': 'To' }, [h('option', { value: '', text: 'Choose a soul…' })].concat(td.members.map(function (m) { return h('option', { value: m.id, text: m.name, selected: m.id === tf.to }); }))); to.onchange = function () { tf.to = to.value; };
+        var gi = h('select', { 'aria-label': 'Item to give' }, [h('option', { value: '', text: '— no item —' })].concat(inv.items.map(function (x) { return h('option', { value: x.name, text: x.name + ' (x' + x.qty + ')', selected: x.name === tf.gname }); }))); gi.onchange = function () { tf.gname = gi.value; };
+        box.appendChild(h('div', { className: 'it-trade' }, [
+          h('div', { className: 'ef' }, [ms, to]),
+          h('div', { className: 'it-act' }, [h('b', { text: 'You give' }), h('div', { className: 'ef' }, [gi, 'x', num('gqty', 'Amount'), '+', num('gkarma', 'Karma'), 'karma'])]),
+        ]));
+        if (tf.mode === 'offer') {
+          var wn = h('input', { value: tf.wname, maxLength: 100, placeholder: 'Item you want (type its exact name)', 'aria-label': 'Item you want' }); wn.oninput = function () { tf.wname = wn.value; };
+          box.appendChild(h('div', { className: 'it-act' }, [h('b', { text: 'You want back' }), h('div', { className: 'ef' }, [wn, 'x', num('wqty', 'Amount'), '+', num('wkarma', 'Karma'), 'karma'])]));
+        }
+        box.appendChild(note('You can give up to ' + money(td.karma) + ' karma. Nothing can go below zero.'));
+        var go = h('button', { type: 'button', className: 'btn primary', text: tf.mode === 'send' ? 'Send' : 'Send offer' });
+        go.onclick = function () {
+          if (!tf.to) { terr = true; tmsg = 'Choose who this is for.'; drawT(); return; }
+          act({ action: tf.mode, to: tf.to, give: { name: tf.gname, qty: tf.gqty, karma: tf.gkarma }, want: { name: tf.wname.trim(), qty: tf.wqty, karma: tf.wkarma } });
+        };
+        box.appendChild(go);
+        function nice(s) { return [s.name ? s.qty + ' x ' + s.name : '', s.karma ? money(s.karma) + ' karma' : ''].filter(Boolean).join(' + ') || 'nothing'; }
+        if (td.incoming.length) {
+          box.appendChild(h('h4', { text: 'Offers to you' }));
+          td.incoming.forEach(function (t) {
+            var ac = h('button', { type: 'button', className: 'btn primary', text: 'Accept' }); ac.onclick = function () { act({ action: 'accept', id: t.id }); };
+            var dc = h('button', { type: 'button', className: 'btn', text: 'Decline' }); dc.onclick = function () { act({ action: 'decline', id: t.id }); };
+            box.appendChild(h('div', { className: 'it-offer' }, [h('p', { text: t.from + ' gives ' + nice(t.give) + ' for your ' + nice(t.want) + '.' }), h('div', { className: 'ef' }, [ac, dc])]));
+          });
+        }
+        if (td.outgoing.length) {
+          box.appendChild(h('h4', { text: 'Your open offers' }));
+          td.outgoing.forEach(function (t) {
+            var cn = h('button', { type: 'button', className: 'btn', text: 'Cancel' }); cn.onclick = function () { act({ action: 'cancel', id: t.id }); };
+            box.appendChild(h('div', { className: 'it-offer' }, [h('p', { text: 'To ' + t.to + ': you give ' + nice(t.give) + ' for ' + nice(t.want) + '.' }), cn]));
+          });
+        }
+      }
+      drawT();
+      call('trade', { action: 'list' }).then(function (r) { if (r.ok) { td = r.j; } else { terr = true; tmsg = r.j.error || 'Could not open trading.'; } drawT(); });
+      return box;
     }
     function tools() {
       clear(root); var cs = G.chars();
@@ -634,8 +728,12 @@
       if (!box) return;
       var dm = !!G.creds(); clear(box); var f = rows.filter(function (x) { return !sel.value || x.name === sel.value; });
       if (!f.length) { box.appendChild(note('No rolls yet.')); return; }
-      var t = h('table', { className: 'dl-tbl' }, [h('tr', {}, [h('th', { text: 'When' }), dm ? h('th', { text: 'Soul' }) : null, h('th', { text: 'Roll' }), h('th', { text: 'Result' })])]);
-      f.forEach(function (x) { t.appendChild(h('tr', {}, [h('td', { className: 'mono', text: new Date(x.at).toLocaleString() }), dm ? h('td', { text: x.name }) : null, h('td', { text: x.label }), h('td', { className: 'mono ' + (x.cls || ''), text: x.txt })])); });
+      var t = h('table', { className: 'dl-tbl' }, [h('tr', {}, [h('th', { text: 'When' }), h('th', { text: 'Soul' }), h('th', { text: 'Roll' }), h('th', { text: 'Result' }), dm ? h('th', { text: '' }) : null])]);
+      f.forEach(function (x) {
+        var del = null;
+        if (dm) { del = h('button', { type: 'button', className: 'link', text: 'Delete', 'aria-label': 'Delete this roll' }); del.onclick = function () { rows = rows.filter(function (y) { return !(y.o === x.o && y.at === x.at); }); draw(); call('rolls', { action: 'del', o: x.o, at: x.at }).then(function () { rev = ''; load(false); }); }; }
+        t.appendChild(h('tr', {}, [h('td', { className: 'mono', text: new Date(x.at).toLocaleString() }), h('td', { text: x.name }), h('td', { text: x.label }), h('td', { className: 'mono ' + (x.cls || ''), text: x.txt }), dm ? h('td', {}, [del]) : null]));
+      });
       box.appendChild(t);
     }
     // Headmaster only: choose an NPC or monster from the registry and roll for it.
@@ -644,6 +742,16 @@
       var s = h('select', { 'aria-label': 'NPC or monster to roll for' }, [h('option', { value: '', text: 'Choose an NPC or monster…' })].concat(reg.map(function (e) { return h('option', { value: e.id, text: e.name + ' (' + (e.type === 'npc' ? 'NPC' : 'Monster') + ')' }); })));
       s.onchange = function () { clear(host); var e = reg.filter(function (x) { return x.id === s.value; })[0]; if (e) host.appendChild(npcRoller(e, function () { load(false); })); };
       return h('div', { className: 'nr-pick' }, [h('p', { className: 'mono red', text: 'Roll for an NPC or monster' }), reg.length ? s : note('No NPCs or monsters yet. Add them in Character details › Registry.'), host]);
+    }
+    // Headmaster only: clear out old rolls so the list never fills up with spam.
+    function cleaner() {
+      function run(body) { call('rolls', Object.assign({ action: 'clear' }, body)).then(function (r) { out.textContent = r.ok ? 'Deleted ' + r.j.gone + ' roll' + (r.j.gone === 1 ? '' : 's') + '.' : (r.j.error || 'Could not delete.'); rev = ''; load(false); }); }
+      var out = h('small', { className: 'mono', role: 'status' }), days = h('input', { type: 'number', min: 0, value: 7, className: 'ni', 'aria-label': 'Days' });
+      var b1 = h('button', { type: 'button', className: 'btn', text: 'Delete rolls older than the days beside it' }), b2 = h('button', { type: 'button', className: 'btn', text: 'Delete the soul chosen below' }), b3 = h('button', { type: 'button', className: 'btn', text: 'Delete all rolls' });
+      G.two(b1, 'Delete rolls older than the days beside it', function () { run({ mode: 'older', days: days.value }); });
+      G.two(b2, 'Delete the soul chosen below', function () { if (!sel.value) { out.textContent = 'Choose a soul in the list below first.'; return; } run({ mode: 'name', name: sel.value }); });
+      G.two(b3, 'Delete all rolls', function () { run({ mode: 'all' }); });
+      return h('div', { className: 'nr-pick' }, [h('p', { className: 'mono red', text: 'Clean up the dice log' }), h('div', { className: 'ef' }, [days, 'days', b1]), h('div', { className: 'ef' }, [b2, b3]), out, note('You can also delete a single roll with the Delete link on its row.')]);
     }
     function fillNames() {
       var keep = sel.value, names = [];
@@ -661,7 +769,7 @@
         if (first) {
           var dm = !!G.creds(); sel = h('select', { 'aria-label': 'Filter by character' }); box = h('div', { className: 'dl-wrap' });
           sel.onchange = draw; fillNames();
-          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? rollerPicker() : null, dm ? h('div', { className: 'ef' }, [sel, note('The latest 300 rolls from every soul. New rolls appear by themselves.')]) : note('Your last 60 rolls. New rolls appear by themselves.'), box]));
+          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? rollerPicker() : null, dm ? cleaner() : null, h('div', { className: 'ef' }, [sel, note(dm ? 'The latest 300 rolls from every soul. New rolls appear by themselves.' : 'Everyone’s latest rolls, newest first. New rolls appear by themselves.')]), box]));
         } else fillNames();
         draw();
       });
@@ -671,6 +779,73 @@
       load(true).then(function () { timer = setInterval(function () { if (!document.hidden) load(false); }, 3000); });
     }
     return { enter: enter, leave: stop, refresh: function () { return load(false); }, wake: function () { if (box && timer) load(false); }, reset: function () { stop(); box = null; rows = []; rev = ''; clear(root); } };
+  })();
+
+  /* ======================= EFFECTS (headmaster) ======================= */
+  // Put a skill's buff or debuff (or one you type in) on chosen souls, see who is carrying what, and end it when you want.
+  modules.fx = (function () {
+    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], targets = {};
+    function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; targets = {}; msg = ''; }
+    function enter() {
+      call('effects', { action: 'list' }).then(function (r) {
+        if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the effects.')); return; }
+        data = r.j; draw();
+      });
+    }
+    function act(body) { call('effects', body).then(function (r) { err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) data = r.j; draw(); }); }
+    function draw() {
+      clear(root); var wrap = h('div', { className: 'hb-wrap' });
+      wrap.appendChild(note('Buffs and debuffs change a soul’s stats on their sheet by themselves (the modifiers, saves and damage bonuses recalculate). The base stats are never touched, so ending an effect puts everything back.'));
+      if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
+
+      /* ----- active effects, grouped by the cast that made them ----- */
+      var groups = {}, order = [];
+      data.chars.forEach(function (c) { c.buffs.forEach(function (b) { var g = b.group || b.id; if (!groups[g]) { groups[g] = { id: g, source: b.source, at: b.at, fx: [], souls: [] }; order.push(g); } var G0 = groups[g]; if (!G0.fx.some(function (x) { return x.stat === b.stat && x.amt === b.amt && x.perm === b.perm; })) G0.fx.push(b); G0.souls.push({ c: c, b: b }); }); });
+      var act1 = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Active effects' })]);
+      if (!order.length) act1.appendChild(note('No one is carrying an effect right now.'));
+      order.sort(function (a, b) { return groups[a].at < groups[b].at ? 1 : -1; }).forEach(function (g) {
+        var gr = groups[g], temp = gr.fx.some(function (x) { return !x.perm; });
+        var endAll = h('button', { type: 'button', className: 'btn' + (temp ? ' primary' : '') });
+        G.two(endAll, temp ? 'End for everyone' : 'Remove for everyone', function () { act({ action: 'end', group: gr.id }); }); endAll.textContent = temp ? 'End for everyone' : 'Remove for everyone';
+        var chips = h('div', { className: 'fx-chips' }, gr.souls.map(function (s) {
+          var x = h('button', { type: 'button', className: 'fx-chip', title: 'End this on ' + s.c.name + ' only', text: s.c.name + ' ✕' }); x.onclick = function () { act({ action: 'end', id: s.c.id, bid: s.b.id }); }; return x;
+        }).filter(function (x, i, a) { return true; }));
+        act1.appendChild(h('div', { className: 'fx-row' + (temp ? ' temp' : '') }, [h('div', { className: 'ef' }, [h('b', { text: gr.source }), h('span', { className: 'bdg' + (temp ? ' on' : ''), text: temp ? 'Until you end it' : 'Permanent' }), endAll]), h('p', { className: 'mono', text: gr.fx.map(function (x) { return fxText(x); }).join(' · ') }), chips]));
+      });
+      wrap.appendChild(act1);
+
+      /* ----- apply ----- */
+      var ap = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Apply an effect' })]);
+      var withBuffs = data.chars.filter(function (c) { return c.skills.some(function (s) { return s.buffs.length; }); });
+      var cs = h('select', { 'aria-label': 'Whose skill' }, [h('option', { value: '', text: 'A custom effect (type it in)' })].concat(withBuffs.map(function (c) { return h('option', { value: c.id, text: 'Skill of ' + c.name, selected: c.id === caster }); })));
+      cs.onchange = function () { caster = cs.value; skill = ''; fx = []; source = ''; draw(); };
+      var row = [cs];
+      if (caster) {
+        var cc = data.chars.filter(function (c) { return c.id === caster; })[0], sk = cc ? cc.skills.filter(function (s) { return s.buffs.length; }) : [];
+        var ss = h('select', { 'aria-label': 'Skill' }, [h('option', { value: '', text: 'Choose a skill…' })].concat(sk.map(function (s, i) { return h('option', { value: String(i), text: (s.name || s.label) + ' (' + s.buffs.length + ')', selected: skill === String(i) }); })));
+        ss.onchange = function () { skill = ss.value; var s = sk[+skill]; fx = s ? JSON.parse(JSON.stringify(s.buffs)) : []; source = s ? (s.name || s.label) : ''; draw(); };
+        row.push(ss);
+      }
+      ap.appendChild(h('div', { className: 'ef' }, row));
+      var sn = h('input', { value: source, maxLength: 100, placeholder: 'Name of the effect (shown to the souls)', 'aria-label': 'Effect name' }); sn.oninput = function () { source = sn.value; };
+      ap.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Name' }), sn]));
+      ap.appendChild(G.fxEditor(fx, draw));
+      ap.appendChild(h('p', { className: 'mono red', text: 'Apply to' }));
+      var all = h('button', { type: 'button', className: 'link', text: 'All' }), none = h('button', { type: 'button', className: 'link', text: 'None' });
+      all.onclick = function () { data.chars.forEach(function (c) { targets[c.id] = true; }); draw(); }; none.onclick = function () { targets = {}; draw(); };
+      ap.appendChild(h('div', { className: 'ef' }, [all, none]));
+      ap.appendChild(h('div', { className: 'fx-targets' }, data.chars.map(function (c) { var i = h('input', { type: 'checkbox', checked: !!targets[c.id] }); i.onchange = function () { targets[c.id] = i.checked; }; return h('label', { className: 'chk' }, [i, h('span', { text: c.name })]); })));
+      var go = h('button', { type: 'button', className: 'btn primary', text: 'Apply' });
+      go.onclick = function () {
+        var ids = data.chars.filter(function (c) { return targets[c.id]; }).map(function (c) { return c.id; });
+        if (!ids.length) { err = true; msg = 'Tick at least one soul to apply it to.'; draw(); return; }
+        act({ action: 'apply', targets: ids, source: source, fx: fx });
+      };
+      ap.appendChild(go);
+      wrap.appendChild(ap);
+      root.appendChild(wrap);
+    }
+    return { enter: function () { msg = ''; enter(); }, reset: reset };
   })();
 
   /* ======================= CHAT ======================= */
@@ -893,15 +1068,16 @@
       box.appendChild(h('div', { className: 'g2' }, [h('label', { className: 'fl' }, [h('span', { text: 'Type' }), ks]), txt('Name', 'name', 0, 100)]));
       box.appendChild(h('div', { className: 'g2' }, [txt('Category (optional)', 'category', 0, 60), c.kind === 'item' ? (function () { var i = h('input', { type: 'number', min: 0, value: c.price || 0, className: 'ni' }); i.oninput = function () { c.price = Math.max(0, Math.floor(+i.value) || 0); }; return h('label', { className: 'fl' }, [h('span', { text: 'Default price (karma)' }), i]); })() : null]));
       if (c.kind === 'item') {
-        var chk = function (label, k) { var i = h('input', { type: 'checkbox', checked: !!c[k] }); i.onchange = function () { c[k] = i.checked; }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); };
+        var chk = function (label, k) { var i = h('input', { type: 'checkbox', checked: !!c[k] }); i.onchange = function () { c[k] = i.checked; if (k === 'usable') draw(); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); };
         box.appendChild(h('div', { className: 'ef' }, [chk('Players can sell this back (90% of its price)', 'sellable'), chk('Players can use this item', 'usable')]));
+        if (c.usable) { c.use = c.use || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'When a soul uses it (optional): add HP, raise a stat, or give a buff. One copy is used up each time. Temporary effects stay until you end them in the Effects tab.' }), G.fxEditor(c.use, draw)])); }
       }
       box.appendChild(crop);
       box.appendChild(txt('Description (everyone can read this)', 'desc', 5, 2000));
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save' });
       save.onclick = function () {
         save.disabled = true; st.textContent = 'Saving…';
-        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable };
+        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, use: c.usable ? (c.use || []) : [] };
         if (!c.isNew) e.id = c.id; if (/^data:/.test(c.image || '') || c.image === '') e.image = c.image;
         call('world', { action: 'wsave', entry: e }).then(function (r) {
           save.disabled = false; if (!r.ok) { st.textContent = r.j.error || 'Save failed'; return; }

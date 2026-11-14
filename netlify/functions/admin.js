@@ -5,6 +5,7 @@ const { getStore, connectLambda } = require('@netlify/blobs');
 const { storyAdmin } = require('./lib/story');
 const { registryAdmin } = require('./lib/registry');
 const { settle } = require('./lib/auth');
+const { cleanFx } = require('./lib/fx');
 const API = 'https://api.netlify.com/api/v1';
 const FORM = process.env.FORM_NAME || 'gehenna-sheet';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Mephisto').trim().toLowerCase();
@@ -50,13 +51,13 @@ function fromSheet(d) {
 // Only known fields get saved, with sane limits.
 function clean(c, old) {
   return {
-    id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '',
+    id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '', buffs: Array.isArray(old.buffs) ? old.buffs : [],
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
     itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
     items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), debt: N(c.debt, 0, 1000000000), quirk: quirks(c.quirk), level: N(c.level == null ? 1 : c.level, 1, 99), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), initiative: N(c.initiative, -99, 99), size: S(c.size, 40), languages: S(c.languages, 200), speed: N(c.speed, 0, 999),
     stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; const sc = N(s.score, 0, 99); o[k] = { score: sc, mod: modOf(sc) }; return o; }, {}),
     skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 40).map(s => ({
-      label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100),
+      label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100), buffs: cleanFx(s.buffs),
       effects: (Array.isArray(s.effects) ? s.effects : []).slice(0, 10).map(e => ({ type: TYPES.includes(e.type) ? e.type : 'Other', n: N(e.n, 0, 50), d: N(e.d, 0, 1000), flat: N(e.flat, -999, 999), stat: ST.includes(e.stat) ? e.stat : '', note: S(e.note, 200) })),
     })),
   };

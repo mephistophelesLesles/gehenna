@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { settle, reply, S, N, IMG, ID, isAdmin, who, needUser, karmaOf, parseBody, imageReply } = require('./lib/auth');
 const { loadAll } = require('./lib/world');
+const { addBuffs, label: fxLabel } = require('./lib/fx');
 
 const LOAN_CAP = 5000;
 const LINES = [
@@ -115,7 +116,18 @@ exports.handler = async (event) => {
 
     const save = async () => { await cstore.setJSON(u.id, c); };
     if (b.action === 'myitems') {
-      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && e.usable), sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
+      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && e.usable), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
+    }
+    if (b.action === 'use') {
+      // Using an item applies what the headmaster wrote on it (see the World registry) and removes one from the inventory.
+      const n = S(b.name, 100).trim().toLowerCase(), e = byName[n], have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);
+      if (!have || !e) return reply(404, { error: 'You do not have that item.' });
+      if (!e.usable) return reply(400, { error: 'That item cannot be used.' });
+      const fx = Array.isArray(e.use) ? e.use : [];
+      have.qty -= 1; c.items = c.items.filter((x) => x.qty > 0);
+      const added = fx.length ? addBuffs(c, e.name, fx, crypto.randomUUID()) : 0;
+      await save();
+      return reply(200, Object.assign(view(c), { message: 'You used ' + e.name + '.' + (added ? ' ' + fx.map(fxLabel).join(', ') + '.' : '') }));
     }
     if (b.action === 'sell') {
       const n = S(b.name, 100).trim().toLowerCase(), e = byName[n], have = (c.items || []).find((x) => String(x.name).toLowerCase() === n), qty = N(b.qty, 1, 9999);

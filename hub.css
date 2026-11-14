@@ -165,3 +165,16 @@
 .mp-sw[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 2px var(--red); }
 .mp-sw.er { width: auto; padding: 0 0.6rem; background: none; color: var(--fg); font: 500 0.72rem var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; }
 .mp-sws input[type="color"] { width: 1.9rem; height: 1.9rem; padding: 0; border: 2px solid var(--line); background: none; cursor: pointer; }
+
+/* ---- effects, trading, dice-log tools ---- */
+.fx-row { border-top: 1px solid var(--line); padding: 0.6rem 0; display: grid; gap: 0.4rem; }
+.fx-row.temp { border-left: 3px solid var(--red); padding-left: 0.7rem; }
+.fx-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.fx-chip { font: 0.72rem var(--f-body); color: var(--fg); background: transparent; border: 1px solid var(--line); padding: 0.2rem 0.5rem; cursor: pointer; }
+.fx-chip:hover { border-color: var(--red); }
+.fx-targets { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.3rem 0.8rem; margin: 0.4rem 0 0.8rem; }
+.it-trade, .it-act { display: grid; gap: 0.5rem; margin: 0.5rem 0; }
+.it-offer { border-top: 1px solid var(--line); padding: 0.5rem 0; display: grid; gap: 0.4rem; }
+.mk-sell { display: grid; gap: 0.6rem; }
+.dl-tbl .link { white-space: nowrap; }
+.hb-wrap .ef input.ni { width: 5rem; flex: 0 0 5rem; }
