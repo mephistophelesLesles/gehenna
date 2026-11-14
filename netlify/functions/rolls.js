@@ -21,11 +21,12 @@ exports.handler = async (event) => {
     const u = await needUser(b); if (!u) return reply(401, { error: 'Sign in first.' });
     const rw = getStore('gehenna-rolls'), rs = reader('gehenna-rolls', rw), cs = reader('gehenna-characters', getStore('gehenna-characters'));
     if (b.action === 'add') {
-      if (u.admin) return reply(400, { error: 'Souls only.' });
-      const [list, c] = await Promise.all([rs.get(u.id, { type: 'json' }), cs.get(u.id, { type: 'json' })]);
+      // Souls log their own rolls. The headmaster logs hers under the NPC or monster she rolled for (b.as); they are kept under 'hm'.
+      const [list, c] = await Promise.all([rs.get(u.id, { type: 'json' }), u.admin ? null : cs.get(u.id, { type: 'json' })]);
       const rows = Array.isArray(list) ? list : [];
-      rows.unshift({ at: new Date().toISOString(), name: c && c.name ? S(c.name, 100) : '', label: S(b.label, 100), txt: S(b.txt, 200), cls: b.cls === 'nat20' || b.cls === 'nat1' ? b.cls : '' });
-      await rw.setJSON(u.id, rows.slice(0, 60));
+      const name = u.admin ? (S(b.as, 100).trim() || 'Headmaster') : (c && c.name ? S(c.name, 100) : '');
+      rows.unshift({ at: new Date().toISOString(), name, label: S(b.label, 100), txt: S(b.txt, 200), cls: b.cls === 'nat20' || b.cls === 'nat1' ? b.cls : '' });
+      await rw.setJSON(u.id, rows.slice(0, u.admin ? 200 : 60));
       await rw.set('_rev', Date.now() + '-' + Math.random().toString(36).slice(2, 6));
       return reply(200, { ok: true });
     }

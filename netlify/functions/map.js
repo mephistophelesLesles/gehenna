@@ -9,7 +9,7 @@ const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ?
 const meta = (l) => ({ id: l.id, name: l.name, rev: l.rev });
 
 // Where a token's picture comes from: a player's character, a registry entry (NPC / monster), or a world item.
-const SRC = /^(player|reg|world):[A-Za-z0-9-]{1,60}$/;
+const SRC = /^(player|reg|world|custom):[A-Za-z0-9-]{1,60}$/;
 // Older tokens only remember a picture URL. Work out the source from it so they can be repaired.
 const legacySrc = (u) => { const m = /^\/\.netlify\/functions\/(registry|chat|world)\?(?:img|avatar)=([A-Za-z0-9-]+)/.exec(String(u || '')); return m ? { registry: 'reg', chat: 'player', world: 'world' }[m[1]] + ':' + m[2] : ''; };
 const tokUrl = (lid, tid, rev) => '/.netlify/functions/map?timg=' + lid + '_' + tid + '&v=' + rev;
@@ -27,6 +27,10 @@ async function attachImages(store, next, old) {
   const oldTok = {}; (old ? old.tokens : []).forEach((t) => { oldTok[t.id] = t; });
   const keep = new Set();
   await Promise.all(next.tokens.map(async (t) => {
+    const up = t.up; delete t.up;
+    if (up) { // a quick token with its own picture
+      const k = 'timg/' + next.id + '/' + t.id; await store.set(k, up); t.src = 'custom:' + t.id; t.img = tokUrl(next.id, t.id, next.rev); keep.add(k); return;
+    }
     if (!t.src) return;
     const key = 'timg/' + next.id + '/' + t.id, o = oldTok[t.id];
     if (o && o.src === t.src && o.img && o.img.indexOf('map?timg=') > 0) { t.img = o.img; keep.add(key); return; }
@@ -36,17 +40,28 @@ async function attachImages(store, next, old) {
   await Promise.all(Object.keys(oldTok).filter((id) => !keep.has('timg/' + next.id + '/' + id)).map((id) => store.delete('timg/' + next.id + '/' + id).catch(() => {})));
 }
 
+// Coloured squares: [column, row, '#rrggbb'], at most one per square.
+function cleanCells(a) {
+  const seen = new Map();
+  (Array.isArray(a) ? a : []).slice(0, 5000).forEach((c) => {
+    if (!Array.isArray(c) || !Number.isInteger(c[0]) || !Number.isInteger(c[1]) || c[0] < 0 || c[1] < 0 || c[0] > 120 || c[1] > 120 || !/^#[0-9a-fA-F]{6}$/.test(String(c[2]))) return;
+    seen.set(c[0] + ',' + c[1], [c[0], c[1], String(c[2]).toLowerCase()]);
+  });
+  return Array.from(seen.values());
+}
 function clean(inc, old) {
   return {
     id: old ? old.id : crypto.randomUUID(),
     name: S(inc.name, 40).trim() || 'Lobby',
     rev: Date.now(),
-    cell: num(inc.cell, 2, 25, 6), tokScale: num(inc.tokScale, 0.3, 4, 1),
+    cell: num(inc.cell, 2, 25, 6), tokScale: num(inc.tokScale, 0.3, 4, 1), tileAlpha: num(inc.tileAlpha, 0.1, 0.9, 0.4),
+    cells: cleanCells(inc.cells),
     imgScale: num(inc.imgScale, 0.1, 6, 1), imgX: num(inc.imgX, -3, 3, 0), imgY: num(inc.imgY, -3, 3, 0),
     members: (Array.isArray(inc.members) ? inc.members : []).filter((x) => ID.test(String(x))).slice(0, 200).map(String),
     tokens: (Array.isArray(inc.tokens) ? inc.tokens : []).slice(0, 150).map((t) => ({
       id: ID.test(String(t.id || '')) ? String(t.id) : crypto.randomUUID(),
       label: S(t.label, 30), img: '', src: SRC.test(String(t.src || '')) ? String(t.src) : legacySrc(t.img),
+      up: typeof t.up === 'string' && t.up.length < 400000 && IMG.test(t.up) ? t.up : '',
       size: num(t.size, 0.25, 4, 1), x: num(t.x, 0, 1, 0.5), y: num(t.y, 0, 1, 0.5),
     })),
   };

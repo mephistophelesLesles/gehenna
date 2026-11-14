@@ -2223,7 +2223,8 @@
   window.GEH = { h: h, two: two, cropper: cropper, creds: function () { return creds; }, pkey: function () { return pkey; }, pchar: function () { return pchar; },
     chars: function () { return chars; }, reg: function () { return reg; }, story: function () { return story; }, reloadChar: reloadChar,
     reloadChars: function () { return api({ action: 'chars' }).then(function (r) { if (r.ok && r.j.chars) { chars = r.j.chars; pick(); } }); },
-    render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null };
+    render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null,
+    dice: { dice: dice, plain: plain, sgn: sgn, tumble: tumble, modOf: modOf } };
 })();
 </script>
 <script src="hub.js"></script>

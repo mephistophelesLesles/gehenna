@@ -69,7 +69,7 @@
 
   /* ======================= MAP ======================= */
   modules.map = (function () {
-    var root = $('pane-map'), built = false, lobbies = [], curId = null, lob = null, timer = null, saveT = null, selTok = null, tab = 'shadow', q = '', snap = true;
+    var root = $('pane-map'), built = false, lobbies = [], curId = null, lob = null, timer = null, saveT = null, selTok = null, tab = 'shadow', q = '', snapMode = 'square', paint = { on: false, color: '#2ecc71', erase: false };
     var ui = {};
     function isDM() { return !!G.creds(); }
     function reset() { built = false; lobbies = []; curId = null; lob = null; selTok = null; clear(root); stop(); }
@@ -129,14 +129,33 @@
     }
 
     /* the map box: picture, grid, tokens. Everything is positioned in fractions of the box, so players see exactly what the headmaster sees. */
-    function fit() { if (!lob || !ui.grid) return; var w = ui.box.clientWidth, c = w * lob.cell / 100; ui.grid.style.backgroundSize = c + 'px ' + c + 'px'; }
+    function fit() {
+      if (!lob || !ui.grid) return; var w = ui.box.clientWidth, c = w * lob.cell / 100; ui.grid.style.backgroundSize = c + 'px ' + c + 'px';
+      Object.keys(ui.tiles || {}).forEach(function (k) { layTile(ui.tiles[k], c); });
+    }
+    /* coloured squares: they belong to the grid, so they follow the square size */
+    function layTile(t, c) { var s = t.el.style; s.left = (t.col * c) + 'px'; s.top = (t.row * c) + 'px'; s.width = c + 'px'; s.height = c + 'px'; }
+    function addTile(col, row, color) {
+      var el = h('div', { className: 'mp-tile' }); el.style.background = color; ui.paint.appendChild(el);
+      var t = { el: el, col: col, row: row }; ui.tiles[col + ',' + row] = t; layTile(t, ui.box.clientWidth * lob.cell / 100);
+    }
+    function setTile(col, row, color) {
+      var k = col + ',' + row, cur = ui.tiles[k];
+      if (cur) { if (color && cur.el.style.background && lob.cells.some(function (c) { return c[0] === col && c[1] === row && c[2] === color; })) return; cur.el.remove(); delete ui.tiles[k]; }
+      lob.cells = lob.cells.filter(function (c) { return !(c[0] === col && c[1] === row); });
+      if (color) { lob.cells.push([col, row, color]); addTile(col, row, color); }
+    }
     function place(t, el) { el.style.left = (t.x * 100) + '%'; el.style.top = (t.y * 100) + '%'; el.style.width = (lob.cell * 0.9 * (lob.tokScale || 1) * (t.size || 1)) + '%'; }
     function drawBox() {
       clear(ui.box); ui.grid = null;
       if (!lob) { ui.box.appendChild(h('div', { className: 'mp-empty' }, [h('p', { className: 'mono', text: curId ? 'Opening the map…' : (isDM() ? 'Add a lobby to begin.' : 'Nothing to show yet.') })])); return; }
       if (lob.image) ui.box.appendChild(h('img', { className: 'mp-img', src: lob.image, alt: '', draggable: false }));
       ui.img = ui.box.querySelector('.mp-img'); styleImg();
+      lob.cells = lob.cells || [];
+      ui.paint = h('div', { className: 'mp-paint' }); ui.paint.style.opacity = lob.tileAlpha || 0.4; ui.box.appendChild(ui.paint); ui.tiles = {};
       ui.grid = h('div', { className: 'mp-grid' }); ui.box.appendChild(ui.grid);
+      lob.cells.forEach(function (c) { addTile(c[0], c[1], c[2]); });
+      ui.box.classList.toggle('painting', isDM() && paint.on);
       lob.tokens.forEach(function (t) { ui.box.appendChild(tokenEl(t)); });
       if (!lob.image && isDM()) ui.box.appendChild(h('p', { className: 'mp-hint mono', text: 'Upload a map image on the right.' }));
       fit();
@@ -154,10 +173,37 @@
       var move = function (m) { var r = ui.box.getBoundingClientRect(); t.x = Math.max(0, Math.min(1, (m.clientX - r.left) / r.width)); t.y = Math.max(0, Math.min(1, (m.clientY - r.top) / r.height)); place(t, e); };
       var up = function () {
         e.removeEventListener('pointermove', move); e.removeEventListener('pointerup', up); e.removeEventListener('pointercancel', up);
-        if (snap) { var r = ui.box.getBoundingClientRect(), cx = lob.cell / 100, cy = cx * r.width / r.height; t.x = Math.min(1, (Math.floor(t.x / cx) + 0.5) * cx); t.y = Math.min(1, (Math.floor(t.y / cy) + 0.5) * cy); place(t, e); }
+        if (snapMode !== 'free') {
+          var r = ui.box.getBoundingClientRect(), cx = lob.cell / 100, cy = cx * r.width / r.height;
+          if (snapMode === 'fine') { t.x = Math.max(0, Math.min(1, Math.round(t.x / (cx / 4)) * cx / 4)); t.y = Math.max(0, Math.min(1, Math.round(t.y / (cy / 4)) * cy / 4)); }
+          else {
+            var gx = Math.floor(t.x / cx), gy = Math.floor(t.y / cy), spots = [[0, 0], [0.25, 0.25], [-0.25, 0.25], [0.25, -0.25], [-0.25, -0.25], [0, 0.3], [0.3, 0], [-0.3, 0], [0, -0.3]], pick = spots[0];
+            // another token already in this square? sit beside it instead of hiding it
+            for (var i = 0; i < spots.length; i++) {
+              var px = (gx + 0.5 + spots[i][0]) * cx, py = (gy + 0.5 + spots[i][1]) * cy;
+              if (!lob.tokens.some(function (o) { return o !== t && Math.abs(o.x - px) < cx * 0.12 && Math.abs(o.y - py) < cy * 0.12; })) { pick = spots[i]; break; }
+            }
+            t.x = Math.min(1, (gx + 0.5 + pick[0]) * cx); t.y = Math.min(1, (gy + 0.5 + pick[1]) * cy);
+          }
+          place(t, e);
+        }
         save();
       };
       e.addEventListener('pointermove', move); e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up);
+    }
+    function boxDown(ev) { if (!isDM() || !lob) return; if (paint.on) paintDown(ev); else dragImage(ev); }
+    function paintDown(ev) {
+      ev.preventDefault(); ui.box.setPointerCapture(ev.pointerId);
+      var prev = null;
+      var cellAt = function (m) { var r = ui.box.getBoundingClientRect(), c = ui.box.clientWidth * lob.cell / 100; return { x: m.clientX - r.left - ui.box.clientLeft, y: m.clientY - r.top - ui.box.clientTop, c: c, w: ui.box.clientWidth, h: ui.box.clientHeight }; };
+      var hit = function (x, y, c, w, hh) { if (x < 0 || y < 0 || x >= w || y >= hh) return; setTile(Math.floor(x / c), Math.floor(y / c), paint.erase ? null : paint.color); };
+      var go = function (m) {
+        var a = cellAt(m);
+        if (prev) { var n = Math.max(1, Math.ceil(Math.hypot(a.x - prev.x, a.y - prev.y) / (a.c / 3))); for (var i = 1; i <= n; i++) hit(prev.x + (a.x - prev.x) * i / n, prev.y + (a.y - prev.y) * i / n, a.c, a.w, a.h); } else hit(a.x, a.y, a.c, a.w, a.h);
+        prev = a;
+      };
+      var up = function () { ui.box.removeEventListener('pointermove', go); ui.box.removeEventListener('pointerup', up); ui.box.removeEventListener('pointercancel', up); save(); };
+      go(ev); ui.box.addEventListener('pointermove', go); ui.box.addEventListener('pointerup', up); ui.box.addEventListener('pointercancel', up);
     }
     function dragImage(ev) {
       if (!isDM() || !lob || !lob.image || ev.target.closest('.mp-tok')) return;
@@ -173,12 +219,12 @@
       if (!lob) return;
       ui.status.textContent = 'Saving…'; clearTimeout(saveT);
       saveT = setTimeout(function () {
-        var l = { id: lob.id, name: lob.name, cell: lob.cell, tokScale: lob.tokScale || 1, imgScale: lob.imgScale, imgX: lob.imgX, imgY: lob.imgY, members: lob.members, tokens: lob.tokens };
+        var l = { id: lob.id, name: lob.name, cell: lob.cell, tokScale: lob.tokScale || 1, tileAlpha: lob.tileAlpha || 0.4, cells: lob.cells || [], imgScale: lob.imgScale, imgX: lob.imgX, imgY: lob.imgY, members: lob.members, tokens: lob.tokens.map(function (t) { return { id: t.id, label: t.label, src: t.src, up: t.up || '', size: t.size, x: t.x, y: t.y }; }) };
         if (lob._img) l.image = lob.image;
         var id = lob.id;
         call('map', { action: 'save', lobby: l }).then(function (r) {
           if (!r.ok) { ui.status.textContent = r.j.error || 'Save failed'; return; }
-          if (lob && lob.id === id) { lob.rev = r.j.lobby.rev; lob._img = false; (r.j.tokens || []).forEach(function (s) { var t = lob.tokens.filter(function (x) { return x.id === s.id; })[0]; if (!t) return; t.src = s.src; if (s.img && t.img !== s.img) { t.img = s.img; var old = ui.box.querySelector('.mp-tok[data-id="' + s.id + '"]'); if (old && !old.matches(':active')) old.replaceWith(tokenEl(t)); } }); }
+          if (lob && lob.id === id) { lob.rev = r.j.lobby.rev; lob._img = false; (r.j.tokens || []).forEach(function (s) { var t = lob.tokens.filter(function (x) { return x.id === s.id; })[0]; if (!t) return; t.src = s.src; delete t.up; if (s.img && t.img !== s.img) { t.img = s.img; var old = ui.box.querySelector('.mp-tok[data-id="' + s.id + '"]'); if (old && !old.matches(':active')) old.replaceWith(tokenEl(t)); } }); }
           lobbies = r.j.lobbies; ui.status.textContent = 'Saved.'; drawTabs();
         });
       }, now ? 0 : 500);
@@ -202,7 +248,8 @@
       };
       var rm = h('button', { type: 'button', className: 'link', text: 'Remove image' }); rm.onclick = function () { lob.image = ''; lob._img = true; drawBox(); save(true); };
       var fitb = h('button', { type: 'button', className: 'btn', text: 'Fit image to box' }); fitb.onclick = function () { lob.imgScale = 1; lob.imgX = 0; lob.imgY = 0; styleImg(); drawSide(); save(); };
-      var sn = h('input', { type: 'checkbox', checked: snap }); sn.onchange = function () { snap = sn.checked; };
+      var sn = h('select', { 'aria-label': 'Token snapping' }, [['square', 'Snap to squares (side by side if shared)'], ['fine', 'Fine snap (quarter squares)'], ['free', 'Free (no snap, anywhere)']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+      sn.value = snapMode; sn.onchange = function () { snapMode = sn.value; };
       var del = h('button', { type: 'button', className: 'btn', text: 'Delete lobby' });
       G.two(del, 'Delete lobby', function () { call('map', { action: 'delete', id: lob.id }).then(function (r) { if (r.ok) { lobbies = r.j.lobbies; curId = null; lob = null; poll(); } }); });
       var chars = G.chars(), mem = h('div', { className: 'mp-mem' });
@@ -218,21 +265,43 @@
         slider('Image size', 0.2, 4, 0.01, lob.imgScale, function (v) { lob.imgScale = v; styleImg(); }, save),
         slider('Square size', 3, 20, 0.1, lob.cell, function (v) { lob.cell = v; drawBoxKeepImg(); }, save),
         slider('All tokens size', 0.3, 3, 0.05, lob.tokScale || 1, function (v) { lob.tokScale = v; drawBoxKeepImg(); }, save),
-        h('label', { className: 'chk' }, [sn, h('span', { text: 'Snap tokens to the squares' })]),
-        note('Drag the map image to move it. Drag a token to move it.'),
+        h('label', { className: 'fl' }, [h('span', { text: 'Token placing' }), sn]),
+        note('Drag the map image to move it. Drag a token to move it. Use Fine or Free to put several tokens in one square.'),
       ]));
+      ui.side.appendChild(paintCard());
       ui.side.appendChild(h('div', { className: 'mp-card' }, [h('p', { className: 'mono red', text: 'Souls in this lobby' }), mem, note('Players only see lobbies they are in.')]));
       ui.side.appendChild(tokenCard());
       ui.side.appendChild(h('div', { className: 'mp-card' }, [del]));
+    }
+    function paintCard() {
+      var COL = [['#2ecc71', 'Green'], ['#3b82f6', 'Blue'], ['#ef4444', 'Red'], ['#f59e0b', 'Orange'], ['#eab308', 'Yellow'], ['#a855f7', 'Purple'], ['#06b6d4', 'Cyan'], ['#ffffff', 'White']];
+      var onb = h('button', { type: 'button', className: 'btn', text: paint.on ? 'Painting: ON' : 'Paint tiles: OFF', 'aria-pressed': String(paint.on) });
+      var custom = h('input', { type: 'color', value: paint.color, 'aria-label': 'Custom colour' }), er = h('button', { type: 'button', className: 'mp-sw er', text: 'Erase', 'aria-pressed': String(paint.erase) });
+      var sws = COL.map(function (c) { var b = h('button', { type: 'button', className: 'mp-sw', title: c[1], 'aria-label': c[1], 'aria-pressed': String(!paint.erase && paint.color === c[0]) }); b.style.background = c[0]; b.onclick = function () { paint.color = c[0]; paint.erase = false; paint.on = true; mark(); }; return b; });
+      function mark() {
+        onb.textContent = paint.on ? 'Painting: ON' : 'Paint tiles: OFF'; onb.setAttribute('aria-pressed', String(paint.on)); ui.box.classList.toggle('painting', paint.on);
+        sws.forEach(function (b, i) { b.setAttribute('aria-pressed', String(!paint.erase && paint.color === COL[i][0])); }); er.setAttribute('aria-pressed', String(paint.erase)); custom.value = paint.color;
+      }
+      onb.onclick = function () { paint.on = !paint.on; mark(); };
+      er.onclick = function () { paint.erase = true; paint.on = true; mark(); };
+      custom.oninput = function () { paint.color = custom.value; paint.erase = false; paint.on = true; mark(); };
+      var clr = h('button', { type: 'button', className: 'btn', text: 'Clear all tiles' });
+      G.two(clr, 'Clear all tiles', function () { lob.cells = []; ui.tiles = {}; clear(ui.paint); save(); });
+      return h('div', { className: 'mp-card' }, [
+        h('p', { className: 'mono red', text: 'Tile colours' }), onb,
+        h('div', { className: 'mp-sws' }, sws.concat([custom, er])),
+        slider('Tile strength', 0.1, 0.9, 0.05, lob.tileAlpha || 0.4, function (v) { lob.tileAlpha = v; if (ui.paint) ui.paint.style.opacity = v; }, save),
+        clr, note('Turn painting on, pick a colour, then click or drag over squares to tint them. Erase takes a colour off. Tokens cannot be dragged while painting is on.'),
+      ]);
     }
     function drawBoxKeepImg() { if (!lob || !ui.grid) return; fit(); Array.prototype.forEach.call(ui.box.querySelectorAll('.mp-tok'), function (n, i) { if (lob.tokens[i]) place(lob.tokens[i], n); }); }
 
     function tokenCard() {
       var card = h('div', { className: 'mp-card' }), list = h('div', { className: 'mp-list' });
-      var tabs = h('div', { className: 'mp-mini' }, [['shadow', 'Monsters'], ['npc', 'NPCs'], ['player', 'Players']].map(function (t) {
+      var tabs = h('div', { className: 'mp-mini' }, [['shadow', 'Monsters'], ['npc', 'NPCs'], ['player', 'Players'], ['custom', 'Quick']].map(function (t) {
         return h('button', { type: 'button', text: t[1], 'aria-pressed': String(tab === t[0]), onclick: function () { tab = t[0]; drawSide(); } });
       }));
-      var s = h('input', { type: 'search', placeholder: 'Search ' + (tab === 'shadow' ? 'monsters' : tab === 'npc' ? 'NPCs' : 'players'), value: q, 'aria-label': 'Search tokens' });
+      var s = h('input', { type: 'search', placeholder: 'Search ' + (tab === 'shadow' ? 'monsters' : tab === 'npc' ? 'NPCs' : 'players'), value: q, 'aria-label': 'Search tokens' }); if (tab === 'custom') s.hidden = true;
       s.oninput = function () { q = s.value; fill(); };
       function source() {
         if (tab === 'player') return G.chars().map(function (c) { return { name: c.name || 'Unnamed', sub: 'Player', img: c.image ? FN + 'chat?avatar=' + c.id + '&v=' + (Date.parse(c.updatedAt || 0) || 0) : '', src: c.image ? 'player:' + c.id : '' }; });
@@ -240,6 +309,23 @@
       }
       function fill() {
         clear(list); var n = 0;
+        if (tab === 'custom') {
+          var cn = h('input', { placeholder: 'Name (Chest, Fire, Key…)', maxLength: 30, 'aria-label': 'Quick token name' }), cf = h('input', { type: 'file', accept: 'image/*', 'aria-label': 'Quick token picture' });
+          var ca = h('button', { type: 'button', className: 'btn', text: 'Add to map' }), cm = note('A name, and a picture if you like. Add as many as you need.');
+          var put = function (d) {
+            var id = 't' + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+            var t = { id: id, label: cn.value.trim().slice(0, 30), img: d, src: d ? 'custom:' + id : '', up: d, size: 1, x: 0.5, y: 0.5 };
+            lob.tokens.push(t); selTok = t.id; drawBox(); drawSide(); save();
+          };
+          ca.onclick = function () {
+            if (!cn.value.trim()) { cm.textContent = 'Give it a name first.'; return; }
+            var f = cf.files && cf.files[0]; if (!f) { put(''); return; }
+            cm.textContent = 'Preparing picture…';
+            shrink(f, 256, 150000, function (d) { if (!d) { cm.textContent = 'Could not use that picture.'; return; } put(d); });
+          };
+          [cn, h('label', { className: 'fl' }, [h('span', { text: 'Picture (optional)' }), cf]), ca, cm].forEach(function (x) { list.appendChild(x); });
+          return;
+        }
         source().filter(function (e) { return !q || e.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; }).forEach(function (e) {
           n++;
           var add = h('button', { type: 'button', className: 'mp-plus', text: '+', 'aria-label': 'Add ' + e.name + ' to the map' });
@@ -263,7 +349,7 @@
       return card;
     }
     ui.box = null;
-    return { enter: function (r) { if (!built) build(); ui.box.onpointerdown = dragImage; poll(true); start(); }, leave: stop, wake: wake, reset: reset };
+    return { enter: function (r) { if (!built) build(); ui.box.onpointerdown = boxDown; poll(true); start(); }, leave: stop, wake: wake, reset: reset };
   })();
 
   /* ======================= MARKETPLACE ======================= */
@@ -440,10 +526,33 @@
       var nm = h('input', { placeholder: 'Item name', 'aria-label': 'Item name' }); nm.setAttribute('list', 'it-names');
       var dl = h('datalist', { id: 'it-names' }, G.worldList.filter(function (e) { return e.kind === 'item'; }).map(function (e) { return h('option', { value: e.name }); }));
       var qty = h('input', { type: 'number', min: 1, value: 1, className: 'ni', 'aria-label': 'Quantity' });
+      // Full view of what the chosen character carries, plus an overview of everyone.
+      var inv = h('div', { className: 'mk-detail' }), everyone = h('div', { className: 'mk-detail' }), showAll = false;
+      function drawInv() {
+        clear(inv); var c = G.chars().filter(function (x) { return x.id === who.value; })[0];
+        if (!c) { inv.appendChild(note('Pick a character.')); return; }
+        var items = c.items || [], total = 0; items.forEach(function (x) { total += Number(x.qty) || 0; });
+        inv.appendChild(h('p', { className: 'mono red', text: 'Inventory: ' + c.name }));
+        inv.appendChild(h('p', { className: 'mk-tot', text: items.length ? total + ' item' + (total === 1 ? '' : 's') + ' (' + items.length + ' kind' + (items.length === 1 ? '' : 's') + ')' : 'Nothing carried yet' }));
+        inv.appendChild(h('p', { className: 'mono hb-note', text: 'Karma ' + money(parseInt(String(c.karma || '0').replace(/,/g, ''), 10) || 0) + (c.debt ? ' · Debt -' + money(c.debt) : '') }));
+        items.forEach(function (x) {
+          inv.appendChild(h('div', { className: 'ef' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: 'x' + x.qty })]));
+          if (x.desc) inv.appendChild(h('p', { className: 'pre hb-note', text: x.desc }));
+        });
+      }
+      function drawEveryone() {
+        clear(everyone); var tg = h('button', { type: 'button', className: 'btn', text: showAll ? 'Hide everyone’s items' : 'Show everyone’s items' }); tg.onclick = function () { showAll = !showAll; drawEveryone(); };
+        everyone.appendChild(tg); if (!showAll) return;
+        cs.forEach(function (c) {
+          var items = c.items || [];
+          everyone.appendChild(h('div', { className: 'ef' }, [h('b', { text: c.name }), h('span', { className: 'mono', text: items.length ? items.map(function (x) { return x.name + ' x' + x.qty; }).join(', ') : 'nothing' })]));
+        });
+      }
+      who.onchange = drawInv; drawInv(); drawEveryone();
       function go(action, extra) {
         out.className = 'mono hb-note'; out.textContent = 'Working…';
         call('market', Object.assign({ action: action, id: who.value, name: nm.value, qty: qty.value }, extra || {})).then(function (r) {
-          out.textContent = r.ok ? r.j.message : (r.j.error || 'Failed.'); if (!r.ok) out.className = 'mono hb-note bad'; else if (G.reloadChars) G.reloadChars();
+          out.textContent = r.ok ? r.j.message : (r.j.error || 'Failed.'); if (!r.ok) out.className = 'mono hb-note bad'; else if (G.reloadChars) G.reloadChars().then(function () { drawInv(); drawEveryone(); });
         });
       }
       function btn(t, fn, confirm) { var b = h('button', { type: 'button', className: 'btn' + (confirm ? '' : ' primary'), text: t }); if (confirm) G.two(b, t, fn); else b.onclick = fn; return b; }
@@ -451,10 +560,71 @@
         h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Karma' }), h('div', { className: 'ef' }, [amt, btn('Add karma (use a minus to take it)', function () { go('hm_karma', { amount: amt.value }); })])]),
         h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Items' }), h('div', { className: 'ef' }, [nm, dl, 'x', qty]),
           h('div', { className: 'ef' }, [btn('Add item', function () { go('hm_additem'); }), btn('Take item', function () { go('hm_takeitem'); }, true), to, btn('Give item to them', function () { go('hm_giveitem', { to: to.value }); }, true)]),
-          note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), out]));
+          note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), out, inv, everyone]));
     }
     return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) tools(); else mine(); }, reset: reset };
   })();
+
+  /* ======================= ROLL FOR AN NPC OR MONSTER ======================= */
+  // The same panel players get (stats and saving throws, initiative, skills, free dice), but for a registry NPC or monster.
+  // Skills and attacks get a roll button for every dice expression written in their text (like 2d6+3). Every roll is saved to the dice log under the NPC's name.
+  var rollQ = Promise.resolve();
+  function npcRoller(e, onLog) {
+    var D = G.dice, who = e.name + ' (' + (e.type === 'npc' ? 'NPC' : 'Monster') + ')', ORDER = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'];
+    var adv = h('select', { 'aria-label': 'Advantage' }, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+    var hist = h('div', { className: 'hist' });
+    function log(label, txt, cls) {
+      hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + txt }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild);
+      // One at a time, so quick clicks never overwrite each other on the server.
+      rollQ = rollQ.then(function () { return call('rolls', { action: 'add', as: who, label: label, txt: txt, cls: cls || '' }); }).then(function () { if (onLog) onLog(); }, function () {});
+    }
+    function d20(m) {
+      var a = D.dice(1, 20)[0], b = adv.value === 'n' ? null : D.dice(1, 20)[0], pk = b === null ? a : (adv.value === 'a' ? Math.max(a, b) : Math.min(a, b));
+      return { vals: b === null ? [a] : [a, b], d: 20, txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + D.sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
+    }
+    function go(label, x, btn, out) { if (btn) btn.disabled = true; if (out) out.textContent = ''; D.tumble(x, who + ': ' + label, function () { if (out) { out.textContent = ' ' + x.txt; out.className = 'mono ' + (x.cls || ''); } log(label, x.txt, x.cls); if (btn) btn.disabled = false; }); }
+    function rollBtn(text, label, make) { var res = h('span', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: text }); b.onclick = function () { go(label, make(), b, res); }; return h('div', { className: 'ef' }, [b, res]); }
+    // Saving throw bonuses written on the entry ("DEX +5, WIS +3") replace the plain modifier.
+    var sv = {}; String(e.saves || '').replace(/\b(STR|DEX|CON|INT|WIS|CHA)\b\s*([+-]\s*\d+)/gi, function (m, k, n) { sv[k.toUpperCase()] = parseInt(n.replace(/\s/g, ''), 10); return m; });
+    var stats = e.stats || {};
+    var grid = h('div', { className: 'g6' }, ORDER.map(function (k) {
+      var score = Number(stats[k]) || 0, m = sv[k] != null ? sv[k] : D.modOf(score), res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
+      b.onclick = function () { var x = d20(m); b.disabled = true; res.textContent = ''; D.tumble(x, who + ': ' + k + ' save', function () { res.textContent = x.txt; res.className = 'mono ' + x.cls; log(k + ' save', x.txt, x.cls); b.disabled = false; }); };
+      return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(score) }), h('small', { text: 'modifier ' + (m >= 0 ? '+' : '') + m + (sv[k] != null ? ' (listed)' : '') }), b, res]);
+    }));
+    var init = Number(e.initiative) || 0;
+    var sec1 = h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: 'Stats and saving throws' }), h('div', { className: 'ef' }, [h('small', { text: 'd20 rolls:' }), adv]), grid, rollBtn('Roll initiative (' + D.sgn(init).trim() + ')', 'Initiative', function () { return d20(init); })]);
+
+    // Skills and attacks: a button for each dice expression found in the text.
+    var DICE = /(\d{1,2})d(\d{1,3})(?:\s*([+-])\s*(\d{1,3}))?/gi;
+    function parts(label, text) {
+      text = String(text || '').trim(); if (!text) return null;
+      var name = (text.split(/[:\u2014\u2013(\n]|\s-\s/)[0] || text).trim().slice(0, 50) || label, box = h('div', { className: 'pv-skill' }, [h('p', { className: 'mono', text: label }), h('h3', { text: name })]), n = 0, m;
+      var hit = /([+-]\s*\d+)\s*(?:to hit|hit)/i.exec(text);
+      if (hit) { var hb = parseInt(hit[1].replace(/\s/g, ''), 10); box.appendChild(rollBtn('Roll to hit ' + (hb >= 0 ? '+' : '') + hb, name + ' to hit', function () { return d20(hb); })); n++; }
+      DICE.lastIndex = 0;
+      while ((m = DICE.exec(text))) {
+        (function (cnt, die, flat, expr) { n++; box.appendChild(rollBtn('Roll ' + expr, name + ' ' + expr, function () { return D.plain(Math.min(20, cnt), die, flat); })); })(+m[1], +m[2], m[3] ? (m[3] === '-' ? -1 : 1) * +m[4] : 0, m[0].replace(/\s/g, ''));
+      }
+      if (!n) box.appendChild(h('small', { className: 'mono', text: 'No dice written here. Add dice like 2d6+3 to its text and a roll button appears.' }));
+      if (text.length > name.length) box.appendChild(h('p', { className: 'pre hb-note', text: text }));
+      return box;
+    }
+    var skillBoxes = [];
+    if (e.basic) skillBoxes.push(parts('Basic skill', e.basic));
+    (e.skills || []).forEach(function (t, i) { skillBoxes.push(parts('Skill ' + (i + 1), t)); });
+    if (e.ultimate) skillBoxes.push(parts('Ultimate', e.ultimate));
+    String(e.attacks || '').split('\n').forEach(function (t, i) { if (t.trim()) skillBoxes.push(parts('Attack ' + (i + 1), t)); });
+    var sec2 = h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: 'Skills and attacks' })].concat(skillBoxes.filter(Boolean).length ? skillBoxes.filter(Boolean) : [note('This entry has no skills or attacks yet. Add them in Character details › Registry.')]));
+
+    var cnt = h('input', { type: 'number', value: 1, className: 'ni', 'aria-label': 'Number of dice' }), mod = h('input', { type: 'number', value: 0, className: 'ni', 'aria-label': 'Modifier' });
+    var die = h('select', { 'aria-label': 'Die' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { return h('option', { text: 'd' + n, value: n, selected: n === 20 }); }));
+    function free(n, d, m) { var lab = n + 'd' + d + (m ? (m > 0 ? '+' : '') + m : ''); go(lab, (n === 1 && d === 20) ? d20(m) : D.plain(n, d, m)); }
+    var rb = h('button', { type: 'button', className: 'btn primary', text: 'Roll' }); rb.onclick = function () { free(Math.max(1, Math.min(20, Math.floor(+cnt.value) || 1)), +die.value, Math.floor(+mod.value) || 0); };
+    var quick = h('div', { className: 'ef' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { var q = h('button', { type: 'button', className: 'btn', text: 'd' + n }); q.onclick = function () { free(1, n, 0); }; return q; }));
+    var sec3 = h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: 'Dice' }), quick, h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, rb]), hist]);
+    return h('div', { className: 'pv nr' }, [note('Rolling as ' + e.name + '. Every roll is saved to the dice log under this name, and players do not see it.'), sec1, sec2, sec3]);
+  }
 
   /* ======================= DICE LOG ======================= */
   modules.dice = (function () {
@@ -467,6 +637,13 @@
       var t = h('table', { className: 'dl-tbl' }, [h('tr', {}, [h('th', { text: 'When' }), dm ? h('th', { text: 'Soul' }) : null, h('th', { text: 'Roll' }), h('th', { text: 'Result' })])]);
       f.forEach(function (x) { t.appendChild(h('tr', {}, [h('td', { className: 'mono', text: new Date(x.at).toLocaleString() }), dm ? h('td', { text: x.name }) : null, h('td', { text: x.label }), h('td', { className: 'mono ' + (x.cls || ''), text: x.txt })])); });
       box.appendChild(t);
+    }
+    // Headmaster only: choose an NPC or monster from the registry and roll for it.
+    function rollerPicker() {
+      var host = h('div', { className: 'nr-host' }), reg = G.reg().filter(function (e) { return e.type !== 'player'; });
+      var s = h('select', { 'aria-label': 'NPC or monster to roll for' }, [h('option', { value: '', text: 'Choose an NPC or monster…' })].concat(reg.map(function (e) { return h('option', { value: e.id, text: e.name + ' (' + (e.type === 'npc' ? 'NPC' : 'Monster') + ')' }); })));
+      s.onchange = function () { clear(host); var e = reg.filter(function (x) { return x.id === s.value; })[0]; if (e) host.appendChild(npcRoller(e, function () { load(false); })); };
+      return h('div', { className: 'nr-pick' }, [h('p', { className: 'mono red', text: 'Roll for an NPC or monster' }), reg.length ? s : note('No NPCs or monsters yet. Add them in Character details › Registry.'), host]);
     }
     function fillNames() {
       var keep = sel.value, names = [];
@@ -484,7 +661,7 @@
         if (first) {
           var dm = !!G.creds(); sel = h('select', { 'aria-label': 'Filter by character' }); box = h('div', { className: 'dl-wrap' });
           sel.onchange = draw; fillNames();
-          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? h('div', { className: 'ef' }, [sel, note('The latest 300 rolls from every soul. New rolls appear by themselves.')]) : note('Your last 60 rolls. New rolls appear by themselves.'), box]));
+          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? rollerPicker() : null, dm ? h('div', { className: 'ef' }, [sel, note('The latest 300 rolls from every soul. New rolls appear by themselves.')]) : note('Your last 60 rolls. New rolls appear by themselves.'), box]));
         } else fillNames();
         draw();
       });
@@ -493,7 +670,7 @@
       stop(); rev = ''; clear(root).appendChild(note('Gathering the dice…'));
       load(true).then(function () { timer = setInterval(function () { if (!document.hidden) load(false); }, 3000); });
     }
-    return { enter: enter, leave: stop, wake: function () { if (box && timer) load(false); }, reset: function () { stop(); box = null; rows = []; rev = ''; clear(root); } };
+    return { enter: enter, leave: stop, refresh: function () { return load(false); }, wake: function () { if (box && timer) load(false); }, reset: function () { stop(); box = null; rows = []; rev = ''; clear(root); } };
   })();
 
   /* ======================= CHAT ======================= */
