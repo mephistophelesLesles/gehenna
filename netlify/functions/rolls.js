@@ -4,20 +4,29 @@
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { reply, S, needUser, parseBody } = require('./lib/auth');
 
+// Fresh reads: first through the Netlify API (always up to date, uses the token the admin tool already has), and if that is not
+// available here, the normal read. Strong consistency is not supported in this function mode, so it is never requested.
+const API = process.env.NETLIFY_TOKEN && (process.env.SITE_ID || process.env.NETLIFY_SITE_ID) ? { siteID: process.env.SITE_ID || process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_TOKEN } : null;
+function reader(name, plain) {
+  const fresh = API ? getStore(Object.assign({ name }, API)) : null;
+  const run = async (fn) => { if (fresh) { try { return await fn(fresh); } catch (e) { /* fall back */ } } return fn(plain); };
+  return { get: (k, o) => run((st) => st.get(k, o)), list: (o) => run((st) => st.list(o)) };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return reply(405, { error: 'POST only' });
   let b; try { b = parseBody(event); } catch (e) { return reply(400, { error: 'Bad request' }); }
   try {
     connectLambda(event);
     const u = await needUser(b); if (!u) return reply(401, { error: 'Sign in first.' });
-    const rs = getStore({ name: 'gehenna-rolls', consistency: 'strong' }), cs = getStore({ name: 'gehenna-characters', consistency: 'strong' });
+    const rw = getStore('gehenna-rolls'), rs = reader('gehenna-rolls', rw), cs = reader('gehenna-characters', getStore('gehenna-characters'));
     if (b.action === 'add') {
       if (u.admin) return reply(400, { error: 'Souls only.' });
       const [list, c] = await Promise.all([rs.get(u.id, { type: 'json' }), cs.get(u.id, { type: 'json' })]);
       const rows = Array.isArray(list) ? list : [];
       rows.unshift({ at: new Date().toISOString(), name: c && c.name ? S(c.name, 100) : '', label: S(b.label, 100), txt: S(b.txt, 200), cls: b.cls === 'nat20' || b.cls === 'nat1' ? b.cls : '' });
-      await rs.setJSON(u.id, rows.slice(0, 60));
-      await rs.set('_rev', Date.now() + '-' + Math.random().toString(36).slice(2, 6));
+      await rw.setJSON(u.id, rows.slice(0, 60));
+      await rw.set('_rev', Date.now() + '-' + Math.random().toString(36).slice(2, 6));
       return reply(200, { ok: true });
     }
     // "Anything new?" check: one tiny read.
