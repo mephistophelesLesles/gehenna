@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { storyAdmin } = require('./lib/story');
 const { registryAdmin } = require('./lib/registry');
+const { settle } = require('./lib/auth');
 const API = 'https://api.netlify.com/api/v1';
 const FORM = process.env.FORM_NAME || 'gehenna-sheet';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Mephisto').trim().toLowerCase();
@@ -85,7 +86,7 @@ exports.handler = async (event) => {
     if (b.action === 'accept') {
       if (!goodId) return reply(400, { error: 'Bad id' });
       const sub = await nf('/submissions/' + b.id);
-      const c = fromSheet(sub.data || {});
+      const c = fromSheet(sub.data || {}); settle(c);
       c.id = crypto.randomUUID(); c.key = newKey(); c.createdAt = new Date().toISOString();
       const img = String((sub.data || {}).image || '');
       c.image = IMG.test(img) && img.length < 700000 ? img : '';
@@ -96,13 +97,14 @@ exports.handler = async (event) => {
     if (b.action === 'chars') {
       const { blobs } = await chars.list();
       const all = (await Promise.all(blobs.map(x => chars.get(x.key, { type: 'json' })))).filter(Boolean);
+      await Promise.all(all.filter((x) => settle(x)).map((x) => chars.setJSON(x.id, x)));
       return reply(200, { chars: all.sort((x, y) => x.name.localeCompare(y.name)) });
     }
     if (b.action === 'save' || b.action === 'newkey' || b.action === 'delchar') {
       if (!goodId && !(b.char && /^[a-f0-9-]{8,40}$/i.test(String(b.char.id || '')))) return reply(400, { error: 'Bad id' });
       const id = b.id || b.char.id, old = await chars.get(id, { type: 'json' });
       if (!old) return reply(404, { error: 'Character not found' });
-      if (b.action === 'save') { const c = clean(b.char, old); await chars.setJSON(id, c); return reply(200, { char: c }); }
+      if (b.action === 'save') { const c = clean(b.char, old); settle(c); await chars.setJSON(id, c); return reply(200, { char: c }); }
       await keys.delete(hash(old.key));
       if (b.action === 'delchar') { await chars.delete(id); return reply(200, { ok: true }); }
       old.key = newKey(); await chars.setJSON(id, old); await keys.set(hash(old.key), id);

@@ -33,6 +33,9 @@ async function needUser(b) {
 // Whole-number karma from the free text field ("1,000", "-5"). Anything else counts as 0.
 function karmaOf(c) { const m = /-?\d[\d,]*/.exec(String(c.karma || '')); return m ? parseInt(m[0].replace(/,/g, ''), 10) || 0 : 0; }
 
+// Negative karma is debt. Moves it into the debt balance (karma becomes 0). Returns true if the character changed.
+function settle(c) { const k = karmaOf(c); if (k >= 0) return false; c.debt = Math.min(1e9, (Number(c.debt) || 0) - k); c.karma = '0'; return true; }
+
 function parseBody(event) {
   if (event.httpMethod === 'POST') return JSON.parse(event.body || '{}');
   return event.queryStringParameters || {};
@@ -43,4 +46,4 @@ function imageReply(dataUrl, maxAge) {
   return { statusCode: 200, isBase64Encoded: true, headers: { 'Content-Type': m[1], 'Cache-Control': 'public, max-age=' + (maxAge || 86400) }, body: m[2] };
 }
 
-module.exports = { reply, S, N, IMG, ID, sleep, isAdmin, who, needUser, karmaOf, parseBody, imageReply, hash };
+module.exports = { settle, reply, S, N, IMG, ID, sleep, isAdmin, who, needUser, karmaOf, parseBody, imageReply, hash };

@@ -48,7 +48,7 @@
   }
 
   /* ---------- section tabs ---------- */
-  var nav = $('adm-nav'), PANES = ['char', 'map', 'market', 'chat', 'note'], current = 'char', lastMode = '';
+  var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'chat', 'note', 'dice'], current = 'char', lastMode = '';
   var modules = {};
   function pane(name) {
     if (modules[current] && modules[current].leave) modules[current].leave();
@@ -320,6 +320,8 @@
       else main.appendChild(note('No categories yet.'));
       root.appendChild(h('div', { className: 'hb-wrap mk' }, [side, main]));
     }
+    // Normal price, crossed out and replaced by the sale price while a sale is on.
+    function tag(it) { return it.sale ? h('small', {}, [h('s', { text: money(it.price) }), ' ' + money(it.sale) + ' Karma · SALE']) : h('small', { text: money(it.price) + ' Karma' }); }
     function shelf(c) {
       var dm = isDM(), wrap = h('div', {}), kc = dm && cfg ? cfg.cats.filter(function (x) { return x.id === c.id; })[0] : null;
       if (dm && kc) {
@@ -331,7 +333,7 @@
       }
       var grid = h('div', { className: 'mk-grid' });
       c.items.forEach(function (it) {
-        var b = h('button', { type: 'button', className: 'mk-item', 'aria-pressed': String(sel === it.itemId) }, [thumb(it.image, it.name.charAt(0), 'orb'), h('b', { text: it.name }), h('small', { text: money(it.price) + ' Karma' })]);
+        var b = h('button', { type: 'button', className: 'mk-item', 'aria-pressed': String(sel === it.itemId) }, [thumb(it.image, it.name.charAt(0), 'orb'), h('b', { text: it.name }), tag(it)]);
         b.onclick = function () { sel = it.itemId; msg = ''; draw(); };
         grid.appendChild(b);
       });
@@ -344,12 +346,13 @@
       return wrap;
     }
     function detail(c, it, kc) {
-      var box = h('div', { className: 'mk-detail' }, [h('h4', { text: it.name }), it.desc && h('p', { className: 'pre', text: it.desc }), h('p', { className: 'mono red', text: money(it.price) + ' Karma' })]);
+      var p = it.sale || it.price;
+      var box = h('div', { className: 'mk-detail' }, [h('h4', { text: it.name }), it.desc && h('p', { className: 'pre', text: it.desc }), h('p', { className: 'mono red' }, [it.sale ? h('s', { text: money(it.price) }) : null, ' ' + money(p) + ' Karma' + (it.sale ? ' (on sale)' : '')])]);
       if (!isDM()) {
-        var buy = h('button', { type: 'button', className: 'btn primary', text: 'Buy for ' + money(it.price) + ' karma' });
-        G.two(buy, 'Buy for ' + money(it.price) + ' karma', function () { buy.disabled = true; call('market', { action: 'buy', catId: c.id, itemId: it.itemId }).then(function (r) { after(r); }); });
+        var buy = h('button', { type: 'button', className: 'btn primary', text: 'Buy for ' + money(p) + ' karma' });
+        G.two(buy, 'Buy for ' + money(p) + ' karma', function () { buy.disabled = true; call('market', { action: 'buy', catId: c.id, itemId: it.itemId }).then(function (r) { after(r); }); });
         box.appendChild(buy);
-        if (data.karma < it.price) box.appendChild(note('You need ' + money(it.price - data.karma) + ' more karma.'));
+        if (data.karma < p) box.appendChild(note('You need ' + money(p - data.karma) + ' more karma.'));
       } else if (kc) {
         var ci = kc.items.filter(function (x) { return x.itemId === it.itemId; })[0];
         var pr = h('input', { type: 'number', min: 0, value: ci ? ci.price : 0, className: 'ni', 'aria-label': 'Price' });
@@ -357,6 +360,10 @@
         var rm = h('button', { type: 'button', className: 'btn', text: 'Remove from shop' });
         G.two(rm, 'Remove from shop', function () { kc.items = kc.items.filter(function (x) { return x.itemId !== it.itemId; }); sel = null; saveCfg(); });
         box.appendChild(h('div', { className: 'ef' }, [pr, sv, rm]));
+        var sp = h('input', { type: 'number', min: 0, value: (ci && ci.sale) || 0, className: 'ni', 'aria-label': 'Sale price' });
+        var ss = h('button', { type: 'button', className: 'btn', text: 'Put on sale' }); ss.onclick = function () { if (ci) { ci.sale = Math.max(0, Math.floor(+sp.value) || 0); saveCfg(); } };
+        var es = h('button', { type: 'button', className: 'btn', text: 'End sale' }); es.onclick = function () { if (ci) { ci.sale = 0; saveCfg(); } };
+        box.appendChild(h('div', { className: 'ef' }, [h('label', { className: 'ef' }, ['Sale price (must be lower than the price)', sp]), ss, es]));
       }
       return box;
     }
@@ -392,6 +399,84 @@
       ]);
     }
     return { enter: function () { msg = ''; enter(); }, reset: reset };
+  })();
+
+  /* ======================= ITEMS (players: inventory and selling; headmaster: quick tools) ======================= */
+  modules.items = (function () {
+    var root = $('pane-items'), msg = '', err = false;
+    function isDM() { return !!G.creds(); }
+    function money(n) { return Number(n || 0).toLocaleString('en-US'); }
+    function reset() { clear(root); msg = ''; }
+    function badge(t, on) { return h('span', { className: 'bdg' + (on ? ' on' : ''), text: t }); }
+    function mine() {
+      call('market', { action: 'myitems' }).then(function (r) {
+        clear(root); if (!r.ok) { root.appendChild(note(r.j.error || 'Could not open your items.')); return; }
+        var total = 0; r.j.items.forEach(function (x) { total += x.qty; });
+        var wrap = h('div', { className: 'hb-wrap' }, [h('p', { className: 'mk-tot', text: 'You carry ' + total + ' item' + (total === 1 ? '' : 's') + ' (' + r.j.items.length + ' kind' + (r.j.items.length === 1 ? '' : 's') + ')' }),
+          h('p', { className: 'mk-tot' + (r.j.debt ? ' bad' : ''), text: 'Karma: ' + money(r.j.karma) + (r.j.debt ? ' · Debt: -' + money(r.j.debt) : '') })]);
+        if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
+        if (!r.j.items.length) wrap.appendChild(note('Nothing here yet. The headmaster adds items as you earn them.'));
+        r.j.items.forEach(function (x) {
+          var kids = [h('div', { className: 'ef' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: 'x' + x.qty }), badge(x.usable ? 'Can use' : 'Cannot use', x.usable), x.sellable ? badge('Sells for ' + money(x.worth) + ' each', true) : null])];
+          if (x.desc) kids.push(h('p', { className: 'pre', text: x.desc }));
+          if (x.sellable) {
+            var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many to sell' }), sb = h('button', { type: 'button', className: 'btn' });
+            G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || 'Could not sell.'); if (r2.ok && G.reloadChar) G.reloadChar(); mine(); }); });
+            sb.textContent = 'Sell'; kids.push(h('div', { className: 'ef' }, [q, sb]));
+          }
+          wrap.appendChild(h('div', { className: 'mk-detail' }, kids));
+        });
+        root.appendChild(wrap);
+      });
+    }
+    function tools() {
+      clear(root); var cs = G.chars();
+      if (!cs.length) { root.appendChild(note('No saved characters yet.')); return; }
+      function pick(label) { return h('select', { 'aria-label': label }, cs.map(function (c) { return h('option', { value: c.id, text: c.name }); })); }
+      var who = pick('Character'), to = pick('Give to'), out = h('p', { className: 'mono hb-note', role: 'status' });
+      var amt = h('input', { type: 'number', value: 0, className: 'ni', 'aria-label': 'Karma to add' });
+      var nm = h('input', { placeholder: 'Item name', 'aria-label': 'Item name' }); nm.setAttribute('list', 'it-names');
+      var dl = h('datalist', { id: 'it-names' }, G.worldList.filter(function (e) { return e.kind === 'item'; }).map(function (e) { return h('option', { value: e.name }); }));
+      var qty = h('input', { type: 'number', min: 1, value: 1, className: 'ni', 'aria-label': 'Quantity' });
+      function go(action, extra) {
+        out.className = 'mono hb-note'; out.textContent = 'Working…';
+        call('market', Object.assign({ action: action, id: who.value, name: nm.value, qty: qty.value }, extra || {})).then(function (r) {
+          out.textContent = r.ok ? r.j.message : (r.j.error || 'Failed.'); if (!r.ok) out.className = 'mono hb-note bad'; else if (G.reloadChars) G.reloadChars();
+        });
+      }
+      function btn(t, fn, confirm) { var b = h('button', { type: 'button', className: 'btn' + (confirm ? '' : ' primary'), text: t }); if (confirm) G.two(b, t, fn); else b.onclick = fn; return b; }
+      root.appendChild(h('div', { className: 'hb-wrap' }, [note('Quick tools: change a character without opening their sheet. Negative karma turns into debt by itself.'), h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Character' }), who]),
+        h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Karma' }), h('div', { className: 'ef' }, [amt, btn('Add karma (use a minus to take it)', function () { go('hm_karma', { amount: amt.value }); })])]),
+        h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Items' }), h('div', { className: 'ef' }, [nm, dl, 'x', qty]),
+          h('div', { className: 'ef' }, [btn('Add item', function () { go('hm_additem'); }), btn('Take item', function () { go('hm_takeitem'); }, true), to, btn('Give item to them', function () { go('hm_giveitem', { to: to.value }); }, true)]),
+          note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), out]));
+    }
+    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) tools(); else mine(); }, reset: reset };
+  })();
+
+  /* ======================= DICE LOG ======================= */
+  modules.dice = (function () {
+    var root = $('pane-dice');
+    function enter() {
+      clear(root).appendChild(note('Gathering the dice…'));
+      call('rolls', { action: 'list' }).then(function (r) {
+        clear(root); if (!r.ok) { root.appendChild(note(r.j.error || 'Could not open the dice log.')); return; }
+        var dm = !!G.creds(), rows = r.j.rolls || [], names = [];
+        rows.forEach(function (x) { if (x.name && names.indexOf(x.name) < 0) names.push(x.name); });
+        var sel = h('select', { 'aria-label': 'Filter by character' }, [h('option', { value: '', text: 'Everyone' })].concat(names.sort().map(function (n) { return h('option', { value: n, text: n }); })));
+        var box = h('div', { className: 'dl-wrap' });
+        function draw() {
+          clear(box); var f = rows.filter(function (x) { return !sel.value || x.name === sel.value; });
+          if (!f.length) { box.appendChild(note('No rolls yet.')); return; }
+          var t = h('table', { className: 'dl-tbl' }, [h('tr', {}, [h('th', { text: 'When' }), dm ? h('th', { text: 'Soul' }) : null, h('th', { text: 'Roll' }), h('th', { text: 'Result' })])]);
+          f.forEach(function (x) { t.appendChild(h('tr', {}, [h('td', { className: 'mono', text: new Date(x.at).toLocaleString() }), dm ? h('td', { text: x.name }) : null, h('td', { text: x.label }), h('td', { className: 'mono ' + (x.cls || ''), text: x.txt })])); });
+          box.appendChild(t);
+        }
+        sel.onchange = draw; draw();
+        root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? h('div', { className: 'ef' }, [sel, note('The latest 300 rolls from every soul.')]) : note('Your last 60 rolls.'), box]));
+      });
+    }
+    return { enter: enter, reset: function () { clear(root); } };
   })();
 
   /* ======================= CHAT ======================= */
@@ -613,12 +698,16 @@
       ks.onchange = function () { c.kind = ks.value; draw(); };
       box.appendChild(h('div', { className: 'g2' }, [h('label', { className: 'fl' }, [h('span', { text: 'Type' }), ks]), txt('Name', 'name', 0, 100)]));
       box.appendChild(h('div', { className: 'g2' }, [txt('Category (optional)', 'category', 0, 60), c.kind === 'item' ? (function () { var i = h('input', { type: 'number', min: 0, value: c.price || 0, className: 'ni' }); i.oninput = function () { c.price = Math.max(0, Math.floor(+i.value) || 0); }; return h('label', { className: 'fl' }, [h('span', { text: 'Default price (karma)' }), i]); })() : null]));
+      if (c.kind === 'item') {
+        var chk = function (label, k) { var i = h('input', { type: 'checkbox', checked: !!c[k] }); i.onchange = function () { c[k] = i.checked; }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); };
+        box.appendChild(h('div', { className: 'ef' }, [chk('Players can sell this back (90% of its price)', 'sellable'), chk('Players can use this item', 'usable')]));
+      }
       box.appendChild(crop);
       box.appendChild(txt('Description (everyone can read this)', 'desc', 5, 2000));
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save' });
       save.onclick = function () {
         save.disabled = true; st.textContent = 'Saving…';
-        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price };
+        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable };
         if (!c.isNew) e.id = c.id; if (/^data:/.test(c.image || '') || c.image === '') e.image = c.image;
         call('world', { action: 'wsave', entry: e }).then(function (r) {
           save.disabled = false; if (!r.ok) { st.textContent = r.j.error || 'Save failed'; return; }

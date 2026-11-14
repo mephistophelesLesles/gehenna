@@ -140,3 +140,11 @@
 #world { background: var(--bg); border-top: 1px solid var(--line); } #world[hidden] { display: none !important; }
 .hb-thumb.reg-img { width: 100%; aspect-ratio: 1; }
 @media (max-width: 40rem) { .wd-tab { font-size: 1.3rem; } }
+
+/* ---- items, sale prices, dice log ---- */
+.bdg { font: 700 0.66rem var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--line); color: var(--muted); padding: 0.1rem 0.45rem; }
+.bdg.on { color: var(--fg); border-color: var(--red); }
+.mk-item s, .mk-detail s { color: var(--muted); }
+.dl-wrap { overflow-x: auto; }
+.dl-tbl { width: 100%; border-collapse: collapse; }
+.dl-tbl th, .dl-tbl td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }

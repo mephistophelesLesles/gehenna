@@ -936,10 +936,12 @@
     <h2 id="adm-title">Headmaster</h2>
     <nav class="adm-nav" id="adm-nav" hidden aria-label="Sections">
       <button type="button" data-pane="char" aria-pressed="true">Character details</button>
+      <button type="button" data-pane="items" aria-pressed="false">Items</button>
       <button type="button" data-pane="map" aria-pressed="false">Map</button>
       <button type="button" data-pane="market" aria-pressed="false">Marketplace</button>
       <button type="button" data-pane="chat" aria-pressed="false">Chat</button>
       <button type="button" data-pane="note" aria-pressed="false">Notebook</button>
+      <button type="button" data-pane="dice" aria-pressed="false">Dice log</button>
     </nav>
     <div class="btns">
       <button type="button" class="btn" id="adm-refresh" hidden>Refresh</button>
@@ -966,10 +968,12 @@
       <div class="adm-main" id="adm-main"></div>
     </div>
   </div>
+  <section class="pane" id="pane-items" hidden aria-label="Items"></section>
   <section class="pane" id="pane-map" hidden aria-label="Map"></section>
   <section class="pane" id="pane-market" hidden aria-label="Marketplace"></section>
   <section class="pane" id="pane-chat" hidden aria-label="Chat"></section>
   <section class="pane" id="pane-note" hidden aria-label="Notebook"></section>
+  <section class="pane" id="pane-dice" hidden aria-label="Dice log"></section>
 </div>
 
 <button type="button" class="sound" id="sound">
@@ -1819,7 +1823,7 @@
     var w = h('div', { className: 'pv' });
     var hist = h('div', { className: 'hist' });
     var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
-    function logRoll(label, line, cls) { hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
+    function logRoll(label, line, cls) { if (pkey) fetch('/.netlify/functions/rolls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: pkey, action: 'add', label: label, txt: line, cls: cls || '' }) }).catch(function () {}); hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
     function d20(m) {
       var a = dice(1, 20)[0], b = adv.value === 'n' ? null : dice(1, 20)[0], pk = b === null ? a : (adv.value === 'a' ? Math.max(a, b) : Math.min(a, b));
       return { vals: b === null ? [a] : [a, b], d: 20, txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
@@ -2216,6 +2220,7 @@
   // The bridge hub.js (Map, Marketplace, Chat, Notebook, World) uses.
   window.GEH = { h: h, two: two, cropper: cropper, creds: function () { return creds; }, pkey: function () { return pkey; }, pchar: function () { return pchar; },
     chars: function () { return chars; }, reg: function () { return reg; }, story: function () { return story; }, reloadChar: reloadChar,
+    reloadChars: function () { return api({ action: 'chars' }).then(function (r) { if (r.ok && r.j.chars) { chars = r.j.chars; pick(); } }); },
     render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null };
 })();
 </script>

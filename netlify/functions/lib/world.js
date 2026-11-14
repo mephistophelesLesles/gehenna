@@ -20,11 +20,12 @@ function clean(e, old) {
     name: S(e.name, 100).trim() || 'Unnamed', image,
     desc: S(e.desc, 2000), category: S(e.category, 60).trim(),
     price: N(e.price, 0, 1000000),
+    sellable: e.sellable == null ? !!(old && old.sellable) : !!e.sellable, usable: e.usable == null ? !!(old && old.usable) : !!e.usable,
     createdAt: old ? old.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
 }
 const imgUrl = (e) => (e.image ? '/.netlify/functions/world?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0) : '');
-const pub = (e) => ({ id: e.id, kind: e.kind, name: e.name, image: imgUrl(e), desc: e.desc, category: e.category, price: e.price });
+const pub = (e) => ({ id: e.id, kind: e.kind, name: e.name, image: imgUrl(e), desc: e.desc, category: e.category, price: e.price, sellable: !!e.sellable, usable: !!e.usable });
 
 async function worldAdmin(b, store) {
   if (b.action === 'wlist') {
