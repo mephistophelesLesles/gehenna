@@ -75,6 +75,7 @@
     current = name;
     PANES.forEach(function (p) { var e = $('pane-' + p); if (e) e.hidden = p !== name; });
     Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-pane') === name)); });
+    var act = nav.querySelector('button[aria-pressed="true"]'); if (act && act.scrollIntoView) { try { act.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (e) {} }
     if (modules[name] && modules[name].enter) modules[name].enter();
     var a = $('adm'); if (a) a.scrollTop = 0;
   }
@@ -90,9 +91,9 @@
   /* ======================= MAP ======================= */
   modules.map = (function () {
     var root = $('pane-map'), built = false, lobbies = [], curId = null, lob = null, timer = null, saveT = null, selTok = null, tab = 'shadow', q = '', snapMode = 'square', paint = { on: false, color: '#2ecc71', erase: false };
-    var ui = {};
+    var ui = {}, zm = { s: 1, x: 0, y: 0 }, npcs = [], npcOpen = {};
     function isDM() { return !!G.creds(); }
-    function reset() { built = false; lobbies = []; curId = null; lob = null; selTok = null; clear(root); stop(); }
+    function reset() { built = false; lobbies = []; curId = null; lob = null; selTok = null; npcs = []; npcOpen = {}; zm = { s: 1, x: 0, y: 0 }; clear(root); stop(); }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
     function start() { stop(); if (!isDM()) timer = setInterval(function () { if (!document.hidden) poll(); }, 5000); }
 
@@ -101,13 +102,14 @@
       ui.tabs = h('div', { className: 'mp-tabs', role: 'tablist' });
       ui.status = h('span', { className: 'mono hb-note' });
       ui.box = h('div', { className: 'mp-box' + (isDM() ? ' edit' : '') });
-      ui.msg = h('p', { className: 'mono hb-note' });
+      ui.msg = h('p', { className: 'mono hb-note' }); ui.npcs = h('div', { className: 'mp-npcs' });
       ui.side = h('div', { className: 'mp-side' });
       root.appendChild(h('div', { className: 'hb-wrap' }, [
         h('div', { className: 'mp-head' }, [ui.tabs, ui.status]),
-        h('div', { className: 'mp-body' }, [h('div', { className: 'mp-stage' }, [ui.box, ui.msg]), isDM() ? ui.side : null]),
+        h('div', { className: 'mp-body' }, [h('div', { className: 'mp-stage' }, [ui.box, ui.msg, isDM() ? null : ui.npcs]), isDM() ? ui.side : null]),
       ]));
       if (window.ResizeObserver) new ResizeObserver(fit).observe(ui.box); else window.addEventListener('resize', fit);
+      if (!isDM()) setupZoom();
     }
     function enter() { if (!built) build(); poll(true); start(); }
     function wake() { if (!isDM()) poll(); }
@@ -128,8 +130,9 @@
       call('map', { action: 'get', id: id }).then(function (r) {
         if (id !== curId) return;
         if (!r.ok) { lob = null; ui.msg.textContent = r.j.error || 'Could not open that map.'; drawBox(); return; }
-        ui.msg.textContent = isDM() ? '' : 'The map updates by itself when the headmaster changes it.';
-        lob = r.j.lobby; drawBox(); if (isDM()) drawSide();
+        ui.msg.textContent = isDM() ? '' : 'The map updates by itself. Zoom with + / −, pinch, or Ctrl + scroll. Tap a token to see who it is.';
+        if (!lob || lob.id !== r.j.lobby.id) zm = { s: 1, x: 0, y: 0 };
+        lob = r.j.lobby; drawBox(); if (isDM()) drawSide(); else loadNpcs();
       });
     }
     function drawTabs() {
@@ -150,6 +153,7 @@
 
     /* the map box: picture, grid, tokens. Everything is positioned in fractions of the box, so players see exactly what the headmaster sees. */
     function fit() {
+      zApply();
       if (!lob || !ui.grid) return; var w = ui.box.clientWidth, c = w * lob.cell / 100; ui.grid.style.backgroundSize = c + 'px ' + c + 'px';
       Object.keys(ui.tiles || {}).forEach(function (k) { layTile(ui.tiles[k], c); });
     }
@@ -167,8 +171,8 @@
     }
     function place(t, el) { el.style.left = (t.x * 100) + '%'; el.style.top = (t.y * 100) + '%'; el.style.width = (lob.cell * 0.9 * (lob.tokScale || 1) * (t.size || 1)) + '%'; }
     function drawBox() {
-      clear(ui.box); ui.grid = null;
-      if (!lob) { ui.box.appendChild(h('div', { className: 'mp-empty' }, [h('p', { className: 'mono', text: curId ? 'Opening the map…' : (isDM() ? 'Add a lobby to begin.' : 'Nothing to show yet.') })])); return; }
+      clear(ui.box); ui.grid = null; ui.zoom = null;
+      if (!lob) { npcs = []; drawNpcs(); ui.box.appendChild(h('div', { className: 'mp-empty' }, [h('p', { className: 'mono', text: curId ? 'Opening the map…' : (isDM() ? 'Add a lobby to begin.' : 'Nothing to show yet.') })])); return; }
       if (lob.image) ui.box.appendChild(h('img', { className: 'mp-img', src: lob.image, alt: '', draggable: false }));
       ui.img = ui.box.querySelector('.mp-img'); styleImg();
       lob.cells = lob.cells || [];
@@ -178,12 +182,14 @@
       ui.box.classList.toggle('painting', isDM() && paint.on);
       lob.tokens.forEach(function (t) { ui.box.appendChild(tokenEl(t)); });
       if (!lob.image && isDM()) ui.box.appendChild(h('p', { className: 'mp-hint mono', text: 'Upload a map image on the right.' }));
+      if (!isDM()) wrapZoom();
       fit();
     }
     function styleImg() { if (!ui.img) return; ui.img.style.width = (lob.imgScale * 100) + '%'; ui.img.style.left = (lob.imgX * 100) + '%'; ui.img.style.top = (lob.imgY * 100) + '%'; }
     function tokenEl(t) {
       var e = h('div', { className: 'mp-tok' + (t.id === selTok ? ' sel' : ''), title: t.label }, [thumb(t.img, (t.label || '?').charAt(0).toUpperCase(), 'tk'), h('span', { className: 'mp-lab', text: t.label })]);
       place(t, e); e.setAttribute('data-id', t.id);
+      var rg = /^reg:([A-Za-z0-9-]+)$/.exec(String(t.src || '')); if (!isDM() && rg) { e.setAttribute('data-reg', rg[1]); e.classList.add('tap'); }
       if (isDM()) e.addEventListener('pointerdown', function (ev) { dragToken(ev, t, e); });
       return e;
     }
@@ -232,6 +238,112 @@
       var move = function (m) { lob.imgX = ox + (m.clientX - sx) / r.width; lob.imgY = oy + (m.clientY - sy) / r.height; styleImg(); };
       var up = function () { ui.box.removeEventListener('pointermove', move); ui.box.removeEventListener('pointerup', up); ui.box.removeEventListener('pointercancel', up); save(); };
       ui.box.addEventListener('pointermove', move); ui.box.addEventListener('pointerup', up); ui.box.addEventListener('pointercancel', up);
+    }
+
+
+    /* ---- viewing: zoom and pan (players only; the headmaster edits the map, players can only look) ---- */
+    function zApply() {
+      if (!ui.zoom || !ui.box) return;
+      var W = ui.box.clientWidth, H = ui.box.clientHeight;
+      zm.s = Math.max(1, Math.min(6, zm.s));
+      zm.x = Math.min(0, Math.max(W - W * zm.s, zm.x)); zm.y = Math.min(0, Math.max(H - H * zm.s, zm.y));
+      ui.zoom.style.transform = 'translate(' + zm.x + 'px,' + zm.y + 'px) scale(' + zm.s + ')';
+      ui.box.classList.toggle('zoomed', zm.s > 1.001);
+    }
+    function zAt(px, py, s2) { var s = zm.s; s2 = Math.max(1, Math.min(6, s2)); zm.x = px - (px - zm.x) * s2 / s; zm.y = py - (py - zm.y) * s2 / s; zm.s = s2; zApply(); }
+    function wrapZoom() {
+      var z = h('div', { className: 'mp-zoom' });
+      Array.prototype.slice.call(ui.box.childNodes).forEach(function (n) { z.appendChild(n); });
+      ui.box.appendChild(z); ui.zoom = z;
+      ui.box.appendChild(h('div', { className: 'mp-zc' }, [['+', 'Zoom in', 1.4], ['\u2212', 'Zoom out', 1 / 1.4], ['\u27F2', 'Reset zoom', 0]].map(function (d) {
+        var b = h('button', { type: 'button', text: d[0], title: d[1], 'aria-label': d[1] });
+        b.onclick = function () { if (d[2]) zAt(ui.box.clientWidth / 2, ui.box.clientHeight / 2, zm.s * d[2]); else { zm = { s: 1, x: 0, y: 0 }; zApply(); } };
+        return b;
+      })));
+      zApply();
+    }
+    function setupZoom() {
+      var ptrs = {}, count = 0, moved = 0, tapTok = null, lastTap = 0;
+      var pts = function () { return Object.keys(ptrs).map(function (k) { return ptrs[k]; }); };
+      ui.box.addEventListener('wheel', function (ev) {
+        if (!lob || (!ev.ctrlKey && !ev.metaKey && zm.s <= 1.001)) return;
+        ev.preventDefault(); var r = ui.box.getBoundingClientRect(); zAt(ev.clientX - r.left, ev.clientY - r.top, zm.s * (ev.deltaY < 0 ? 1.2 : 1 / 1.2));
+      }, { passive: false });
+      ui.box.addEventListener('dblclick', function (ev) {
+        if (!lob || ev.target.closest('.mp-zc')) return;
+        if (zm.s > 1.001) { zm = { s: 1, x: 0, y: 0 }; zApply(); } else { var r = ui.box.getBoundingClientRect(); zAt(ev.clientX - r.left, ev.clientY - r.top, 2.5); }
+      });
+      ui.box.addEventListener('pointerdown', function (ev) {
+        if (!lob || ev.target.closest('.mp-zc')) return;
+        if (!ptrs[ev.pointerId]) count++;
+        ptrs[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+        if (count === 1) { moved = 0; var tk = ev.target.closest && ev.target.closest('.mp-tok[data-reg]'); tapTok = tk ? tk.getAttribute('data-reg') : null; }
+        try { ui.box.setPointerCapture(ev.pointerId); } catch (e) {}
+      });
+      ui.box.addEventListener('pointermove', function (ev) {
+        var p = ptrs[ev.pointerId]; if (!p) return;
+        if (count === 1) {
+          var dx = ev.clientX - p.x, dy = ev.clientY - p.y; moved += Math.abs(dx) + Math.abs(dy); p.x = ev.clientX; p.y = ev.clientY;
+          if (zm.s > 1.001) { zm.x += dx; zm.y += dy; zApply(); }
+        } else if (count === 2) {
+          var a = pts(), d0 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), c0x = (a[0].x + a[1].x) / 2, c0y = (a[0].y + a[1].y) / 2;
+          p.x = ev.clientX; p.y = ev.clientY;
+          var b = pts(), d1 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y), c1x = (b[0].x + b[1].x) / 2, c1y = (b[0].y + b[1].y) / 2, r = ui.box.getBoundingClientRect();
+          moved += 20; zm.x += c1x - c0x; zm.y += c1y - c0y;
+          if (d0 > 0) zAt(c1x - r.left, c1y - r.top, zm.s * d1 / d0); else zApply();
+        }
+      });
+      var end = function (ev) {
+        if (!ptrs[ev.pointerId]) return;
+        delete ptrs[ev.pointerId]; count = Math.max(0, count - 1);
+        if (count === 0 && ev.type === 'pointerup' && moved < 8) {
+          if (tapTok) openNpc(tapTok);
+          var now = Date.now(); if (!tapTok && now - lastTap < 300 && ev.pointerType === 'touch') { var r = ui.box.getBoundingClientRect(); if (zm.s > 1.001) { zm = { s: 1, x: 0, y: 0 }; zApply(); } else zAt(ev.clientX - r.left, ev.clientY - r.top, 2.5); lastTap = 0; } else lastTap = now;
+        }
+      };
+      ui.box.addEventListener('pointerup', end); ui.box.addEventListener('pointercancel', end);
+    }
+
+    /* ---- the NPCs and monsters on this map, with their stats when the headmaster has disclosed them ---- */
+    function loadNpcs() {
+      var id = lob && lob.id; if (!id || isDM()) return;
+      call('map', { action: 'npcs', id: id }).then(function (r) { if (!lob || lob.id !== id) return; npcs = r.ok ? (r.j.entries || []) : []; drawNpcs(); });
+    }
+    function openNpc(id) {
+      if (!npcs.some(function (e) { return e.id === id; })) return;
+      npcOpen[id] = true; drawNpcs();
+      var n = ui.npcs.querySelector('[data-reg="' + id + '"]'); if (n && n.scrollIntoView) { try { n.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }
+    }
+    function statBlock(e) {
+      var box = h('div', { className: 'mp-stat' }), has = function (k) { return Object.prototype.hasOwnProperty.call(e, k); }, any = false;
+      var line = function (label, text) { if (text == null || String(text).trim() === '') return; any = true; box.appendChild(h('p', {}, [h('b', { text: label + ' ' }), String(text)])); };
+      if (e.teaser) box.appendChild(h('p', { className: 'mono', text: e.teaser }));
+      var vit = [];
+      if (has('hp')) vit.push(['HP', e.hp]); if (has('armor')) vit.push(['Armor', e.armor]);
+      if (has('speed') && e.speed !== '') vit.push(['Speed', e.speed + ' ft']);
+      if (has('initiative') && e.initiative !== '') vit.push(['Initiative', (e.initiative >= 0 ? '+' : '') + e.initiative]);
+      if (has('prof') && e.prof) vit.push(['Prof.', '+' + e.prof]);
+      if (vit.length) { any = true; box.appendChild(h('div', { className: 'mp-vit' }, vit.map(function (v) { return h('div', {}, [h('span', { className: 'mono', text: v[0] }), h('b', { text: String(v[1]) })]); }))); }
+      if (e.stats && typeof e.stats === 'object') { any = true; box.appendChild(h('div', { className: 'mp-vit ab' }, Object.keys(e.stats).map(function (k) { return h('div', {}, [h('span', { className: 'mono', text: k }), h('b', { text: String(e.stats[k]) })]); }))); }
+      line('Size:', e.size); line('Level / CR:', e.level); line('Senses:', e.senses); line('Languages:', e.languages); line('Saving throws:', e.saves);
+      line('Immunities:', e.immunities); line('Resistances:', e.resistances); line('Weaknesses:', e.weaknesses);
+      line('Basic:', e.basic); (Array.isArray(e.skills) ? e.skills : []).forEach(function (s, i) { line('Skill ' + (i + 1) + ':', s); }); line('Ultimate:', e.ultimate);
+      line('Attacks:', e.attacks); line('Quirks:', Array.isArray(e.quirks) ? e.quirks.join(', ') : e.quirks);
+      if (e.statsHidden) box.appendChild(h('p', { className: 'mono', text: 'The headmaster has not revealed its stats yet.' }));
+      else if (!any && !e.teaser) box.appendChild(h('p', { className: 'mono', text: 'Nothing is known about this one yet.' }));
+      return box;
+    }
+    function drawNpcs() {
+      if (!ui.npcs) return; clear(ui.npcs);
+      if (!lob || !npcs.length) return;
+      ui.npcs.appendChild(h('p', { className: 'mono red', text: 'On this map' }));
+      npcs.forEach(function (e) {
+        var open = !!npcOpen[e.id];
+        var sub = [e.type === 'shadow' ? 'Monster' : 'NPC', e.level && !e.undisclosed ? 'Lv ' + e.level : '', e.undisclosed ? 'Undisclosed' : (e.statsHidden ? 'Stats sealed' : '')].filter(Boolean).join(' \u00B7 ');
+        var row = h('button', { type: 'button', className: 'mp-nrow', 'aria-expanded': String(open), 'data-reg': e.id }, [thumb(e.image, (e.name || '?').charAt(0).toUpperCase(), 'tk'), h('span', {}, [h('b', { text: e.name }), h('small', { text: sub })]), h('span', { className: 'mono', text: open ? 'Hide' : 'Stats' })]);
+        row.onclick = function () { npcOpen[e.id] = !npcOpen[e.id]; drawNpcs(); };
+        var item = h('div', { className: 'mp-nitem' }, [row]); if (open) item.appendChild(statBlock(e)); ui.npcs.appendChild(item);
+      });
     }
 
     /* saving (headmaster) */

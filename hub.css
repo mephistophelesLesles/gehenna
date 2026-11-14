@@ -196,3 +196,55 @@
 .il-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: 1.1rem; }
 .il-act { margin-top: 0.5rem; }
 .dm-sheet .pv { max-width: 52rem; }
+
+
+/* ---- Map: zoom and pan for players, and the NPCs / monsters on the map ---- */
+.mp-box:not(.edit) { touch-action: pan-y; }
+.mp-box.zoomed { touch-action: none; cursor: grab; }
+.mp-box:not(.edit) .mp-tok { touch-action: auto; }
+.mp-box:not(.edit) .mp-tok.tap { cursor: pointer; }
+.mp-zoom { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+.mp-zc { position: absolute; right: 0.5rem; bottom: 0.5rem; z-index: 20; display: flex; gap: 0.3rem; }
+.mp-zc button { width: 2.5rem; height: 2.5rem; padding: 0; background: rgba(5, 4, 4, 0.88); color: var(--fg); border: 1px solid var(--line); font: 700 1.2rem var(--f-body); cursor: pointer; }
+.mp-zc button:hover, .mp-zc button:focus-visible { background: var(--red); border-color: var(--red); }
+.mp-npcs { display: grid; gap: 0.5rem; }
+.mp-npcs:empty { display: none; }
+.mp-nitem { display: grid; background: var(--surface); border: 1px solid var(--line); }
+.mp-nrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.7rem; align-items: center; width: 100%; text-align: left; padding: 0.5rem 0.7rem; background: none; border: 0; color: var(--fg); font: inherit; cursor: pointer; }
+.mp-nrow:hover, .mp-nrow[aria-expanded="true"] { background: var(--surface-2); }
+.mp-nrow .hb-thumb { width: 2.6rem; }
+.mp-nrow b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-nrow small { display: block; color: var(--muted); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.mp-nrow > .mono { color: var(--red-hi); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.mp-stat { display: grid; gap: 0.5rem; padding: 0.7rem 0.9rem 0.9rem; border-top: 1px solid var(--line); }
+.mp-stat p { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.mp-vit { display: grid; grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr)); gap: 0.4rem 0.8rem; }
+.mp-vit span { display: block; font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-hi); }
+.mp-vit b { font-size: 1.1rem; font-weight: 600; }
+.mp-vit.ab { grid-template-columns: repeat(6, minmax(0, 1fr)); padding-top: 0.4rem; border-top: 1px solid var(--line); }
+
+/* ---- Phones: a tighter header and a chat you can actually use ---- */
+@media (max-width: 52rem) {
+  .adm .adm-bar { padding: 0.5rem 0.8rem; gap: 0.5rem; }
+  .adm .adm-bar h2 { font-size: 1.25rem; }
+  .adm .adm-bar .btn { padding: 0.45rem 0.7rem; font-size: 0.7rem; }
+  .mp-zc button { width: 2.9rem; height: 2.9rem; }
+  .mp-vit.ab { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .cht { gap: 0.5rem; }
+  .cht-side { flex-wrap: nowrap; overflow-x: auto; gap: 0.2rem 1rem; padding-bottom: 0.2rem; scrollbar-width: none; align-items: center; }
+  .cht-side::-webkit-scrollbar { display: none; }
+  .cht-side > * { flex: none; width: auto; }
+  .cht-h, .cht-side > .hb-note, .cht-me small, .cht-side > p.mono { display: none; }
+  .cht-me { width: auto; gap: 0 0.5rem; } .hb-thumb.av.lg { width: 2.2rem; font-size: 1rem; }
+  .cht-btn { white-space: nowrap; font-size: 0.9rem; }
+  .cht-pick { padding: 0.25rem 0.4rem; gap: 0.5rem; font-size: 0.95rem; white-space: nowrap; } .cht-pick .hb-thumb { width: 1.9rem; }
+  .cht-main { grid-template-rows: auto minmax(0, 1fr) auto auto auto; height: min(80dvh, calc(100dvh - 9rem)); min-height: 20rem; padding: 0.6rem 0.5rem 0.6rem 0.8rem; gap: 0.4rem; }
+  .cht-title { font-size: 1.05rem; }
+  .cht-msg { max-width: 94%; gap: 0.4rem; } .cht-msg .hb-thumb.av { width: 2rem; }
+  .cht-txt { padding: 0.35rem 0.6rem; font-size: 0.95rem; } .cht-img { max-height: 11rem; }
+  .cht-compose { flex-wrap: nowrap; gap: 0.4rem; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .cht-compose input[type="text"] { flex: 1 1 auto; order: 0; min-width: 0; font-size: 16px; }
+  .cht-compose .btn { padding: 0.55rem 0.7rem; }
+  .cht-main > .hb-note { display: none; }
+}

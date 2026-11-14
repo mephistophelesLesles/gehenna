@@ -4,6 +4,8 @@
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { reply, S, IMG, ID, needUser, parseBody, imageReply } = require('./lib/auth');
+const { view } = require('./lib/registry');
+const RID = /^[a-f0-9-]{8,40}$/i;
 
 const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
 const meta = (l) => ({ id: l.id, name: l.name, rev: l.rev });
@@ -98,6 +100,18 @@ exports.handler = async (event) => {
       }
       const image = (await store.get('img/' + l.id)) || '';
       return reply(200, { lobby: Object.assign({}, l, { image }) });
+    }
+    if (b.action === 'npcs') {
+      // The NPCs and monsters standing on this map, as a player is allowed to see them (sealed stats and undisclosed NPCs stay sealed).
+      const l = all.find((x) => x.id === String(b.id));
+      if (!l || !mine(l)) return reply(404, { error: 'You are not in that lobby.' });
+      const ids = Array.from(new Set(l.tokens.map((t) => /^reg:([A-Za-z0-9-]+)$/.exec(String(t.src || ''))).filter(Boolean).map((m) => m[1]))).filter((i) => RID.test(i));
+      const reg = getStore('gehenna-registry'), entries = [];
+      for (const id of ids) {
+        const e = await reg.get(id, { type: 'json' });
+        if (e && e.listed && e.type !== 'player') entries.push(view(e, u.admin ? null : u.id, true));
+      }
+      return reply(200, { entries });
     }
     if (!u.admin) return reply(403, { error: 'Headmaster only.' });
 
