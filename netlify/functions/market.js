@@ -6,7 +6,7 @@ const { getStore, connectLambda } = require('@netlify/blobs');
 const { settle, reply, S, N, IMG, ID, isAdmin, who, needUser, karmaOf, parseBody, imageReply } = require('./lib/auth');
 const { loadAll } = require('./lib/world');
 
-const LOAN_CAP = 10000;
+const LOAN_CAP = 5000;
 const LINES = [
   'Hello, young soul~ busy?',
   'Ooh, a customer! Come closer, darling. I only bite a little.',
@@ -150,7 +150,7 @@ exports.handler = async (event) => {
       const amt = N(b.amount, 0, 1e9), debt = c.debt || 0, bal = karmaOf(c);
       if (amt < 1) return reply(400, { error: 'Enter how much to borrow.' });
       if (debt > 0 || bal < 0) return reply(400, { error: 'No loans while you are in debt.' });
-      if (debt + amt > LOAN_CAP) return reply(400, { error: 'Loans are capped at ' + LOAN_CAP + ' karma.' });
+      if (debt + amt > LOAN_CAP) return reply(400, { error: 'Loans are capped at ' + LOAN_CAP.toLocaleString('en-US') + ' karma.' });
       c.karma = String(bal + amt); c.debt = debt + amt; await save();
       return reply(200, Object.assign(view(c), { message: 'Borrowed ' + amt + ' karma. It is added to your debt.' }));
     }

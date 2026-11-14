@@ -130,7 +130,7 @@
 
     /* the map box: picture, grid, tokens. Everything is positioned in fractions of the box, so players see exactly what the headmaster sees. */
     function fit() { if (!lob || !ui.grid) return; var w = ui.box.clientWidth, c = w * lob.cell / 100; ui.grid.style.backgroundSize = c + 'px ' + c + 'px'; }
-    function place(t, el) { el.style.left = (t.x * 100) + '%'; el.style.top = (t.y * 100) + '%'; el.style.width = (lob.cell * 0.9) + '%'; }
+    function place(t, el) { el.style.left = (t.x * 100) + '%'; el.style.top = (t.y * 100) + '%'; el.style.width = (lob.cell * 0.9 * (lob.tokScale || 1) * (t.size || 1)) + '%'; }
     function drawBox() {
       clear(ui.box); ui.grid = null;
       if (!lob) { ui.box.appendChild(h('div', { className: 'mp-empty' }, [h('p', { className: 'mono', text: curId ? 'Opening the map…' : (isDM() ? 'Add a lobby to begin.' : 'Nothing to show yet.') })])); return; }
@@ -144,7 +144,7 @@
     function styleImg() { if (!ui.img) return; ui.img.style.width = (lob.imgScale * 100) + '%'; ui.img.style.left = (lob.imgX * 100) + '%'; ui.img.style.top = (lob.imgY * 100) + '%'; }
     function tokenEl(t) {
       var e = h('div', { className: 'mp-tok' + (t.id === selTok ? ' sel' : ''), title: t.label }, [thumb(t.img, (t.label || '?').charAt(0).toUpperCase(), 'tk'), h('span', { className: 'mp-lab', text: t.label })]);
-      place(t, e);
+      place(t, e); e.setAttribute('data-id', t.id);
       if (isDM()) e.addEventListener('pointerdown', function (ev) { dragToken(ev, t, e); });
       return e;
     }
@@ -173,12 +173,12 @@
       if (!lob) return;
       ui.status.textContent = 'Saving…'; clearTimeout(saveT);
       saveT = setTimeout(function () {
-        var l = { id: lob.id, name: lob.name, cell: lob.cell, imgScale: lob.imgScale, imgX: lob.imgX, imgY: lob.imgY, members: lob.members, tokens: lob.tokens };
+        var l = { id: lob.id, name: lob.name, cell: lob.cell, tokScale: lob.tokScale || 1, imgScale: lob.imgScale, imgX: lob.imgX, imgY: lob.imgY, members: lob.members, tokens: lob.tokens };
         if (lob._img) l.image = lob.image;
         var id = lob.id;
         call('map', { action: 'save', lobby: l }).then(function (r) {
           if (!r.ok) { ui.status.textContent = r.j.error || 'Save failed'; return; }
-          if (lob && lob.id === id) { lob.rev = r.j.lobby.rev; lob._img = false; }
+          if (lob && lob.id === id) { lob.rev = r.j.lobby.rev; lob._img = false; (r.j.tokens || []).forEach(function (s) { var t = lob.tokens.filter(function (x) { return x.id === s.id; })[0]; if (!t) return; t.src = s.src; if (s.img && t.img !== s.img) { t.img = s.img; var old = ui.box.querySelector('.mp-tok[data-id="' + s.id + '"]'); if (old && !old.matches(':active')) old.replaceWith(tokenEl(t)); } }); }
           lobbies = r.j.lobbies; ui.status.textContent = 'Saved.'; drawTabs();
         });
       }, now ? 0 : 500);
@@ -217,6 +217,7 @@
         h('label', { className: 'fl' }, [h('span', { text: 'Map image' }), file]), h('div', { className: 'ef' }, [fitb, rm]),
         slider('Image size', 0.2, 4, 0.01, lob.imgScale, function (v) { lob.imgScale = v; styleImg(); }, save),
         slider('Square size', 3, 20, 0.1, lob.cell, function (v) { lob.cell = v; drawBoxKeepImg(); }, save),
+        slider('All tokens size', 0.3, 3, 0.05, lob.tokScale || 1, function (v) { lob.tokScale = v; drawBoxKeepImg(); }, save),
         h('label', { className: 'chk' }, [sn, h('span', { text: 'Snap tokens to the squares' })]),
         note('Drag the map image to move it. Drag a token to move it.'),
       ]));
@@ -234,8 +235,8 @@
       var s = h('input', { type: 'search', placeholder: 'Search ' + (tab === 'shadow' ? 'monsters' : tab === 'npc' ? 'NPCs' : 'players'), value: q, 'aria-label': 'Search tokens' });
       s.oninput = function () { q = s.value; fill(); };
       function source() {
-        if (tab === 'player') return G.chars().map(function (c) { return { name: c.name || 'Unnamed', sub: 'Player', img: c.image ? FN + 'chat?avatar=' + c.id + '&v=' + Date.parse(c.updatedAt || 0) : '' }; });
-        return G.reg().filter(function (e) { return e.type === tab && e.listed !== false; }).map(function (e) { return { name: e.name, sub: tab === 'npc' ? 'NPC' : 'Monster', img: e.image && !(e.type === 'npc' && e.undisclosed) ? FN + 'registry?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0) : '' }; });
+        if (tab === 'player') return G.chars().map(function (c) { return { name: c.name || 'Unnamed', sub: 'Player', img: c.image ? FN + 'chat?avatar=' + c.id + '&v=' + (Date.parse(c.updatedAt || 0) || 0) : '', src: c.image ? 'player:' + c.id : '' }; });
+        return G.reg().filter(function (e) { return e.type === tab && e.listed !== false; }).map(function (e) { return { name: e.name, sub: tab === 'npc' ? 'NPC' : 'Monster', img: e.image && !(e.type === 'npc' && e.undisclosed && e.hideImage) ? FN + 'registry?img=' + e.id + '&v=' + (Date.parse(e.updatedAt || 0) || 0) : '', src: e.image && !(e.type === 'npc' && e.undisclosed && e.hideImage) ? 'reg:' + e.id : '' }; });
       }
       function fill() {
         clear(list); var n = 0;
@@ -243,7 +244,7 @@
           n++;
           var add = h('button', { type: 'button', className: 'mp-plus', text: '+', 'aria-label': 'Add ' + e.name + ' to the map' });
           add.onclick = function () {
-            var t = { id: 't' + Date.now().toString(36) + Math.floor(Math.random() * 1000), label: e.name.slice(0, 30), img: e.img, x: 0.5, y: 0.5 };
+            var t = { id: 't' + Date.now().toString(36) + Math.floor(Math.random() * 1000), label: e.name.slice(0, 30), img: e.img, src: e.src || '', size: 1, x: 0.5, y: 0.5 };
             lob.tokens.push(t); selTok = t.id; drawBox(); drawSide(); save();
           };
           list.appendChild(h('div', { className: 'mp-row' }, [thumb(e.img, e.name.charAt(0).toUpperCase(), 'sm'), h('div', {}, [h('b', { text: e.name }), h('small', { className: 'mono', text: e.sub })]), add]));
@@ -256,7 +257,8 @@
         var lab = h('input', { value: t.label, maxLength: 30, 'aria-label': 'Token label' }); lab.oninput = function () { t.label = lab.value; var n = ui.box.querySelector('.mp-tok.sel .mp-lab'); if (n) n.textContent = lab.value; save(); };
         var rmt = h('button', { type: 'button', className: 'btn', text: 'Remove token' });
         rmt.onclick = function () { lob.tokens = lob.tokens.filter(function (x) { return x.id !== t.id; }); selTok = null; drawBox(); drawSide(); save(); };
-        card.appendChild(h('div', { className: 'mp-sel' }, [h('p', { className: 'mono red', text: 'Selected token' }), lab, rmt]));
+        var sz = slider('Token size', 0.25, 4, 0.05, t.size || 1, function (v) { t.size = v; var el = ui.box.querySelector('.mp-tok[data-id="' + t.id + '"]'); if (el) place(t, el); }, save);
+        card.appendChild(h('div', { className: 'mp-sel' }, [h('p', { className: 'mono red', text: 'Selected token' }), lab, sz, rmt]));
       }
       return card;
     }
@@ -391,11 +393,11 @@
     function debtPanel() {
       var amt = h('input', { type: 'number', min: 1, placeholder: 'Amount', className: 'ni', 'aria-label': 'Amount to pay' });
       var pay = h('button', { type: 'button', className: 'btn primary', text: 'Pay debt' }); pay.onclick = function () { call('market', { action: 'paydebt', amount: amt.value }).then(function (r) { after(r); }); };
-      var la = h('input', { type: 'number', min: 1, placeholder: 'Amount', className: 'ni', 'aria-label': 'Loan amount' });
+      var la = h('input', { type: 'number', min: 1, max: 5000, placeholder: 'Amount (max 5,000)', className: 'ni', 'aria-label': 'Loan amount' });
       var loan = h('button', { type: 'button', className: 'btn primary', text: 'Take a loan' }); loan.onclick = function () { call('market', { action: 'loan', amount: la.value }).then(function (r) { after(r); }); };
       return h('div', { className: 'mk-debt' }, [
         h('div', { className: 'mk-detail' }, [h('h4', { text: 'Pay debt' }), note('Debt is never paid automatically. Choose how much. If you do not have that much karma, the payment is cancelled.'), h('div', { className: 'ef' }, [amt, pay])]),
-        h('div', { className: 'mk-detail' }, [h('h4', { text: 'Loan' }), note('Loans are approved automatically and added to your debt. You cannot borrow while you are in debt, and your debt can never pass 10,000 karma.'), h('div', { className: 'ef' }, [la, loan])]),
+        h('div', { className: 'mk-detail' }, [h('h4', { text: 'Loan' }), note('Loans are approved automatically and added to your debt. You cannot borrow while you are in debt, and you can borrow at most 5,000 karma.'), h('div', { className: 'ef' }, [la, loan])]),
       ]);
     }
     return { enter: function () { msg = ''; enter(); }, reset: reset };
@@ -456,27 +458,42 @@
 
   /* ======================= DICE LOG ======================= */
   modules.dice = (function () {
-    var root = $('pane-dice');
-    function enter() {
-      clear(root).appendChild(note('Gathering the dice…'));
-      call('rolls', { action: 'list' }).then(function (r) {
-        clear(root); if (!r.ok) { root.appendChild(note(r.j.error || 'Could not open the dice log.')); return; }
-        var dm = !!G.creds(), rows = r.j.rolls || [], names = [];
-        rows.forEach(function (x) { if (x.name && names.indexOf(x.name) < 0) names.push(x.name); });
-        var sel = h('select', { 'aria-label': 'Filter by character' }, [h('option', { value: '', text: 'Everyone' })].concat(names.sort().map(function (n) { return h('option', { value: n, text: n }); })));
-        var box = h('div', { className: 'dl-wrap' });
-        function draw() {
-          clear(box); var f = rows.filter(function (x) { return !sel.value || x.name === sel.value; });
-          if (!f.length) { box.appendChild(note('No rolls yet.')); return; }
-          var t = h('table', { className: 'dl-tbl' }, [h('tr', {}, [h('th', { text: 'When' }), dm ? h('th', { text: 'Soul' }) : null, h('th', { text: 'Roll' }), h('th', { text: 'Result' })])]);
-          f.forEach(function (x) { t.appendChild(h('tr', {}, [h('td', { className: 'mono', text: new Date(x.at).toLocaleString() }), dm ? h('td', { text: x.name }) : null, h('td', { text: x.label }), h('td', { className: 'mono ' + (x.cls || ''), text: x.txt })])); });
-          box.appendChild(t);
-        }
-        sel.onchange = draw; draw();
-        root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? h('div', { className: 'ef' }, [sel, note('The latest 300 rolls from every soul.')]) : note('Your last 60 rolls.'), box]));
+    var root = $('pane-dice'), timer = null, rev = '', rows = [], sel = null, box = null;
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    function draw() {
+      if (!box) return;
+      var dm = !!G.creds(); clear(box); var f = rows.filter(function (x) { return !sel.value || x.name === sel.value; });
+      if (!f.length) { box.appendChild(note('No rolls yet.')); return; }
+      var t = h('table', { className: 'dl-tbl' }, [h('tr', {}, [h('th', { text: 'When' }), dm ? h('th', { text: 'Soul' }) : null, h('th', { text: 'Roll' }), h('th', { text: 'Result' })])]);
+      f.forEach(function (x) { t.appendChild(h('tr', {}, [h('td', { className: 'mono', text: new Date(x.at).toLocaleString() }), dm ? h('td', { text: x.name }) : null, h('td', { text: x.label }), h('td', { className: 'mono ' + (x.cls || ''), text: x.txt })])); });
+      box.appendChild(t);
+    }
+    function fillNames() {
+      var keep = sel.value, names = [];
+      rows.forEach(function (x) { if (x.name && names.indexOf(x.name) < 0) names.push(x.name); });
+      clear(sel); sel.appendChild(h('option', { value: '', text: 'Everyone' })); names.sort().forEach(function (n) { sel.appendChild(h('option', { value: n, text: n })); });
+      sel.value = names.indexOf(keep) >= 0 ? keep : '';
+    }
+    // Asks the server for rolls; when nothing changed it answers instantly with a one-line "same".
+    function load(first) {
+      return call('rolls', { action: 'list', rev: first ? '' : rev }).then(function (r) {
+        if (first) clear(root);
+        if (!r.ok) { if (first) root.appendChild(note(r.j.error || 'Could not open the dice log.')); return; }
+        if (r.j.same) return;
+        rev = r.j.rev || ''; rows = r.j.rolls || [];
+        if (first) {
+          var dm = !!G.creds(); sel = h('select', { 'aria-label': 'Filter by character' }); box = h('div', { className: 'dl-wrap' });
+          sel.onchange = draw; fillNames();
+          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? h('div', { className: 'ef' }, [sel, note('The latest 300 rolls from every soul. New rolls appear by themselves.')]) : note('Your last 60 rolls. New rolls appear by themselves.'), box]));
+        } else fillNames();
+        draw();
       });
     }
-    return { enter: enter, reset: function () { clear(root); } };
+    function enter() {
+      stop(); rev = ''; clear(root).appendChild(note('Gathering the dice…'));
+      load(true).then(function () { timer = setInterval(function () { if (!document.hidden) load(false); }, 3000); });
+    }
+    return { enter: enter, leave: stop, wake: function () { if (box && timer) load(false); }, reset: function () { stop(); box = null; rows = []; rev = ''; clear(root); } };
   })();
 
   /* ======================= CHAT ======================= */

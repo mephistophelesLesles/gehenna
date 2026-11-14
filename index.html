@@ -1823,7 +1823,9 @@
     var w = h('div', { className: 'pv' });
     var hist = h('div', { className: 'hist' });
     var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
-    function logRoll(label, line, cls) { if (pkey) fetch('/.netlify/functions/rolls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: pkey, action: 'add', label: label, txt: line, cls: cls || '' }) }).catch(function () {}); hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
+    var rollQ = Promise.resolve();
+    function sendRoll(body) { return fetch('/.netlify/functions/rolls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body }).then(function (r) { if (!r.ok) throw new Error('x'); }); }
+    function logRoll(label, line, cls) { if (pkey) { var body = JSON.stringify({ key: pkey, action: 'add', label: label, txt: line, cls: cls || '' }); rollQ = rollQ.then(function () { return sendRoll(body).catch(function () { return sendRoll(body); }); }).catch(function () {}); } hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
     function d20(m) {
       var a = dice(1, 20)[0], b = adv.value === 'n' ? null : dice(1, 20)[0], pk = b === null ? a : (adv.value === 'a' ? Math.max(a, b) : Math.min(a, b));
       return { vals: b === null ? [a] : [a, b], d: 20, txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
