@@ -396,9 +396,9 @@
 
   /* ======================= CHAT ======================= */
   modules.chat = (function () {
-    var root = $('pane-chat'), ui = {}, built = false, me = null, members = [], byId = {}, unread = {}, ch = 'ooc', who = null, lastKey = '', timer = null, mtimer = null, recent = [], picking = false, editing = false, sending = false;
+    var root = $('pane-chat'), ui = {}, built = false, me = null, members = [], byId = {}, unread = {}, ch = 'ooc', who = null, lastKey = '', timer = null, mtimer = null, recent = [], picking = false, editing = false, seen = {}, pending = [];
     function isDM() { return !!G.creds(); }
-    function reset() { built = false; clear(root); stop(); me = null; members = []; recent = []; ch = 'ooc'; who = null; lastKey = ''; }
+    function reset() { built = false; clear(root); stop(); me = null; members = []; recent = []; ch = 'ooc'; who = null; lastKey = ''; seen = {}; pending = []; }
     function stop() { clearInterval(timer); clearInterval(mtimer); timer = mtimer = null; }
     function body(extra) { return Object.assign(ch === 'ooc' || ch === 'rp' ? { channel: ch } : { with: who }, extra || {}); }
 
@@ -408,7 +408,7 @@
         if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the chat.')); return; }
         take(r.j); if (!built) { build(); }
         drawSide(); openChannel(ch, who, true);
-        stop(); timer = setInterval(function () { if (!document.hidden) fetchNew(); }, 4000); mtimer = setInterval(function () { if (!document.hidden) refreshMembers(); }, 12000);
+        stop(); timer = setInterval(function () { if (!document.hidden) fetchNew(); }, 2500); mtimer = setInterval(function () { if (!document.hidden) refreshMembers(); }, 12000);
       });
     }
     function take(j) {
@@ -431,7 +431,7 @@
         ui.file.value = '';
       };
       ui.send.onclick = send; ui.in.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
-      ui.main = h('div', { className: 'cht-main' }, [ui.head, ui.log, h('div', { className: 'cht-compose' }, [ui.imgBtn, ui.in, ui.send, ui.file]), ui.err, note('Names are shortened to 10 characters. Chat logs are deleted every month.')]);
+      ui.main = h('div', { className: 'cht-main' }, [ui.head, ui.log, h('div', { className: 'cht-compose' }, [ui.imgBtn, ui.in, ui.send, ui.file]), ui.err, note('Players appear by their first name. Chat logs are deleted every month.')]);
       root.appendChild(h('div', { className: 'hb-wrap cht' }, [ui.side, ui.main]));
     }
     function avatar(m, cls) { return thumb(m && m.avatar, (m && m.name || '?').charAt(0).toUpperCase(), 'av ' + (cls || '')); }
@@ -458,13 +458,13 @@
       });
     }
     function profileEditor(m) {
-      var c = { image: m.avatar || '' }, crop = G.cropper(c), nm = h('input', { value: m.name === '?' ? '' : m.name, maxLength: 10, 'aria-label': 'Display name (10 characters max)' });
+      var c = { image: m.avatar || '' }, crop = G.cropper(c), nm = h('input', { value: m.name === '?' ? '' : m.name, maxLength: 30, 'aria-label': 'Display name' });
       var sv = h('button', { type: 'button', className: 'btn primary', text: 'Save profile' }), st = h('small', { className: 'mono' });
       sv.onclick = function () {
         var body = { action: 'setprofile', name: nm.value }; if (/^data:/.test(c.image) || c.image === '') body.image = c.image;
         call('chat', body).then(function (r) { st.textContent = r.ok ? 'Saved.' : (r.j.error || 'Could not save.'); if (r.ok) { editing = false; enter(); } });
       };
-      return h('div', { className: 'ed cht-prof' }, [h('label', { className: 'fl' }, [h('span', { text: 'Name (10 characters max)' }), nm]), crop, sv, st]);
+      return h('div', { className: 'ed cht-prof' }, [h('label', { className: 'fl' }, [h('span', { text: 'Display name' }), nm]), crop, sv, st]);
     }
     function showPicker() {
       clear(ui.head); ui.head.textContent = 'Who do you want to message?'; clear(ui.log);
@@ -476,7 +476,7 @@
       if (members.length < 2) ui.log.appendChild(note('Nobody else is here yet.'));
     }
     function openChannel(c, w, keep) {
-      ch = c; who = w; lastKey = ''; clear(ui.log);
+      ch = c; who = w; lastKey = ''; seen = {}; pending = []; clear(ui.log);
       ui.head.textContent = c === 'ooc' ? 'OOC' : c === 'rp' ? 'RP chat' : (byId[w] ? byId[w].name : 'Private message');
       if (picking) { showPicker(); return; }
       if (c === 'pm') { delete unread[w]; }
@@ -490,7 +490,15 @@
         var msgs = r.j.msgs || []; if (!msgs.length) { if (first && !ui.log.children.length) ui.log.appendChild(h('p', { className: 'mono hb-note cht-empty', text: 'No messages yet. Say something.' })); return; }
         var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
         var near = ui.log.scrollHeight - ui.log.scrollTop - ui.log.clientHeight < 80 || first;
-        msgs.forEach(function (m) { lastKey = m.k; ui.log.appendChild(bubble(m)); });
+        msgs.forEach(function (m) {
+          lastKey = m.k;
+          if (seen[m.k]) return;
+          if (m.from === me) { // our own message came back: drop the "sending" copy of it
+            var pi = -1; pending.forEach(function (p, n) { if (pi < 0 && p.text === (m.text || '') && !!p.image === !!m.img) pi = n; });
+            if (pi >= 0) { pending[pi].el.remove(); pending.splice(pi, 1); }
+          }
+          seen[m.k] = 1; ui.log.appendChild(bubble(m));
+        });
         if (near) ui.log.scrollTop = ui.log.scrollHeight;
       });
     }
@@ -499,34 +507,92 @@
       var txt = h('div', { className: 'cht-txt' }, [mine ? null : h('small', { className: 'mono', text: p.name }), m.text ? h('p', { text: m.text }) : null, m.img ? h('img', { className: 'cht-img', src: FN + 'chat?mimg=' + encodeURIComponent(m.img), alt: 'Shared image', loading: 'lazy' }) : null]);
       return h('div', { className: 'cht-msg' + (mine ? ' mine' : '') }, mine ? [txt, avatar(p, 'sm')] : [avatar(p, 'sm'), txt]);
     }
+    // The message shows up at once, a little faded with "Sending…", and settles when the server confirms it.
     function send() {
-      if (sending || (ch === 'pm' && !who)) return;
-      var text = ui.in.value.trim(); if (!text && !ui.pend) return;
-      sending = true; ui.send.disabled = true;
-      call('chat', body({ action: 'send', text: text, image: ui.pend || undefined })).then(function (r) {
-        sending = false; ui.send.disabled = false;
-        if (!r.ok) { ui.err.textContent = r.j.error || 'Could not send.'; return; }
-        ui.err.textContent = ''; ui.in.value = ''; ui.pend = null; ui.imgBtn.textContent = '+ image'; fetchNew();
-      });
+      if (ch === 'pm' && !who) return;
+      var text = ui.in.value.trim(), image = ui.pend; if (!text && !image) return;
+      ui.in.value = ''; ui.pend = null; ui.imgBtn.textContent = '+ image'; ui.err.textContent = '';
+      var p = byId[me] || { name: '?', avatar: '' }, state = h('small', { className: 'mono cht-state', text: 'Sending…' });
+      var txt = h('div', { className: 'cht-txt' }, [text ? h('p', { text: text }) : null, image ? h('img', { className: 'cht-img', src: image, alt: 'Image being sent' }) : null, state]);
+      var el = h('div', { className: 'cht-msg mine pending' }, [txt, avatar(p, 'sm')]);
+      var rec = { text: text, image: image, el: el }; pending.push(rec);
+      var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
+      ui.log.appendChild(el); ui.log.scrollTop = ui.log.scrollHeight; ui.in.focus();
+      function go() {
+        el.classList.remove('failed'); state.textContent = 'Sending…';
+        call('chat', body({ action: 'send', text: text, image: image || undefined })).then(function (r) {
+          if (!r.ok) { el.classList.add('failed'); state.textContent = (r.j.error || 'Not sent') + ' · tap to retry'; el.onclick = function () { el.onclick = null; go(); }; return; }
+          seen[r.j.k] = 1;
+          var i = pending.indexOf(rec);
+          if (i >= 0) { pending.splice(i, 1); el.classList.remove('pending'); state.remove(); } // the server confirmed it: it simply becomes a normal message
+        });
+      }
+      go();
     }
     return { enter: enter, leave: stop, reset: reset, wake: function () { if (built) fetchNew(); } };
   })();
 
   /* ======================= NOTEBOOK ======================= */
+  // Everyone keeps their own notebook: chapters they write themselves (important details, plans, clues). Only the owner can read it.
   modules.note = (function () {
-    var book = null;
-    function fetcher(body) {
-      var ch = G.story();
-      if (!body.id) return Promise.resolve({ ok: true, j: { chapters: ch.map(function (c) { return { id: c.id, title: c.title, locked: false }; }) } });
-      var c = ch.filter(function (x) { return x.id === body.id; })[0];
-      return Promise.resolve(c ? { ok: true, j: { chapter: { id: c.id, title: c.title + (c.locked ? ' (locked for players)' : ''), body: c.body, images: c.images || [] } } } : { ok: false, j: { error: 'Chapter not found.' } });
-    }
+    var root = $('pane-note'), list = [], cur = null, ui = {}, saveT = null, dirty = false, token = 0;
+    function reset() { flush(); list = []; cur = null; clear(root); }
     function enter() {
-      if (!window.GEH_makeBook) { clear($('nb-page')).appendChild(note('The storyline reader is not available.')); return; }
-      book = window.GEH_makeBook($('nb-toc'), $('nb-page'), $('nb-book'), G.creds() ? fetcher : null);
-      book.load();
+      clear(root).appendChild(h('div', { className: 'hb-wrap' }, [note('Opening your notebook…')]));
+      call('notebook', { action: 'list' }).then(function (r) {
+        if (!r.ok) { clear(root).appendChild(h('div', { className: 'hb-wrap' }, [note(r.j.error || 'Could not open your notebook.')])); return; }
+        list = r.j.chapters || []; if (!list.some(function (c) { return c.id === cur; })) cur = list[0] ? list[0].id : null; build();
+      });
     }
-    return { enter: enter, reset: function () { book = null; clear($('nb-toc')); clear($('nb-page')); } };
+    function build() {
+      clear(root);
+      ui.toc = h('ol', { className: 'toc' }); ui.page = h('article', { className: 'book-page', tabindex: '-1', 'aria-live': 'polite' });
+      var add = h('button', { type: 'button', className: 'btn primary', text: '+ New chapter' }); add.onclick = newChapter;
+      root.appendChild(h('div', { className: 'hb-wrap' }, [h('div', { className: 'book' }, [h('nav', { className: 'book-toc', 'aria-label': 'Your chapters' }, [h('p', { className: 'mono red', text: 'Your notebook' }), add, ui.toc]), ui.page])]));
+      drawToc(); drawPage();
+    }
+    function cc() { return list.filter(function (c) { return c.id === cur; })[0]; }
+    function drawToc() {
+      clear(ui.toc);
+      list.forEach(function (c) {
+        var b = h('button', { type: 'button', className: 'toc-btn' }, [h('span', { text: c.title || 'Untitled' })]); if (c.id === cur) b.setAttribute('aria-current', 'page');
+        b.onclick = function () { flush(); cur = c.id; drawToc(); drawPage(); };
+        ui.toc.appendChild(h('li', {}, [b]));
+      });
+    }
+    function newChapter() {
+      flush();
+      call('notebook', { action: 'save', chapter: { title: 'Untitled chapter', body: '' } }).then(function (r) {
+        if (!r.ok) { ui.page.textContent = r.j.error || 'Could not add a chapter.'; return; }
+        list = r.j.chapters; cur = r.j.chapter.id; drawToc(); drawPage(true);
+      });
+    }
+    function flush() { if (dirty) save(true); }
+    function save(quiet) {
+      var c = cc(); if (!c) return;
+      clearTimeout(saveT); dirty = false; if (ui.status) ui.status.textContent = 'Saving…';
+      call('notebook', { action: 'save', chapter: { id: c.id, title: c.title, body: c.body } }).then(function (r) {
+        if (ui.status) ui.status.textContent = r.ok ? 'Saved.' : (r.j.error || 'Could not save. Try again.');
+        if (!r.ok) dirty = true;
+      });
+    }
+    function drawPage(focus) {
+      clear(ui.page); var c = cc();
+      if (!c) { ui.page.appendChild(h('div', {}, [h('h3', { className: 'ch-title', text: 'Your notebook' }), note('This is yours. Write down anything important: details, plans, clues, things you do not want to forget. Add a chapter to begin.')])); return; }
+      var title = h('input', { className: 'nb-title', value: c.title || '', maxLength: 100, placeholder: 'Chapter title', 'aria-label': 'Chapter title' });
+      var body = h('textarea', { className: 'nb-body', rows: 16, placeholder: 'Write here…', 'aria-label': 'Chapter text' }); body.value = c.body || '';
+      ui.status = h('small', { className: 'mono hb-note', role: 'status' });
+      function touch() { dirty = true; ui.status.textContent = 'Typing…'; clearTimeout(saveT); saveT = setTimeout(function () { save(); }, 900); }
+      title.oninput = function () { c.title = title.value; touch(); drawToc(); }; body.oninput = function () { c.body = body.value; touch(); };
+      var sv = h('button', { type: 'button', className: 'btn primary', text: 'Save now' }); sv.onclick = function () { save(); };
+      function mv(dir) { flush(); call('notebook', { action: 'move', id: c.id, dir: dir }).then(function (r) { if (r.ok) { list = r.j.chapters; drawToc(); } }); }
+      var up = h('button', { type: 'button', className: 'btn', text: '↑ Move up' }), dn = h('button', { type: 'button', className: 'btn', text: '↓ Move down' }); up.onclick = function () { mv('up'); }; dn.onclick = function () { mv('down'); };
+      var del = h('button', { type: 'button', className: 'btn', text: 'Delete chapter' });
+      G.two(del, 'Delete chapter', function () { dirty = false; clearTimeout(saveT); call('notebook', { action: 'delete', id: c.id }).then(function (r) { if (r.ok) { list = r.j.chapters; cur = list[0] ? list[0].id : null; drawToc(); drawPage(); } }); });
+      ui.page.appendChild(h('div', { className: 'nb-edit' }, [title, body, h('div', { className: 'ef' }, [sv, up, dn, del]), ui.status]));
+      if (focus) { title.focus(); title.select && title.select(); }
+    }
+    return { enter: enter, leave: flush, reset: reset, wake: function () {} };
   })();
 
   /* ======================= WORLD (Locations and Items) ======================= */

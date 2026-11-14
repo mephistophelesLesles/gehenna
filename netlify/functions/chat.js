@@ -1,12 +1,14 @@
 // Chat: an OOC room, an RP room, and private messages between any two people (players and the headmaster).
-// Names are shortened to 10 characters. Players cannot rename themselves or change their icon (it is their character's);
+// Players show up by their first name. Players cannot rename themselves or change their icon (it is their character's);
 // only the headmaster can edit her own profile. Chat logs are deleted at the start of every month.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { reply, S, IMG, ID, needUser, parseBody, imageReply } = require('./lib/auth');
 
 const ymOf = (d) => (d || new Date()).toISOString().slice(0, 7);
-const short = (n) => String(n || '').trim().slice(0, 10) || '?';
+// Players appear by their first name only. The headmaster's display name is whatever she typed.
+const first = (n) => String(n || '').trim().split(/\s+/)[0].slice(0, 30) || '?';
+const display = (n) => String(n || '').trim().slice(0, 30) || 'Headmaster';
 const pad = (n) => String(n).padStart(13, '0');
 
 async function characters(cstore) {
@@ -67,14 +69,14 @@ exports.handler = async (event) => {
 
     if (b.action === 'members') {
       const chars = await characters(cstore), p = await profile(store), inbox = (await store.get('in/' + u.id, { type: 'json' })) || {};
-      const list = chars.map((c) => ({ id: c.id, name: short(c.name), avatar: c.image ? '/.netlify/functions/chat?avatar=' + c.id + '&v=' + Date.parse(c.updatedAt || 0) : '' }));
-      list.unshift({ id: 'hm', name: short(p.name), avatar: p.image ? '/.netlify/functions/chat?avatar=hm&v=' + (p.at || 0) : '', headmaster: true });
+      const list = chars.map((c) => ({ id: c.id, name: first(c.name), avatar: c.image ? '/.netlify/functions/chat?avatar=' + c.id + '&v=' + Date.parse(c.updatedAt || 0) : '' }));
+      list.unshift({ id: 'hm', name: display(p.name), avatar: p.image ? '/.netlify/functions/chat?avatar=hm&v=' + (p.at || 0) : '', headmaster: true });
       return reply(200, { me: u.id, admin: u.admin, members: list, unread: inbox });
     }
     if (b.action === 'setprofile') {
       if (!u.admin) return reply(403, { error: 'Only the headmaster can edit her profile.' });
       const p = await profile(store);
-      p.name = short(b.name === undefined ? p.name : b.name);
+      p.name = display(b.name === undefined ? p.name : b.name);
       if (b.image === '') p.image = ''; else if (typeof b.image === 'string' && IMG.test(b.image) && b.image.length < 200000) p.image = b.image;
       p.at = Date.now(); await store.setJSON('hm-profile', p);
       return reply(200, { ok: true });
@@ -97,16 +99,15 @@ exports.handler = async (event) => {
     if (b.action === 'send') {
       const text = S(b.text, 500).trim(), image = typeof b.image === 'string' && IMG.test(b.image) && b.image.length < 180000 ? b.image : '';
       if (!text && !image) return reply(400, { error: 'Write something first.' });
-      await monthlyCleanup(store);
-      const ym = ymOf(), id = crypto.randomBytes(8).toString('hex'), ts = Date.now();
-      let img = '';
-      if (image) { await store.set('i/' + ym + '/' + id, image); img = ym + '_' + id; }
-      await store.setJSON(prefix + ym + '/' + pad(ts) + '-' + id, { from: u.id, text, img, ts });
+      const ym = ymOf(), id = crypto.randomBytes(8).toString('hex'), ts = Date.now(), k = prefix + ym + '/' + pad(ts) + '-' + id;
+      const ops = [monthlyCleanup(store), store.setJSON(k, { from: u.id, text, img: image ? ym + '_' + id : '', ts })];
+      if (image) ops.push(store.set('i/' + ym + '/' + id, image));
       if (ch.startsWith('pm_')) {
-        const to = String(b.with), inbox = (await store.get('in/' + to, { type: 'json' })) || {};
-        inbox[u.id] = (inbox[u.id] || 0) + 1; await store.setJSON('in/' + to, inbox);
+        const to = String(b.with);
+        ops.push(store.get('in/' + to, { type: 'json' }).then((inbox) => { inbox = inbox || {}; inbox[u.id] = (inbox[u.id] || 0) + 1; return store.setJSON('in/' + to, inbox); }));
       }
-      return reply(200, { ok: true });
+      await Promise.all(ops); // all at once, so sending stays quick
+      return reply(200, { ok: true, k });
     }
     return reply(400, { error: 'Unknown action' });
   } catch (e) { return reply(502, { error: 'Server error: ' + e.message }); }

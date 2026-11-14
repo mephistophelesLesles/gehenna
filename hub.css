@@ -122,7 +122,15 @@
   .cht-compose { flex-wrap: wrap; } .cht-compose input[type="text"] { flex: 1 1 100%; order: -1; }
 }
 
+/* ---- Chat: a message being sent ---- */
+.cht-msg.pending { opacity: 0.6; } .cht-msg.failed { opacity: 1; cursor: pointer; } .cht-msg.failed .cht-txt { border-color: var(--red); }
+.cht-state { color: var(--muted); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; } .cht-msg.failed .cht-state { color: var(--red-hi); }
+
 /* ---- Notebook ---- */
+.nb-edit { display: grid; gap: 0.9rem; }
+.hb-wrap .nb-title { font-family: var(--f-display); font-size: clamp(1.7rem, 4.5vw, 2.6rem); line-height: 1.1; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 0.3rem 0; }
+.hb-wrap .nb-title:focus { outline: none; border-bottom-color: var(--red); }
+.hb-wrap .nb-body { font-size: 1.05rem; line-height: 1.75; min-height: 18rem; resize: vertical; }
 .pane .book { margin: 0; }
 .pane .book-page { min-height: 22rem; }
 
