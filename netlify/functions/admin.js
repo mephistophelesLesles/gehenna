@@ -52,7 +52,7 @@ function clean(c, old) {
     id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '',
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
     itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
-    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), quirk: quirks(c.quirk), level: N(c.level == null ? 1 : c.level, 1, 99), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), initiative: N(c.initiative, -99, 99), size: S(c.size, 40), languages: S(c.languages, 200), speed: N(c.speed, 0, 999),
+    items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500) })), debt: N(c.debt, 0, 1000000000), quirk: quirks(c.quirk), level: N(c.level == null ? 1 : c.level, 1, 99), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), initiative: N(c.initiative, -99, 99), size: S(c.size, 40), languages: S(c.languages, 200), speed: N(c.speed, 0, 999),
     stats: ST.reduce((o, k) => { const s = (c.stats || {})[k] || {}; const sc = N(s.score, 0, 99); o[k] = { score: sc, mod: modOf(sc) }; return o; }, {}),
     skills: (Array.isArray(c.skills) ? c.skills : []).slice(0, 40).map(s => ({
       label: S(s.label, 40), name: S(s.name, 100), text: S(s.text), cooldown: S(s.cooldown, 100),

@@ -487,6 +487,7 @@
   .imgrow .thumb { width: 7rem; height: 5rem; object-fit: cover; border: 1px solid var(--line); }
   .imgctl { display: grid; gap: 0.5rem; min-width: 0; }
 </style>
+<link rel="stylesheet" href="hub.css">
 
 
 
@@ -554,10 +555,11 @@
           <p class="desc">How rolls, saving throws and skills work, and what happens on the luckiest and unluckiest rolls.</p>
           <button type="button" class="btn primary" id="open-dice" aria-controls="dice" aria-expanded="false">Open the rules</button>
         </article>
-        <article class="panel soon">
+        <article class="panel open-card">
           <p class="mono red">The world</p>
           <h3>Locations and Items Registered</h3>
-          <span class="tag">Unavailable for now</span>
+          <p class="desc">Places worth knowing and objects worth owning. Everything registered in Gehenna, in one place.</p>
+          <button type="button" class="btn primary" id="open-world" aria-controls="world" aria-expanded="false">Open the world</button>
         </article>
       </div>
     </div>
@@ -686,6 +688,31 @@
             <div class="reg-grid" id="reg-grid"></div>
           </div>
           <div class="reg-det" id="reg-det" hidden></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="world" hidden aria-label="Locations and Items">
+    <div class="wrap">
+      <div class="book-top">
+        <p class="mono red">Gehenna’s Gate &middot; Locations and Items</p>
+        <button type="button" class="btn" id="world-close">Close the registry</button>
+      </div>
+      <h2 class="sr-only">Locations and Items Registered</h2>
+      <div class="reg">
+        <nav class="reg-nav" aria-label="World sections">
+          <div class="reg-tabs">
+            <button type="button" class="wd-tab" data-t="location" aria-pressed="true">Locations</button>
+            <button type="button" class="wd-tab" data-t="item" aria-pressed="false">Items</button>
+          </div>
+        </nav>
+        <div class="reg-main" id="w-main" tabindex="-1" aria-live="polite">
+          <div id="w-list">
+            <div class="reg-bar"><input type="search" id="w-search" placeholder="Search name" aria-label="Search name"></div>
+            <div class="reg-grid" id="w-grid"></div>
+          </div>
+          <div class="reg-det" id="w-det" hidden></div>
         </div>
       </div>
     </div>
@@ -907,6 +934,13 @@
 <div class="adm" id="adm" hidden role="dialog" aria-modal="true" aria-label="Headmaster admin">
   <div class="adm-bar">
     <h2 id="adm-title">Headmaster</h2>
+    <nav class="adm-nav" id="adm-nav" hidden aria-label="Sections">
+      <button type="button" data-pane="char" aria-pressed="true">Character details</button>
+      <button type="button" data-pane="map" aria-pressed="false">Map</button>
+      <button type="button" data-pane="market" aria-pressed="false">Marketplace</button>
+      <button type="button" data-pane="chat" aria-pressed="false">Chat</button>
+      <button type="button" data-pane="note" aria-pressed="false">Notebook</button>
+    </nav>
     <div class="btns">
       <button type="button" class="btn" id="adm-refresh" hidden>Refresh</button>
       <button type="button" class="btn" id="adm-out" hidden>Log out</button>
@@ -925,11 +959,24 @@
     <button type="button" class="btn primary" id="pl-go">Open my profile</button>
     <p id="pl-msg" aria-live="polite"></p>
   </div>
-  <div class="pl-view" id="pl-view" hidden></div>
-  <div class="adm-grid" id="adm-grid" hidden>
-    <div class="adm-side" id="adm-side"></div>
-    <div class="adm-main" id="adm-main"></div>
+  <div class="pane" id="pane-char">
+    <div class="pl-view" id="pl-view" hidden></div>
+    <div class="adm-grid" id="adm-grid" hidden>
+      <div class="adm-side" id="adm-side"></div>
+      <div class="adm-main" id="adm-main"></div>
+    </div>
   </div>
+  <section class="pane" id="pane-map" hidden aria-label="Map"></section>
+  <section class="pane" id="pane-market" hidden aria-label="Marketplace"></section>
+  <section class="pane" id="pane-chat" hidden aria-label="Chat"></section>
+  <section class="pane" id="pane-note" hidden aria-label="Notebook">
+    <div class="hb-wrap">
+      <div class="book" id="nb-book">
+        <nav class="book-toc" aria-label="Chapters"><p class="mono red">Contents</p><ol class="toc" id="nb-toc"></ol></nav>
+        <article class="book-page" id="nb-page" tabindex="-1" aria-live="polite"><p class="mono">Opening the book…</p></article>
+      </div>
+    </div>
+  </section>
 </div>
 
 <button type="button" class="sound" id="sound">
@@ -1332,11 +1379,14 @@
 // Storyline book: lists the chapters and opens one at a time. Locked chapters stay closed.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var sec = $('storyline'), openBtn = $('open-book'), closeBtn = $('book-close'), toc = $('toc'), page = $('page'), book = $('book');
+  var sec = $('storyline'), openBtn = $('open-book'), closeBtn = $('book-close'), page = $('page');
+  // The reader is a factory so the Notebook tab can show the same book. fetcher (optional) replaces the public endpoint.
+  function makeBook(toc, page, book, fetcher) {
   var chapters = [], cur = null, cache = {}, loaded = false, loading = false;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function call(body) {
+    if (fetcher) return fetcher(body);
     return fetch('/.netlify/functions/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
   }
@@ -1430,9 +1480,13 @@
     }).catch(function () { loading = false; showError('Could not reach the server. Try again in a moment.', loadList); });
   }
 
+  return { load: function () { if (!loaded) loadList(); } };
+  }
+  window.GEH_makeBook = makeBook;
+  var mainBook = makeBook($('toc'), page, $('book'), null);
   function openBook() {
     sec.hidden = false; openBtn.setAttribute('aria-expanded', 'true');
-    if (!loaded) loadList();
+    mainBook.load();
     sec.scrollIntoView({ block: 'start' });
     page.focus({ preventScroll: true });
   }
@@ -1596,7 +1650,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
-  var creds = null, inbox = [], chars = [], story = [], reg = [], regTpl = null, tab = 'inbox', cur = null, pchar = null;
+  var creds = null, inbox = [], chars = [], story = [], reg = [], regTpl = null, tab = 'inbox', cur = null, pchar = null, pkey = '';
   var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
   // Stat modifier: the D&D steps (one point per two points of score), moved so that a score of 10 gives +1, and never below 0.
   var MOD_BASE = 8;
@@ -1618,6 +1672,7 @@
     login.hidden = m !== 'login'; grid.hidden = m !== 'admin'; pv.hidden = m !== 'player';
     $('adm-out').hidden = m === 'login'; $('adm-refresh').hidden = m !== 'admin';
     adm.classList.toggle('player', m === 'player'); $('adm-title').textContent = m === 'player' ? 'Your soul' : m === 'admin' ? 'Headmaster' : 'Login';
+    if (window.GEH && GEH.onMode) GEH.onMode(m);
   }
   function openAdm() { adm.hidden = false; document.body.style.overflow = 'hidden'; if (creds) show('admin'); else if (pchar) show('player'); else { show('login'); $('adm-email').focus(); } }
   function closeAdm() { adm.hidden = true; document.body.style.overflow = ''; }
@@ -1651,7 +1706,7 @@
 
   /* ---------- Character editor ---------- */
   function editor(src) {
-    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; if (c.level == null) c.level = 1; c.stats = c.stats || {}; ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].mod = modOf(c.stats[k].score); }); var statSels = []; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
+    var c = JSON.parse(JSON.stringify(src)), box = h('div', { className: 'ed' }); c.items = c.items || []; c.debt = c.debt || 0; if (c.level == null) c.level = 1; c.stats = c.stats || {}; ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].mod = modOf(c.stats[k].score); }); var statSels = []; c.armor = c.armor || 0; if (c.initiative == null) c.initiative = (c.stats && c.stats.DEX && c.stats.DEX.mod) || 0; c.size = c.size || 'Medium'; c.languages = c.languages || 'Common';
     function txt(label, o, k, rows) { var i = h(rows ? 'textarea' : 'input', { value: o[k] == null ? '' : o[k] }); if (rows) i.rows = rows; i.oninput = function () { o[k] = i.value; }; return h('label', { className: 'fl' }, [h('span', { text: label }), i]); }
     function ni(o, k) { var i = h('input', { type: 'number', value: o[k], className: 'ni' }); i.oninput = function () { o[k] = Number(i.value) || 0; }; return i; }
     function num(label, o, k) { return h('label', { className: 'fl sm' }, [h('span', { text: label }), ni(o, k)]); }
@@ -1667,7 +1722,7 @@
       box.appendChild(h('div', { className: 'g2' }, [txt('Name', c, 'name'), txt('Gender', c, 'gender'), txt('Born - Died', c, 'dates'), txt('Karma', c, 'karma')]));
       ['persona', 'destiny', 'appearance'].forEach(function (k) { box.appendChild(txt(k[0].toUpperCase() + k.slice(1), c, k, 3)); });
       box.appendChild(h('h4', { text: 'Vitals and stats' }));
-      box.appendChild(h('div', { className: 'g6' }, [num('Level', c, 'level'), num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed'), num('Initiative', c, 'initiative')]));
+      box.appendChild(h('div', { className: 'g6' }, [num('Level', c, 'level'), num('Health points', c, 'hp'), num('Armor', c, 'armor'), num('Speed', c, 'speed'), num('Initiative', c, 'initiative'), num('Karma debt', c, 'debt')]));
       box.appendChild(h('div', { className: 'g2' }, [txt('Size', c, 'size'), txt('Languages', c, 'languages')]));
       box.appendChild(h('div', { className: 'g6' }, ST.map(function (k) {
         var sc = ni(c.stats[k], 'score'), md = h('input', { type: 'number', className: 'ni', readOnly: true, value: modOf(c.stats[k].score), title: 'Worked out from the score' });
@@ -1825,7 +1880,7 @@
   }
 
   /* ---------- Storyline editor ---------- */
-  function listFor(t) { return t === 'inbox' ? inbox : t === 'chars' ? chars : t === 'reg' ? reg : story; }
+  function listFor(t) { return t === 'inbox' ? inbox : t === 'chars' ? chars : t === 'reg' ? reg : t === 'world' ? GEH.worldList : story; }
   function newChapter() {
     story = story.filter(function (x) { return !x.isNew; });
     story.push({ id: 'new', isNew: true, title: 'Chapter ' + story.length, locked: true, body: '', images: [] });
@@ -2091,11 +2146,12 @@
   /* ---------- Admin shell ---------- */
   function renderSide() {
     side.textContent = '';
-    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')'], ['story', 'Storyline (' + story.length + ')'], ['reg', 'Registry (' + reg.length + ')']].map(function (t) {
+    var tabs = h('div', { className: 'tabs' }, [['inbox', 'Inbox (' + inbox.length + ')'], ['chars', 'Characters (' + chars.length + ')'], ['story', 'Storyline (' + story.length + ')'], ['reg', 'Registry (' + reg.length + ')'], ['world', 'World (' + GEH.worldList.length + ')']].map(function (t) {
       return h('button', { type: 'button', className: 'btn', text: t[1], 'aria-pressed': String(tab === t[0]), onclick: function () { tab = t[0]; cur = null; pick(); } });
     }));
     side.appendChild(tabs);
     if (tab === 'story') { var nb = h('button', { type: 'button', className: 'btn', text: '+ New chapter' }); nb.onclick = newChapter; side.appendChild(nb); }
+    if (tab === 'world') { var wb = h('button', { type: 'button', className: 'btn', text: '+ New location or item' }); wb.onclick = function () { GEH.worldNew(); }; side.appendChild(wb); }
     if (tab === 'reg') {
       var rb = h('button', { type: 'button', className: 'btn', text: '+ New entry' }); rb.onclick = newEntry; side.appendChild(rb);
       if (chars.length) {
@@ -2106,7 +2162,7 @@
     }
     listFor(tab).forEach(function (it) {
       var b = h('button', { type: 'button', className: 'adm-row', 'aria-current': String(it.id === cur) }, [h('b', { text: (tab === 'story' ? it.title : it.name) || (tab === 'story' ? 'Untitled chapter' : 'Unnamed') }),
-        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : tab === 'story' ? (it.locked ? 'Locked' : 'Open to players') : tab === 'reg' ? regLabel(it) : 'Key ' + it.key })]);
+        h('small', { text: tab === 'inbox' ? (it.spam ? 'Flagged as spam · ' : '') + new Date(it.at).toLocaleString() : tab === 'story' ? (it.locked ? 'Locked' : 'Open to players') : tab === 'reg' ? regLabel(it) : tab === 'world' ? (it.isNew ? 'Unsaved · ' : '') + (it.kind === 'item' ? 'Item' : 'Location') + (it.category ? ' · ' + it.category : '') : 'Key ' + it.key })]);
       b.onclick = function () { cur = it.id; render(); };
       side.appendChild(b);
     });
@@ -2114,8 +2170,8 @@
   function renderMain() {
     main.textContent = '';
     var list = listFor(tab), it = list.filter(function (x) { return x.id === cur; })[0];
-    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : tab === 'story' ? 'No chapters yet. Add one on the left.' : tab === 'reg' ? 'Nothing registered yet. Add an entry on the left.' : 'No accepted characters yet.') })); return; }
-    (tab === 'inbox' ? inboxView(it) : tab === 'story' ? storyEditor(it) : tab === 'reg' ? regEditor(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
+    if (!it) { main.appendChild(h('p', { className: 'adm-empty', text: list.length ? 'Pick one on the left.' : (tab === 'inbox' ? 'No sheets yet.' : tab === 'story' ? 'No chapters yet. Add one on the left.' : tab === 'reg' ? 'Nothing registered yet. Add an entry on the left.' : tab === 'world' ? 'No locations or items yet. Add one on the left.' : 'No accepted characters yet.') })); return; }
+    (tab === 'inbox' ? inboxView(it) : tab === 'story' ? storyEditor(it) : tab === 'reg' ? regEditor(it) : tab === 'world' ? GEH.worldEditor(it) : editor(it)).forEach(function (n) { if (n) main.appendChild(n); });
   }
   function pick() { var list = listFor(tab); if (!list.some(function (x) { return x.id === cur; })) cur = list.length ? list[0].id : null; render(); }
   function render() { renderSide(); renderMain(); }
@@ -2129,6 +2185,7 @@
       }
       msg.textContent = ''; $('adm-pass').value = '';
       inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; reg = (rl.ok && rl.j.entries) || []; regTpl = (rl.ok && rl.j.template) || null; pick();
+      GEH.worldLoad().then(function () { if (tab === 'world') render(); else renderSide(); });
       if (!b.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load saved characters: ' + (b.j.error || '') }), main.firstChild);
       if (!rl.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load the registry: ' + (rl.j.error || '') }), main.firstChild);
       if (!sl.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load the storyline: ' + (sl.j.error || '') }), main.firstChild);
@@ -2144,7 +2201,7 @@
     pm.textContent = 'Checking…';
     fetch('/.netlify/functions/player', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k }) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
-      .then(function (r) { if (!r.ok) { pm.textContent = r.j.error || 'Could not log in.'; return; } pm.textContent = ''; $('pl-key').value = ''; pchar = r.j.char; profile(pchar); show('player'); })
+      .then(function (r) { if (!r.ok) { pm.textContent = r.j.error || 'Could not log in.'; return; } pm.textContent = ''; $('pl-key').value = ''; pkey = k; pchar = r.j.char; profile(pchar); show('player'); })
       .catch(function () { pm.textContent = 'Could not reach the server.'; });
   }
 
@@ -2155,8 +2212,19 @@
   $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
   $('pl-key').addEventListener('keydown', function (e) { if (e.key === 'Enter') playerLogin(); });
   $('adm-refresh').addEventListener('click', load);
-  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; inbox = []; chars = []; story = []; reg = []; cur = null; show('login'); msg.textContent = 'Logged out.'; });
+  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; pkey = ''; inbox = []; chars = []; story = []; reg = []; GEH.worldList.length = 0; cur = null; show('login'); msg.textContent = 'Logged out.'; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
+  function reloadChar() {
+    if (!pkey) return;
+    fetch('/.netlify/functions/player', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: pkey }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) { if (r.ok && r.j.char) { pchar = r.j.char; profile(pchar); } }).catch(function () {});
+  }
+  // The bridge hub.js (Map, Marketplace, Chat, Notebook, World) uses.
+  window.GEH = { h: h, two: two, cropper: cropper, creds: function () { return creds; }, pkey: function () { return pkey; }, pchar: function () { return pchar; },
+    chars: function () { return chars; }, reg: function () { return reg; }, story: function () { return story; }, reloadChar: reloadChar,
+    render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null };
 })();
 </script>
+<script src="hub.js"></script>
 </body></html>
