@@ -1820,8 +1820,8 @@
     wrap.appendChild(b); return wrap;
   }
   function sec(t, kids) { return h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: t })].concat(kids)); }
-  function profile(c) {
-    pv.textContent = '';
+  function profile(c, into, ro) {
+    var host = into || pv; host.textContent = '';
     // Buffs and debuffs sit on top of the saved sheet. The base numbers are never changed, so ending an effect puts everything back.
     c = JSON.parse(JSON.stringify(c)); var fxl = Array.isArray(c.buffs) ? c.buffs : [];
     function fxSum(k) { return fxl.reduce(function (a, x) { return a + (x.stat === k ? Number(x.amt) || 0 : 0); }, 0); }
@@ -1884,7 +1884,18 @@
 
     var inv = c.items || [];
     w.appendChild(sec('Inventory', inv.length ? inv.map(function (it) { return h('div', { className: 'pv-item' }, [h('b', { text: it.name }), h('span', { className: 'mono', text: 'x' + it.qty }), it.desc && h('p', { text: it.desc })]); }) : [h('p', { className: 'adm-empty', text: 'Nothing here yet. The headmaster adds items as you earn them.' })]));
-    pv.appendChild(w);
+    if (ro) {
+      // Headmaster's read-only view of a soul's sheet: same layout, but no dice and no roll buttons (nothing is logged).
+      Array.prototype.forEach.call(w.querySelectorAll('.pv-sec'), function (sc) { var t = sc.firstChild; if (t && t.textContent === 'Dice') sc.remove(); });
+      Array.prototype.forEach.call(w.querySelectorAll('button'), function (b) {
+        var t = b.textContent;
+        if (!/^Roll /.test(t)) return;
+        if (b.closest('.stbox')) { b.remove(); return; }
+        var m = /^Roll initiative \((.*)\)$/.exec(t), sp = h('span', { className: 'mono', text: m ? 'Initiative ' + (m[1] || '+0') : t.replace(/^Roll /, '') });
+        b.replaceWith(sp);
+      });
+    }
+    host.appendChild(w);
   }
 
   /* ---------- Storyline editor ---------- */
@@ -2232,6 +2243,7 @@
   window.GEH = { h: h, two: two, cropper: cropper, creds: function () { return creds; }, pkey: function () { return pkey; }, pchar: function () { return pchar; },
     chars: function () { return chars; }, reg: function () { return reg; }, story: function () { return story; }, reloadChar: reloadChar,
     reloadChars: function () { return api({ action: 'chars' }).then(function (r) { if (r.ok && r.j.chars) { chars = r.j.chars; pick(); } }); },
+    sheetInto: function (c, el) { profile(c, el, true); },
     render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null,
     dice: { dice: dice, plain: plain, sgn: sgn, tumble: tumble, modOf: modOf } };
 })();

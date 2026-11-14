@@ -178,3 +178,21 @@
 .mk-sell { display: grid; gap: 0.6rem; }
 .dl-tbl .link { white-space: nowrap; }
 .hb-wrap .ef input.ni { width: 5rem; flex: 0 0 5rem; }
+
+/* headmaster: Effects and Items (portraits left, details right) */
+.hb-wrap.dm-split { max-width: 100rem; display: grid; grid-template-columns: minmax(22rem, 28rem) minmax(0, 1fr); gap: 1.6rem; align-items: start; }
+.dm-left, .dm-right, .dm-col { display: grid; gap: 0.9rem; min-width: 0; align-content: start; }
+.dm-right { position: sticky; top: 0.6rem; }
+.cp-row { display: flex; flex-wrap: wrap; gap: 0.8rem 1rem; }
+.cp-item { background: none; border: 0; padding: 0; cursor: pointer; display: grid; gap: 0.35rem; justify-items: center; width: 8.6rem; color: var(--fg); font: inherit; }
+.cp-img { width: 8.6rem; height: 10.4rem; object-fit: cover; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; font: 700 2.6rem var(--f-body); }
+.cp-name { font: 700 1.05rem var(--f-body); padding-bottom: 0.15rem; border-bottom: 3px solid transparent; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-item[aria-pressed="true"] .cp-name { border-bottom-color: var(--red); }
+.cp-item[aria-pressed="true"] .cp-img { border-color: var(--red); }
+.cp-item:hover .cp-img { border-color: var(--red-hi); }
+.il-h { font: 700 1.5rem var(--f-body); margin: 0; }
+.il-list { margin: 0; padding-left: 1.6rem; display: grid; gap: 0.9rem; }
+.il-list li::marker { font-weight: 700; }
+.il-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: 1.1rem; }
+.il-act { margin-top: 0.5rem; }
+.dm-sheet .pv { max-width: 52rem; }

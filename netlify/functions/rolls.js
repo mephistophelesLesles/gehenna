@@ -1,5 +1,5 @@
 // Dice log: every soul's rolls are saved as they happen and everyone can read them (newest first). The headmaster's rolls for NPCs and
-// monsters are saved too but only she sees them. The headmaster can delete one roll, one soul's rolls, old rolls, or everything.
+// monsters are saved too and everyone sees them (full transparency). The headmaster can delete one roll, one soul's rolls, old rolls, or everything.
 // Speed notes: the store reads fresh data (no stale cache), the player's name is saved with each roll so the list
 // needs no extra lookups, and a tiny "rev" marker lets the page ask "anything new?" with a single cheap read.
 const { getStore, connectLambda } = require('@netlify/blobs');
@@ -54,8 +54,8 @@ exports.handler = async (event) => {
     const rev = (await rs.get('_rev')) || '';
     if (b.rev && b.rev === rev) return reply(200, { same: true, rev });
 
-    // Everyone sees every soul's rolls. Only the headmaster also gets the NPC/monster rolls (kept under 'hm') and the ids needed to delete.
-    const ids = (await rs.list()).blobs.map((x) => x.key).filter((k) => k !== '_rev' && (u.admin || k !== 'hm'));
+    // Everyone sees every roll, including the headmaster's NPC/monster rolls (kept under 'hm'). Only the headmaster gets the ids needed to delete.
+    const ids = (await rs.list()).blobs.map((x) => x.key).filter((k) => k !== '_rev');
     const parts = await Promise.all(ids.map(async (id) => {
       const list = (await rs.get(id, { type: 'json' })) || [];
       // Rolls saved before names were stored: look the name up once for this soul.

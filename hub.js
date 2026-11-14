@@ -526,6 +526,22 @@
     return { enter: function () { msg = ''; enter(); }, reset: reset };
   })();
 
+  /* ======================= headmaster: pick a soul by portrait (Effects and Items share the choice) ======================= */
+  var pickedId = '';
+  function pickedChar(cs) { var c = cs.filter(function (x) { return x.id === pickedId; })[0] || cs[0]; pickedId = c ? c.id : ''; return c; }
+  function charPicker(cs, onPick) {
+    var row = h('div', { className: 'cp-row', role: 'group', 'aria-label': 'Choose a soul' });
+    cs.forEach(function (c) {
+      var b = h('button', { type: 'button', className: 'cp-item', title: c.name, 'aria-pressed': String(c.id === pickedId), 'data-id': c.id }, [
+        c.image ? h('img', { className: 'cp-img', src: c.image, alt: '' }) : h('span', { className: 'cp-img cp-none', text: (c.name || '?').charAt(0).toUpperCase() }),
+        h('span', { className: 'cp-name', text: c.name || 'Unnamed' })]);
+      b.onclick = function () { onPick(c.id); };
+      row.appendChild(b);
+    });
+    return row;
+  }
+  function markPicker(row, id) { pickedId = id; Array.prototype.forEach.call(row.children, function (n) { n.setAttribute('aria-pressed', String(n.getAttribute('data-id') === id)); }); }
+
   /* ======================= ITEMS (players: inventory and selling; headmaster: quick tools) ======================= */
   modules.items = (function () {
     var root = $('pane-items'), msg = '', err = false;
@@ -620,19 +636,30 @@
       var nm = h('input', { placeholder: 'Item name', 'aria-label': 'Item name' }); nm.setAttribute('list', 'it-names');
       var dl = h('datalist', { id: 'it-names' }, G.worldList.filter(function (e) { return e.kind === 'item'; }).map(function (e) { return h('option', { value: e.name }); }));
       var qty = h('input', { type: 'number', min: 1, value: 1, className: 'ni', 'aria-label': 'Quantity' });
-      // Full view of what the chosen character carries, plus an overview of everyone.
-      var inv = h('div', { className: 'mk-detail' }), everyone = h('div', { className: 'mk-detail' }), showAll = false;
+      // Right side: the long list of what the chosen soul carries, with Remove or Trade on each item. Left side: portraits and quick tools.
+      var inv = h('div', { className: 'mk-detail il' }), everyone = h('div', { className: 'mk-detail' }), showAll = false, pk;
+      pickedChar(cs); who.value = pickedId;
       function drawInv() {
-        clear(inv); var c = G.chars().filter(function (x) { return x.id === who.value; })[0];
+        clear(inv); var c = G.chars().filter(function (x) { return x.id === pickedId; })[0];
+        inv.appendChild(h('h3', { className: 'il-h', text: 'List of items' }));
         if (!c) { inv.appendChild(note('Pick a character.')); return; }
         var items = c.items || [], total = 0; items.forEach(function (x) { total += Number(x.qty) || 0; });
-        inv.appendChild(h('p', { className: 'mono red', text: 'Inventory: ' + c.name }));
-        inv.appendChild(h('p', { className: 'mk-tot', text: items.length ? total + ' item' + (total === 1 ? '' : 's') + ' (' + items.length + ' kind' + (items.length === 1 ? '' : 's') + ')' : 'Nothing carried yet' }));
-        inv.appendChild(h('p', { className: 'mono hb-note', text: 'Karma ' + money(parseInt(String(c.karma || '0').replace(/,/g, ''), 10) || 0) + (c.debt ? ' · Debt -' + money(c.debt) : '') }));
+        inv.appendChild(h('p', { className: 'mono hb-note', text: c.name + ' · ' + (items.length ? total + ' item' + (total === 1 ? '' : 's') + ' (' + items.length + ' kind' + (items.length === 1 ? '' : 's') + ')' : 'nothing carried yet') + ' · Karma ' + money(parseInt(String(c.karma || '0').replace(/,/g, ''), 10) || 0) + (c.debt ? ' · Debt -' + money(c.debt) : '') }));
+        var ol = h('ol', { className: 'il-list' });
         items.forEach(function (x) {
-          inv.appendChild(h('div', { className: 'ef' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: 'x' + x.qty })]));
-          if (x.desc) inv.appendChild(h('p', { className: 'pre hb-note', text: x.desc }));
+          var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many' });
+          var rm = h('button', { type: 'button', className: 'btn', text: 'Remove' });
+          G.two(rm, 'Remove', function () { act('hm_takeitem', { id: c.id, name: x.name, qty: q.value }); });
+          var tos = h('select', { 'aria-label': 'Trade to' }, cs.filter(function (o) { return o.id !== c.id; }).map(function (o) { return h('option', { value: o.id, text: o.name }); }));
+          var gv = h('button', { type: 'button', className: 'btn', text: 'Give' });
+          G.two(gv, 'Give', function () { if (tos.value) act('hm_giveitem', { id: c.id, name: x.name, qty: q.value, to: tos.value }); });
+          var panel = h('div', { className: 'ef il-act' }, [q, rm, 'or give to', tos, gv]); panel.hidden = true;
+          var tg = h('button', { type: 'button', className: 'link il-link', text: 'Remove or Trade', 'aria-expanded': 'false' });
+          tg.onclick = function () { panel.hidden = !panel.hidden; tg.setAttribute('aria-expanded', String(!panel.hidden)); };
+          var li = h('li', {}, [h('div', { className: 'il-line' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: '×' + x.qty }), '(', tg, ')']), x.desc ? h('p', { className: 'pre hb-note', text: x.desc }) : null, panel]);
+          ol.appendChild(li);
         });
+        if (!items.length) inv.appendChild(note('Nothing carried yet.')); else inv.appendChild(ol);
       }
       function drawEveryone() {
         clear(everyone); var tg = h('button', { type: 'button', className: 'btn', text: showAll ? 'Hide everyone’s items' : 'Show everyone’s items' }); tg.onclick = function () { showAll = !showAll; drawEveryone(); };
@@ -642,21 +669,27 @@
           everyone.appendChild(h('div', { className: 'ef' }, [h('b', { text: c.name }), h('span', { className: 'mono', text: items.length ? items.map(function (x) { return x.name + ' x' + x.qty; }).join(', ') : 'nothing' })]));
         });
       }
-      who.onchange = drawInv; drawInv(); drawEveryone();
-      function go(action, extra) {
+      function choose(id) { markPicker(pk, id); who.value = id; drawInv(); }
+      pk = charPicker(cs, choose);
+      who.onchange = function () { choose(who.value); }; drawInv(); drawEveryone();
+      function act(action, extra) {
         out.className = 'mono hb-note'; out.textContent = 'Working…';
-        call('market', Object.assign({ action: action, id: who.value, name: nm.value, qty: qty.value }, extra || {})).then(function (r) {
+        call('market', Object.assign({ action: action }, extra)).then(function (r) {
           out.textContent = r.ok ? r.j.message : (r.j.error || 'Failed.'); if (!r.ok) out.className = 'mono hb-note bad'; else if (G.reloadChars) G.reloadChars().then(function () { drawInv(); drawEveryone(); });
         });
       }
+      function go(action, extra) {
+        act(action, Object.assign({ id: who.value, name: nm.value, qty: qty.value }, extra || {}));
+      }
       function btn(t, fn, confirm) { var b = h('button', { type: 'button', className: 'btn' + (confirm ? '' : ' primary'), text: t }); if (confirm) G.two(b, t, fn); else b.onclick = fn; return b; }
-      root.appendChild(h('div', { className: 'hb-wrap' }, [note('Quick tools: change a character without opening their sheet. Negative karma turns into debt by itself.'), h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Character' }), who]),
+      var left = h('div', { className: 'dm-left' }, [pk, note('Quick tools: change a character without opening their sheet. Negative karma turns into debt by itself.'), h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Character' }), who]),
         h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Karma' }), h('div', { className: 'ef' }, [amt, btn('Add karma (use a minus to take it)', function () { go('hm_karma', { amount: amt.value }); })])]),
         h('div', { className: 'mk-detail' }, [h('p', { className: 'mono red', text: 'Items' }), h('div', { className: 'ef' }, [nm, dl, 'x', qty]),
           h('div', { className: 'ef' }, [btn('Add item', function () { go('hm_additem'); }), btn('Take item', function () { go('hm_takeitem'); }, true), to, btn('Give item to them', function () { go('hm_giveitem', { to: to.value }); }, true)]),
-          note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), out, inv, everyone]));
+          note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), everyone]);
+      root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [left, h('div', { className: 'dm-right' }, [out, inv])]));
     }
-    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) tools(); else mine(); }, reset: reset };
+    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) { (G.reloadChars ? G.reloadChars() : Promise.resolve()).then(tools); } else mine(); }, reset: reset };
   })();
 
   /* ======================= ROLL FOR AN NPC OR MONSTER ======================= */
@@ -717,7 +750,7 @@
     var rb = h('button', { type: 'button', className: 'btn primary', text: 'Roll' }); rb.onclick = function () { free(Math.max(1, Math.min(20, Math.floor(+cnt.value) || 1)), +die.value, Math.floor(+mod.value) || 0); };
     var quick = h('div', { className: 'ef' }, [4, 6, 8, 10, 12, 20, 100].map(function (n) { var q = h('button', { type: 'button', className: 'btn', text: 'd' + n }); q.onclick = function () { free(1, n, 0); }; return q; }));
     var sec3 = h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: 'Dice' }), quick, h('div', { className: 'ef' }, [cnt, 'x', die, '+', mod, rb]), hist]);
-    return h('div', { className: 'pv nr' }, [note('Rolling as ' + e.name + '. Every roll is saved to the dice log under this name, and players do not see it.'), sec1, sec2, sec3]);
+    return h('div', { className: 'pv nr' }, [note('Rolling as ' + e.name + '. Every roll is saved to the dice log under this name, and everyone can see it.'), sec1, sec2, sec3]);
   }
 
   /* ======================= DICE LOG ======================= */
@@ -787,14 +820,16 @@
     var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], targets = {};
     function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; targets = {}; msg = ''; }
     function enter() {
-      call('effects', { action: 'list' }).then(function (r) {
+      var fresh = G.reloadChars ? G.reloadChars() : Promise.resolve();
+      Promise.all([fresh, call('effects', { action: 'list' })]).then(function (rs) {
+        var r = rs[1];
         if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the effects.')); return; }
         data = r.j; draw();
       });
     }
     function act(body) { call('effects', body).then(function (r) { err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) data = r.j; draw(); }); }
     function draw() {
-      clear(root); var wrap = h('div', { className: 'hb-wrap' });
+      clear(root); var wrap = h('div', { className: 'dm-col' });
       wrap.appendChild(note('Buffs and debuffs change a soul’s stats on their sheet by themselves (the modifiers, saves and damage bonuses recalculate). The base stats are never touched, so ending an effect puts everything back.'));
       if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
 
@@ -843,7 +878,12 @@
       };
       ap.appendChild(go);
       wrap.appendChild(ap);
-      root.appendChild(wrap);
+      // Portraits on the left pick whose sheet shows on the right (read-only), so skills, stats and effects are one glance away.
+      var cs = data.chars.map(function (d) { var full = G.chars().filter(function (x) { return x.id === d.id; })[0]; return full ? Object.assign({}, full, { buffs: d.buffs }) : null; }).filter(Boolean);
+      var host = h('div', { className: 'dm-sheet' }), pk;
+      function show() { clear(host); var c = cs.filter(function (x) { return x.id === pickedId; })[0]; if (!c) { host.appendChild(note('No saved characters yet.')); return; } G.sheetInto(c, host); }
+      pickedChar(cs); pk = charPicker(cs, function (id) { markPicker(pk, id); show(); }); show();
+      root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [h('div', { className: 'dm-left' }, [pk, wrap]), h('div', { className: 'dm-right' }, [host])]));
     }
     return { enter: function () { msg = ''; enter(); }, reset: reset };
   })();
