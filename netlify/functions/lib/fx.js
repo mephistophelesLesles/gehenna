@@ -25,4 +25,28 @@ function addBuffs(c, source, fx, group) {
   });
   return n;
 }
-module.exports = { FXSTATS, cleanFx, addBuffs, label, signed };
+
+// Dice an item rolls when it is used (heal, damage and so on), written like a skill's effects: { type, n, d, flat, stat, note }.
+const ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
+function cleanDice(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 10).map((e) => {
+    e = e || {};
+    return { type: TYPES.includes(e.type) ? e.type : 'Other', n: N(e.n, 0, 50), d: N(e.d, 0, 1000), flat: N(e.flat, -999, 999), stat: ST.includes(e.stat) ? e.stat : '', note: S(e.note, 120).trim() };
+  }).filter((e) => e.n > 0 || e.flat !== 0);
+}
+// A stat's modifier as it is right now (saved score plus live buffs). Same formula as the sheet: floor((score - 8) / 2), never below 0.
+function effMod(c, k) {
+  let sc = Number(((c.stats || {})[k] || {}).score) || 0;
+  (Array.isArray(c.buffs) ? c.buffs : []).forEach((b) => { if (b.stat === k) sc += Number(b.amt) || 0; });
+  return Math.max(0, Math.floor((Math.max(0, sc) - 8) / 2));
+}
+const diceName = (e) => e.type + ' ' + e.n + 'd' + e.d + (e.stat ? ' + ' + e.stat : '') + (e.flat ? (e.flat > 0 ? ' + ' : ' - ') + Math.abs(e.flat) : '') + (e.note ? ' (' + e.note + ')' : '');
+// Rolls each effect on the server, so nobody can fake it. Returns [{label, txt}].
+function rollDice(list, c, source) {
+  return (Array.isArray(list) ? list : []).map((e) => {
+    const m = (e.stat ? effMod(c, e.stat) : 0) + (Number(e.flat) || 0), vals = [];
+    let t = m; for (let i = 0; i < e.n; i++) { const v = crypto.randomInt(1, Math.max(1, e.d) + 1); vals.push(v); t += v; }
+    return { label: source + ' ' + diceName(e), txt: '[' + vals.join(', ') + ']' + (m ? (m > 0 ? ' + ' : ' - ') + Math.abs(m) : '') + ' = ' + t };
+  });
+}
+module.exports = { FXSTATS, cleanFx, addBuffs, label, signed, cleanDice, diceName, rollDice, effMod };

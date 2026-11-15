@@ -359,6 +359,22 @@
   .pv-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.6rem 1rem; }
   .pv-vitals span { display: block; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-hi); }
   .pv-vitals b { font-weight: 600; font-size: 1.05rem; }
+  /* HP / EXP / Speed / Initiative block (same look for the headmaster and the players) */
+  .pv-vit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem 1rem; align-items: start; padding: 0.9rem 1rem; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+  .pv-lv { display: grid; gap: 0.15rem; justify-items: start; } .pv-lv .mono { color: var(--red-hi); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; } .pv-lv b { font-weight: 600; }
+  .pv-vgrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 0.7rem 1.2rem; min-width: 0; }
+  .vt { display: grid; gap: 0.25rem; align-content: start; min-width: 0; }
+  .vt-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .vt-h .vt-l { color: var(--fg); } .vt-h .vt-v { font-size: 1rem; letter-spacing: 0; font-weight: 600; }
+  .vt-ed { background: none; border: 0; padding: 0; color: var(--red-hi); font-family: var(--f-mono); font-size: 0.7rem; text-transform: lowercase; letter-spacing: 0.04em; text-decoration: underline; cursor: pointer; }
+  .vt-bar { height: 3px; background: color-mix(in srgb, var(--fg) 14%, transparent); } .vt-bar i { display: block; height: 100%; transition: width 0.4s; }
+  .vt-hp i { background: #2f6df0; } .vt-xp i { background: #2fb344; }
+  .vt-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; } .vt-form input { width: 4.2rem; padding: 0.3rem 0.4rem; } .vt-form .btn { padding: 0.3rem 0.6rem; }
+  .vt.xp { grid-column: 1 / -1; }
+  .pv-vit > .btn { grid-column: 1 / -1; justify-self: start; }
+  .pv .g6 { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.4rem; }
+  .pv .stbox { padding: 0.5rem; min-width: 0; } .pv .stbox .big { font-size: 1.5rem; } .pv .stbox .btn { padding: 0.4rem 0.2rem; }
+  @media (max-width: 40rem) { .pv .g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .pv-vgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .vt.hp { grid-column: 1 / -1; } }
   .pv-top[hidden] { display: none; }
   .pv .portrait { border: 1px solid var(--red); box-shadow: 8px 8px 0 color-mix(in srgb, var(--red) 40%, transparent); }
   .pv-dl { margin: 0; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); align-content: start; }
@@ -1649,6 +1665,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
+  var editing = false, liveRev = '', liveT = null, adminT = null, adminRevs = {}, busyLive = false;
   var creds = null, inbox = [], chars = [], story = [], reg = [], regTpl = null, tab = 'inbox', cur = null, pchar = null, pkey = '';
   var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
   // Stat modifier: the D&D steps (one point per two points of score), moved so that a score of 10 gives +1, and never below 0.
@@ -1821,18 +1838,25 @@
   }
   function sec(t, kids) { return h('section', { className: 'pv-sec' }, [h('p', { className: 'mono red', text: t })].concat(kids)); }
   function profile(c, into, ro) {
-    var host = into || pv; host.textContent = '';
+    var host = into || pv;
+    // Keep what the viewer was doing (personal details open, last rolls, scroll position) when the sheet redraws itself after a live update.
+    var keep = host._keep = host._keep || { open: false, hist: [] }, sc0 = [];
+    for (var pe = host; pe; pe = pe.parentElement) if (pe.scrollHeight > pe.clientHeight + 1) sc0.push([pe, pe.scrollTop]);
+    var wy = window.scrollY; host.textContent = '';
+    var canEdit = !!creds, isHm = !!creds, srcChar = c;
     // Buffs and debuffs sit on top of the saved sheet. The base numbers are never changed, so ending an effect puts everything back.
     c = JSON.parse(JSON.stringify(c)); var fxl = Array.isArray(c.buffs) ? c.buffs : [];
     function fxSum(k) { return fxl.reduce(function (a, x) { return a + (x.stat === k ? Number(x.amt) || 0 : 0); }, 0); }
     ST.forEach(function (k) { c.stats[k] = c.stats[k] || { score: 0, mod: 0 }; c.stats[k].base = c.stats[k].score; c.stats[k].score = Math.max(0, c.stats[k].score + fxSum(k)); c.stats[k].mod = modOf(c.stats[k].score); });
+    var hpNowRaw = c.hpNow, expRaw = Number(c.exp) || 0, expMaxRaw = Number(c.expMax) || 100;
     c.hp = (Number(c.hp) || 0) + fxSum('HP'); c.armor = (Number(c.armor) || 0) + fxSum('Armor'); c.speed = (Number(c.speed) || 0) + fxSum('Speed');
     var w = h('div', { className: 'pv' });
     var hist = h('div', { className: 'hist' });
     var adv = h('select', {}, [['n', 'Normal'], ['a', 'Advantage'], ['d', 'Disadvantage']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
     var rollQ = Promise.resolve();
     function sendRoll(body) { return fetch('/.netlify/functions/rolls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body }).then(function (r) { if (!r.ok) throw new Error('x'); }); }
-    function logRoll(label, line, cls) { if (pkey) { var body = JSON.stringify({ key: pkey, action: 'add', label: label, txt: line, cls: cls || '' }); rollQ = rollQ.then(function () { return sendRoll(body).catch(function () { return sendRoll(body); }); }).catch(function () {}); } hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
+    keep.hist.forEach(function (x) { hist.appendChild(h('p', { className: 'mono ' + (x[2] || ''), text: x[0] + ': ' + x[1] })); });
+    function logRoll(label, line, cls) { keep.hist.unshift([label, line, cls || '']); keep.hist.length = Math.min(keep.hist.length, 8); if (pkey) { var body = JSON.stringify({ key: pkey, action: 'add', label: label, txt: line, cls: cls || '' }); rollQ = rollQ.then(function () { return sendRoll(body).catch(function () { return sendRoll(body); }); }).catch(function () {}); } hist.insertBefore(h('p', { className: 'mono ' + (cls || ''), text: label + ': ' + line }), hist.firstChild); while (hist.children.length > 8) hist.removeChild(hist.lastChild); }
     function d20(m) {
       var a = dice(1, 20)[0], b = adv.value === 'n' ? null : dice(1, 20)[0], pk = b === null ? a : (adv.value === 'a' ? Math.max(a, b) : Math.min(a, b));
       return { vals: b === null ? [a] : [a, b], d: 20, txt: (b === null ? '[' + a + ']' : '[' + a + ', ' + b + '] keep ' + pk) + sgn(m) + ' = ' + (pk + m), cls: pk === 20 ? 'nat20' : pk === 1 ? 'nat1' : '' };
@@ -1840,19 +1864,54 @@
     w.appendChild(h('div', { className: 'pv-hero' }, [h('div', { className: 'pv-sun', 'aria-hidden': 'true' }), h('div', { className: 'pv-kanji', 'aria-hidden': 'true', text: '魂' }),
       h('div', { className: 'pv-id' }, [h('p', { className: 'mono', text: 'A soul on trial' }), h('h2', { text: c.name }), h('p', { className: 'mono', text: 'Level ' + (c.level || 1) }), c.dates && h('p', { className: 'mono', text: c.dates })])]));
     var init = (c.initiative != null ? c.initiative : ((c.stats.DEX && c.stats.DEX.mod) || 0)) + fxSum('Initiative');
-    var vit = [['Level', String(c.level || 1)], ['HP / Armor / Speed', c.hp + ' / ' + (c.armor || 0) + ' / ' + c.speed + ' ft'], ['Initiative', sgn(init)], ['Size', c.size]]
-      .filter(function (p) { return p[1] && String(p[1]).trim(); });
     var det = [['Gender', c.gender], ['Languages', c.languages], ['Persona', c.persona], ['Destiny', c.destiny], ['Karma', c.karma], ['Appearance', c.appearance], ['Core item', c.itemName + (c.itemDesc ? ' - ' + c.itemDesc : '')], ['Quirks', String(c.quirk || '').split('\n').filter(Boolean).join(', ')]]
       .filter(function (p) { return p[1] && p[1].trim(); }).map(function (p) { return h('div', {}, [h('dt', { text: p[0] }), (p[1].length > 220 || p[1].split('\n').length > 4) ? h('dd', {}, [fold(p[1], '', 220)]) : h('dd', { text: p[1] })]); });
     var body = h('div', { className: 'pv-top' }, [c.image && h('img', { src: c.image, className: 'portrait', alt: '' }), h('dl', { className: 'pv-dl' }, det)]);
-    body.hidden = true;
-    var tg = h('button', { type: 'button', className: 'btn', text: 'Show personal details', 'aria-expanded': 'false' });
-    tg.onclick = function () { body.hidden = !body.hidden; tg.textContent = body.hidden ? 'Show personal details' : 'Hide personal details'; tg.setAttribute('aria-expanded', String(!body.hidden)); };
-    w.appendChild(h('div', { className: 'pv-compact' }, [c.image && h('img', { src: c.image, className: 'pv-thumb', alt: '' }), h('div', { className: 'pv-vitals' }, vit.map(function (p) { return h('div', {}, [h('span', { className: 'mono', text: p[0] }), h('b', { text: p[1] })]); })), det.length ? tg : null]));
+    body.hidden = !keep.open;
+    var tg = h('button', { type: 'button', className: 'btn', text: keep.open ? 'Hide personal details' : 'Show personal details', 'aria-expanded': String(keep.open) });
+    tg.onclick = function () { body.hidden = !body.hidden; keep.open = !body.hidden; tg.textContent = body.hidden ? 'Show personal details' : 'Hide personal details'; tg.setAttribute('aria-expanded', String(!body.hidden)); };
+
+    /* ---- vitals: HP, EXP, speed, initiative. Headmaster edits all of it; a player edits only their current HP. Saved live. ---- */
+    var hpNow = hpNowRaw == null ? c.hp : Math.max(0, Math.min(Number(hpNowRaw) || 0, c.hp));
+    function pct(a, m) { return Math.max(0, Math.min(100, m > 0 ? (a / m) * 100 : 0)); }
+    function sendVitals(patch, done) {
+      var body2 = Object.assign({ action: 'set' }, isHm ? { email: creds.email, password: creds.password, id: srcChar.id } : { key: pkey }, patch);
+      fetch('/.netlify/functions/vitals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body2) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (r) {
+          if (done) done();
+          if (!r.ok || !r.j.char) return;
+          if (isHm) { var ex = chars.filter(function (x) { return x.id === r.j.char.id; })[0]; if (ex) Object.assign(ex, r.j.char); profile(ex || r.j.char, host, ro); if (window.GEH && GEH.onSync) GEH.onSync(); }
+          else { pchar = r.j.char; liveRev = r.j.rev || liveRev; profile(pchar); }
+        }).catch(function () { if (done) done(); });
+    }
+    function field(cls, label, valText, bar, canEditThis, editor) {
+      var ed = canEditThis ? h('button', { type: 'button', className: 'vt-ed', text: '(edit)' }) : null;
+      var head = h('div', { className: 'vt-h mono' }, [ed, h('span', { className: 'vt-l', text: label }), h('span', { className: 'vt-v', text: valText })]);
+      var cell = h('div', { className: 'vt ' + cls }, [head, bar]);
+      if (ed) ed.onclick = function () {
+        editing = true; var f = h('div', { className: 'vt-form' }), save = h('button', { type: 'button', className: 'btn primary', text: 'Save' }), x = h('button', { type: 'button', className: 'btn', text: 'Cancel' });
+        var ins = editor(f); f.appendChild(save); f.appendChild(x); cell.replaceChild(f, head); if (bar) bar.hidden = true;
+        x.onclick = function () { editing = false; profile(srcChar, host, ro); };
+        save.onclick = function () { save.disabled = true; save.textContent = 'Saving…'; sendVitals(ins(), function () { editing = false; }); };
+      };
+      return cell;
+    }
+    function numIn(f, v, lo, hi, lab) { var i = h('input', { type: 'number', value: v, min: lo, max: hi, 'aria-label': lab }); f.appendChild(i); return i; }
+    var hpBar = h('div', { className: 'vt-bar vt-hp' }, [h('i', { style: 'width:' + pct(hpNow, c.hp) + '%' })]);
+    var hpCell = field('hp', 'HP', hpNow + '/' + c.hp, hpBar, canEdit, function (f) {
+      var a = numIn(f, hpNow, 0, 99999, 'Current HP'), m = isHm ? (f.appendChild(document.createTextNode('/')), numIn(f, c.hp, 0, 9999, 'Max HP')) : null;
+      return function () { var o = { hpNow: +a.value }; if (m) o.hp = (+m.value) - fxSum('HP'); return o; };
+    });
+    var spCell = field('sp', 'Speed', String(c.speed), null, isHm, function (f) { var a = numIn(f, c.speed, 0, 999, 'Speed'); return function () { return { speed: (+a.value) - fxSum('Speed') }; }; });
+    var inCell = field('in', 'Initiative', String(init), null, isHm, function (f) { var a = numIn(f, init, -99, 99, 'Initiative'); return function () { return { initiative: (+a.value) - fxSum('Initiative') }; }; });
+    var xpBar = h('div', { className: 'vt-bar vt-xp' }, [h('i', { style: 'width:' + pct(Math.min(expRaw, expMaxRaw), expMaxRaw) + '%' })]);
+    var xpCell = field('xp', 'EXP', Math.min(expRaw, expMaxRaw) + '/' + expMaxRaw, xpBar, isHm, function (f) { var a = numIn(f, expRaw, 0, 99999, 'EXP'), m = (f.appendChild(document.createTextNode('/')), numIn(f, expMaxRaw, 1, 99999, 'EXP needed')); return function () { return { exp: +a.value, expMax: +m.value }; }; });
+    w.appendChild(h('div', { className: 'pv-vit' }, [h('div', { className: 'pv-lv' }, [c.image && h('img', { src: c.image, className: 'pv-thumb', alt: '' }), h('span', { className: 'mono', text: 'Level' }), h('b', { text: String(c.level || 1) })]), h('div', { className: 'pv-vgrid' }, [hpCell, spCell, inCell, xpCell]), det.length ? tg : null]));
     w.appendChild(body);
 
     w.appendChild(sec('Stats and saving throws', [h('div', { className: 'g6' }, ST.map(function (k) {
-      var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll ' + k + ' save' });
+      var s = c.stats[k], res = h('small', { className: 'mono' }), b = h('button', { type: 'button', className: 'btn', text: 'Roll', 'aria-label': 'Roll ' + k + ' saving throw' });
       b.onclick = function () { var x = d20(s.mod); b.disabled = true; res.textContent = ''; tumble(x, k + ' save', function () { res.textContent = x.txt; res.className = 'mono ' + x.cls; logRoll(k + ' save', x.txt, x.cls); b.disabled = false; }); };
       return h('div', { className: 'stbox' }, [h('b', { text: k }), h('span', { className: 'big', text: String(s.score) }), h('small', { text: 'modifier ' + (s.mod >= 0 ? '+' : '') + s.mod }), s.base !== s.score ? h('small', { className: 'mono red', text: 'base ' + s.base + ', ' + (s.score > s.base ? '+' : '') + (s.score - s.base) + ' from effects' }) : null, b, res]);
     })), (function () {
@@ -1889,13 +1948,14 @@
       Array.prototype.forEach.call(w.querySelectorAll('.pv-sec'), function (sc) { var t = sc.firstChild; if (t && t.textContent === 'Dice') sc.remove(); });
       Array.prototype.forEach.call(w.querySelectorAll('button'), function (b) {
         var t = b.textContent;
-        if (!/^Roll /.test(t)) return;
+        if (!/^Roll( |$)/.test(t)) return;
         if (b.closest('.stbox')) { b.remove(); return; }
         var m = /^Roll initiative \((.*)\)$/.exec(t), sp = h('span', { className: 'mono', text: m ? 'Initiative ' + (m[1] || '+0') : t.replace(/^Roll /, '') });
         b.replaceWith(sp);
       });
     }
     host.appendChild(w);
+    sc0.forEach(function (x) { x[0].scrollTop = x[1]; }); window.scrollTo(window.scrollX, wy);
   }
 
   /* ---------- Storyline editor ---------- */
@@ -2202,7 +2262,7 @@
         if ((a.j.error || '').indexOf('Wrong') === 0) { creds = null; show('login'); msg.textContent = a.j.error; } else main.textContent = a.j.error || 'Something went wrong.';
         return;
       }
-      msg.textContent = ''; $('adm-pass').value = '';
+      msg.textContent = ''; $('adm-pass').value = ''; startAdminLive();
       inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; reg = (rl.ok && rl.j.entries) || []; regTpl = (rl.ok && rl.j.template) || null; pick();
       GEH.worldLoad().then(function () { if (tab === 'world') render(); else renderSide(); });
       if (!b.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load saved characters: ' + (b.j.error || '') }), main.firstChild);
@@ -2220,7 +2280,7 @@
     pm.textContent = 'Checking…';
     fetch('/.netlify/functions/player', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k }) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
-      .then(function (r) { if (!r.ok) { pm.textContent = r.j.error || 'Could not log in.'; return; } pm.textContent = ''; $('pl-key').value = ''; pkey = k; pchar = r.j.char; profile(pchar); show('player'); })
+      .then(function (r) { if (!r.ok) { pm.textContent = r.j.error || 'Could not log in.'; return; } pm.textContent = ''; $('pl-key').value = ''; pkey = k; pchar = r.j.char; profile(pchar); show('player'); startPlayerLive(); })
       .catch(function () { pm.textContent = 'Could not reach the server.'; });
   }
 
@@ -2231,8 +2291,40 @@
   $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
   $('pl-key').addEventListener('keydown', function (e) { if (e.key === 'Enter') playerLogin(); });
   $('adm-refresh').addEventListener('click', load);
-  $('adm-out').addEventListener('click', function () { creds = null; pchar = null; pkey = ''; inbox = []; chars = []; story = []; reg = []; GEH.worldList.length = 0; cur = null; show('login'); msg.textContent = 'Logged out.'; });
+  $('adm-out').addEventListener('click', function () { stopLive(); creds = null; pchar = null; pkey = ''; inbox = []; chars = []; story = []; reg = []; GEH.worldList.length = 0; cur = null; show('login'); msg.textContent = 'Logged out.'; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
+  /* ---------- live sync: the sheet follows the server within a second or two, no reload needed ---------- */
+  var VURL = '/.netlify/functions/vitals';
+  function vpost(body) { return fetch(VURL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); }); }
+  function stopLive() { clearInterval(liveT); clearInterval(adminT); liveT = adminT = null; liveRev = ''; adminRevs = {}; busyLive = false; editing = false; }
+  function startPlayerLive() {
+    stopLive();
+    liveT = setInterval(function () {
+      if (document.hidden || editing || busyLive || !pkey || adm.hidden || pv.hidden) return;
+      busyLive = true;
+      vpost({ key: pkey, action: 'poll', rev: liveRev }).then(function (r) {
+        busyLive = false;
+        if (!r.ok || r.j.same || !r.j.char) return;
+        var changed = JSON.stringify(r.j.char) !== JSON.stringify(pchar); liveRev = r.j.rev || ''; pchar = r.j.char; if (changed && !editing) profile(pchar);
+      }).catch(function () { busyLive = false; });
+    }, 1500);
+  }
+  function startAdminLive() {
+    stopLive();
+    adminT = setInterval(function () {
+      if (document.hidden || editing || busyLive || !creds || adm.hidden) return;
+      busyLive = true;
+      vpost(Object.assign({ action: 'snap' }, creds)).then(function (r) {
+        if (!r.ok || !r.j.revs) { busyLive = false; return; }
+        var revs = r.j.revs, first = !Object.keys(adminRevs).length;
+        var ids = Object.keys(revs).filter(function (id) { return !first && adminRevs[id] !== undefined && adminRevs[id] !== revs[id] && chars.some(function (x) { return x.id === id; }); });
+        adminRevs = revs;
+        return Promise.all(ids.map(function (id) { return vpost(Object.assign({ action: 'get', id: id }, creds)).then(function (g) { if (g.ok && g.j.char) { var ex = chars.filter(function (x) { return x.id === id; })[0]; if (ex) Object.assign(ex, g.j.char); return true; } return false; }); })).then(function (res) {
+          busyLive = false; if (res && res.some(Boolean) && !editing && window.GEH && GEH.onSync) GEH.onSync();
+        });
+      }).catch(function () { busyLive = false; });
+    }, 2000);
+  }
   function reloadChar() {
     if (!pkey) return;
     fetch('/.netlify/functions/player', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: pkey }) })
@@ -2244,7 +2336,7 @@
     chars: function () { return chars; }, reg: function () { return reg; }, story: function () { return story; }, reloadChar: reloadChar,
     reloadChars: function () { return api({ action: 'chars' }).then(function (r) { if (r.ok && r.j.chars) { chars = r.j.chars; pick(); } }); },
     sheetInto: function (c, el) { profile(c, el, true); },
-    render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null,
+    onSync: null, render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null,
     dice: { dice: dice, plain: plain, sgn: sgn, tumble: tumble, modOf: modOf } };
 })();
 </script>

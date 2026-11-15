@@ -22,6 +22,7 @@ function put(c, name, qty, desc) {
 }
 // Is it possible for this soul to hand over this side right now? Returns an error text, or ''.
 function lacks(c, s, who) {
+  if (s.name && ((c.items || []).find((x) => norm(x.name) === norm(s.name)) || {}).locked) return who === 'You' ? 'You locked ' + s.name + '. Unlock it first.' : who + ' has locked ' + s.name + '.';
   if (s.name && have(c, s.name) < s.qty) return who + ' do' + (who === 'You' ? '' : 'es') + ' not have ' + s.qty + ' × ' + s.name + '.';
   if (s.karma && karmaOf(c) < s.karma) return who + ' do' + (who === 'You' ? '' : 'es') + ' not have ' + money(s.karma) + ' karma to spare.';
   return '';

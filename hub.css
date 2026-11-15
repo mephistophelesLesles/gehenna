@@ -248,3 +248,134 @@
   .cht-compose .btn { padding: 0.55rem 0.7rem; }
   .cht-main > .hb-note { display: none; }
 }
+
+/* ---- item list: small square buttons ---- */
+.il-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.5rem; }
+.btn.sq { min-width: 3.6rem; padding: 0.35rem 0.6rem; font-size: 0.68rem; letter-spacing: 0.08em; }
+.btn.sq:disabled { opacity: 0.35; cursor: not-allowed; }
+.il-btns .ni { width: 3.6rem; padding: 0.35rem; }
+.il-list li.locked { opacity: 0.85; }
+.il-list li.locked .il-line b::before { content: '🔒 '; }
+.il-h { margin: 0 0 0.6rem; }
+.hb-wrap .ef input.ni { width: 5rem; flex: 0 0 5rem; }
+/* ---- map names ---- */
+.mp-names { margin-left: auto; }
+.mp-box.nonames .mp-lab { display: none; }
+@media (max-width: 40rem) { .mp-lab { font-size: 0.58rem; max-width: 4.5rem; } }
+.hb-wrap .il-btns input.ni { width: 3.6rem; flex: 0 0 3.6rem; }
+
+/* ---- Gacha ---- */
+.hb-note.bad { color: var(--red-hi); }
+.gc { display: grid; gap: 1rem; justify-items: center; }
+.gc > .mk-detail { justify-self: stretch; }
+.gc-machine { position: relative; width: min(100%, 15rem); filter: drop-shadow(0 0 26px color-mix(in srgb, var(--red) 38%, transparent)); }
+.gc-machine svg { display: block; width: 100%; height: auto; }
+.gc-machine.off { filter: grayscale(0.85) brightness(0.55); }
+.gc-knobbtn { position: absolute; left: 50%; top: 75.5%; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: none; border: 0; cursor: pointer; padding: 0; }
+.gc-knobbtn:hover::after, .gc-knobbtn:focus-visible::after { content: attr(title); position: absolute; left: 50%; bottom: 112%; transform: translateX(-50%); background: #000; color: #fff; font: 500 0.78rem var(--f-body); padding: 0.28rem 0.6rem; border-radius: 6px; white-space: nowrap; border: 1px solid var(--red); }
+.gc-knobbtn:disabled { cursor: not-allowed; }
+.gc-machine .knob { transform-origin: 120px 272px; }
+.gc-machine .ld { animation: gcLight 1.6s steps(2, end) infinite; }
+@keyframes gcLight { 50% { fill: #5a0a0e; } }
+.gc-machine.busy .knob { animation: gcSpin 0.9s linear infinite; }
+.gc-machine.busy .cp { animation: gcBob 0.28s ease-in-out infinite alternate; }
+.gc-machine .cp { transform-box: fill-box; transform-origin: center; }
+@keyframes gcSpin { to { transform: rotate(360deg); } }
+@keyframes gcBob { from { transform: translateY(-3px) rotate(-6deg); } to { transform: translateY(3px) rotate(6deg); } }
+.gc-btns { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; }
+.gc-pool { display: grid; gap: 0.4rem; }
+.gc-row { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto auto; gap: 0.6rem; align-items: center; padding: 0.35rem 0.5rem; border-left: 4px solid var(--rc, var(--line)); background: var(--bg); }
+.gc-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* rarity colours */
+.r-common { --rc: #8b8b8b; } .r-uncommon { --rc: #3fae7a; } .r-r { --rc: #4d8dff; } .r-sr { --rc: #c05cff; } .r-ssr { --rc: #ffd166; }
+
+/* ---- full-screen draw ---- */
+body.gc-lock { overflow: hidden; }
+.gc-ov { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: auto; background: radial-gradient(70% 60% at 50% 100%, color-mix(in srgb, var(--red) 30%, transparent), transparent 70%), #030202; animation: gcFade 0.25s ease-out; }
+@keyframes gcFade { from { opacity: 0; } }
+.gc-skip { position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 3; }
+.gc-stage { position: relative; width: 100%; min-height: 100%; display: grid; place-items: center; padding: 2rem 1rem 4rem; }
+
+/* capsule: drops, shakes, bursts. The glow colour hints at the best prize inside. */
+.gc-cap { position: relative; width: 8.5rem; height: 8.5rem; --hint: #ddd; }
+.r-uncommon .gc-cap { --hint: #3fae7a; } .r-r .gc-cap { --hint: #4d8dff; } .r-sr .gc-cap { --hint: #c05cff; } .r-ssr .gc-cap { --hint: #ffd166; }
+.gc-cap i { position: absolute; left: 0; width: 100%; height: 50%; display: block; box-shadow: 0 0 0 3px #000 inset; }
+.gc-cap .top { top: 0; border-radius: 8.5rem 8.5rem 0 0; background: radial-gradient(circle at 35% 40%, #ff5a5a, var(--red) 60%, #7a0b11); }
+.gc-cap .bot { bottom: 0; border-radius: 0 0 8.5rem 8.5rem; background: radial-gradient(circle at 35% 30%, #fff, #d7d0cc 60%, #8f8582); }
+.gc-cap::before { content: ''; position: absolute; inset: -22%; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--hint) 70%, transparent), transparent 65%); opacity: 0; }
+.gc-cap.drop { animation: gcDrop 0.75s cubic-bezier(.3, .1, .6, 1) both; }
+.gc-cap.shake { animation: gcShake 0.9s linear both; } .gc-cap.shake::before { opacity: 1; transition: opacity 0.8s; animation: gcPulse 0.45s ease-in-out infinite alternate; }
+.gc-cap.burst .top { animation: gcTop 0.45s ease-in forwards; } .gc-cap.burst .bot { animation: gcBot 0.45s ease-in forwards; } .gc-cap.burst::before { opacity: 1; animation: gcBloom 0.5s ease-out forwards; }
+@keyframes gcDrop { 0% { transform: translateY(-90vh); } 70% { transform: translateY(0); } 82% { transform: translateY(-3.2rem); } 100% { transform: translateY(0); } }
+@keyframes gcShake { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(-9deg) translateX(-6px); } 20% { transform: rotate(9deg) translateX(6px); } 30% { transform: rotate(-12deg) translateX(-8px); } 40% { transform: rotate(12deg) translateX(8px); } 55% { transform: rotate(-15deg) translateX(-10px) scale(1.06); } 70% { transform: rotate(15deg) translateX(10px) scale(1.1); } 85% { transform: rotate(-6deg) scale(1.14); } }
+@keyframes gcPulse { from { transform: scale(0.85); } to { transform: scale(1.2); } }
+@keyframes gcTop { to { transform: translate(-6rem, -10rem) rotate(-70deg); opacity: 0; } }
+@keyframes gcBot { to { transform: translate(6rem, 10rem) rotate(70deg); opacity: 0; } }
+@keyframes gcBloom { to { transform: scale(4); opacity: 0; } }
+.gc-flash { position: absolute; inset: 0; pointer-events: none; background: #fff; opacity: 0; }
+.gc-flash.go { animation: gcFlash 0.5s ease-out; }
+@keyframes gcFlash { 0% { opacity: 0; } 25% { opacity: 0.95; } 100% { opacity: 0; } }
+
+/* ransom-note lettering */
+.gc-ransom { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 3px; max-width: 100%; line-height: 1; }
+.gc-ransom span { display: inline-block; padding: 0.08em 0.22em 0.04em; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.6); text-transform: uppercase; animation: gcPop 0.35s cubic-bezier(.2, 1.6, .4, 1) both; }
+.gc-ransom .gap { width: 0.7em; padding: 0; box-shadow: none; background: none; }
+@keyframes gcPop { from { opacity: 0; scale: 2.2; } }
+
+/* single result */
+.gc-one { display: grid; justify-items: center; gap: 0.9rem; text-align: center; }
+.gc-one .gc-ransom { font-size: clamp(1.1rem, 3.2vw, 2rem); }
+.gc-big { font: 800 clamp(2.4rem, 8vw, 4.6rem)/1 var(--f-body); letter-spacing: 0.08em; color: #fff; text-shadow: 0 0 22px var(--rc), 0 3px 0 #000; animation: gcPop 0.4s 0.3s cubic-bezier(.2, 1.6, .4, 1) both; margin-top: -0.4rem; }
+.gc-sub { font: 800 clamp(1.1rem, 3.4vw, 1.9rem) var(--f-body); letter-spacing: 0.03em; text-transform: uppercase; color: var(--rc); text-shadow: 0 2px 0 #000; }
+.gc-one .gc-card { animation: gcCard 0.6s 0.15s cubic-bezier(.2, 1.3, .4, 1) both; }
+@keyframes gcCard { from { opacity: 0; transform: translateY(2rem) scale(0.7) rotate(-6deg); } }
+
+/* ten-pull grid */
+.gc-ten { display: grid; justify-items: center; gap: 1.2rem; width: min(100%, 62rem); }
+.gc-ten .gc-ransom { font-size: clamp(1rem, 2.6vw, 1.6rem); }
+.gc-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.8rem; width: 100%; }
+.gc-tally { margin: 0; color: var(--muted); letter-spacing: 0.14em; min-height: 1.4em; text-align: center; }
+.gc-slot { perspective: 900px; aspect-ratio: 3 / 4.1; }
+.gc-flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.55s cubic-bezier(.3, 1.2, .5, 1); }
+.gc-slot.on .gc-flip { transform: rotateY(180deg); }
+.gc-slot.pop.on { animation: gcSlotPop 0.6s ease-out; z-index: 2; }
+@keyframes gcSlotPop { 40% { transform: scale(1.12); } }
+.gc-back-side, .gc-front-side { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.gc-back-side { display: grid; place-items: center; border: 3px solid var(--red); background: repeating-linear-gradient(45deg, #120a0a 0 8px, #1c0e0e 8px 16px); border-radius: 12px; font: 700 clamp(2rem, 6vw, 3.4rem) var(--f-kanji); color: var(--red); text-shadow: 0 0 14px var(--red); }
+.gc-front-side { transform: rotateY(180deg); }
+.gc-front-side .gc-card { width: 100%; height: 100%; }
+
+/* the prize card and its rarity borders */
+@property --gca { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.gc-card { --ink: #050303; position: relative; width: min(15rem, 72vw); aspect-ratio: 3 / 4.1; display: grid; grid-template-rows: auto 1fr auto auto; justify-items: center; align-items: center; gap: 0.35rem; padding: 0.7rem 0.6rem 0.8rem; text-align: center; color: var(--fg); border-radius: 14px; border: 3px solid var(--rc); background: radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--rc) 16%, transparent), transparent 70%), var(--ink); overflow: hidden; }
+.gc-grid .gc-card { padding: 0.4rem; gap: 0.2rem; }
+.gc-tag { justify-self: start; font: 800 0.75rem var(--f-mono); letter-spacing: 0.1em; color: var(--ink); background: var(--rc); padding: 0.12rem 0.45rem; border-radius: 4px; }
+.gc-orb { width: 62%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 35% 30%, #fff 0, color-mix(in srgb, var(--rc) 55%, #1a0f0f) 40%, #0a0606 80%); box-shadow: 0 0 20px color-mix(in srgb, var(--rc) 60%, transparent); overflow: hidden; }
+.gc-orb .hb-thumb { width: 100%; height: 100%; border: 0; border-radius: 50%; background: none; font-size: 2.6rem; }
+.gc-orb img { width: 100%; height: 100%; object-fit: cover; }
+.gc-name { font: 800 clamp(0.72rem, 1.6vw, 1.02rem)/1.15 var(--f-body); text-transform: uppercase; overflow-wrap: anywhere; }
+.gc-desc { margin: 0; font-size: 0.74rem; color: var(--muted); line-height: 1.3; max-height: 4em; overflow: hidden; }
+.gc-rl { font: 700 0.64rem var(--f-mono); letter-spacing: 0.2em; text-transform: uppercase; color: var(--rc); }
+
+/* Common: plain steel line. Uncommon: green line with a faint glow. Rare: blue, double ring. SR: violet-magenta with a pulsing glow. SSR: a spinning prismatic neon frame. */
+.gc-card.r-common { border-width: 2px; }
+.gc-card.r-uncommon { border-width: 3px; box-shadow: 0 0 14px color-mix(in srgb, var(--rc) 55%, transparent); }
+.gc-card.r-r { border-width: 3px; box-shadow: 0 0 0 3px var(--ink), 0 0 0 5px var(--rc), 0 0 22px color-mix(in srgb, var(--rc) 65%, transparent); }
+.gc-card.r-sr { border: 4px solid transparent; background: linear-gradient(var(--ink), var(--ink)) padding-box, linear-gradient(135deg, #7a2cff, #ff4df0, #7a2cff) border-box; box-shadow: 0 0 0 3px var(--ink), 0 0 26px #b04dff; animation: gcSR 1.6s ease-in-out infinite alternate; }
+@keyframes gcSR { to { box-shadow: 0 0 0 3px var(--ink), 0 0 44px #ff4df0, 0 0 8px #ff4df0; } }
+.gc-card.r-ssr { border: 5px solid transparent; background: linear-gradient(var(--ink), var(--ink)) padding-box, conic-gradient(from var(--gca), #ff1f2d, #ffd166, #ffffff, #ff2bd6, #29e0ff, #ff1f2d) border-box; box-shadow: 0 0 0 3px var(--ink), 0 0 38px #ff3b4a, 0 0 70px color-mix(in srgb, #ffd166 45%, transparent); animation: gcSpinB 3s linear infinite; }
+@keyframes gcSpinB { to { --gca: 360deg; } }
+.gc-card.r-ssr::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.28) 50%, transparent 62%); transform: translateX(-120%); animation: gcShine 2.6s ease-in-out infinite; }
+@keyframes gcShine { 60%, 100% { transform: translateX(120%); } }
+.r-ssr .gc-one .gc-big, .gc-one.r-ssr .gc-big { background: linear-gradient(90deg, #ff1f2d, #ffd166, #fff, #ff2bd6, #ff1f2d) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; filter: drop-shadow(0 0 14px #ff3b4a); animation: gcPop 0.4s 0.3s cubic-bezier(.2, 1.6, .4, 1) both, gcSlide 3s linear infinite; }
+@keyframes gcSlide { to { background-position: 200% 0; } }
+
+@media (max-width: 52rem) {
+  .gc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+  .gc-row { grid-template-columns: 2.4rem minmax(0, 1fr) auto; } .gc-row .btn { grid-column: 2 / -1; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-ov *, .gc-machine * { animation-duration: 0.01s !important; animation-iteration-count: 1 !important; transition-duration: 0.01s !important; }
+  .gc-card.r-ssr, .gc-card.r-sr { animation: none !important; }
+}

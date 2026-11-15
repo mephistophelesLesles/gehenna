@@ -67,6 +67,21 @@
     box.appendChild(add); return box;
   };
 
+  // Rows for dice an item rolls when used (heal, damage...). Same idea as a skill's effects: type, number of dice, sides, flat bonus, optional stat modifier.
+  G.diceEditor = function (list, redraw) {
+    var box = h('div', { className: 'fxs' });
+    list.forEach(function (e, i) {
+      var ty = h('select', { 'aria-label': 'Type' }, ['Damage', 'Heal', 'Shield', 'Other'].map(function (n) { return h('option', { value: n, text: n, selected: (e.type || 'Heal') === n }); })); ty.onchange = function () { e.type = ty.value; };
+      function num(k, label, min) { var x = h('input', { type: 'number', min: min, value: e[k] == null ? 0 : e[k], className: 'ni', 'aria-label': label }); x.oninput = function () { e[k] = Math.floor(+x.value) || 0; }; return x; }
+      var st = h('select', { 'aria-label': 'Adds the modifier of' }, [['', 'No stat']].concat(['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'].map(function (n) { return [n, '+ ' + n + ' modifier']; })).map(function (o) { return h('option', { value: o[0], text: o[1], selected: (e.stat || '') === o[0] }); })); st.onchange = function () { e.stat = st.value; };
+      var nt = h('input', { value: e.note || '', maxLength: 120, placeholder: 'Note (optional)', 'aria-label': 'Note' }); nt.oninput = function () { e.note = nt.value; };
+      var x = h('button', { type: 'button', className: 'link', text: 'Remove' }); x.onclick = function () { list.splice(i, 1); redraw(); };
+      box.appendChild(h('div', { className: 'ef' }, [ty, num('n', 'Number of dice', 0), 'd', num('d', 'Sides', 0), '+', num('flat', 'Flat bonus', -999), st, nt, x]));
+    });
+    var add = h('button', { type: 'button', className: 'btn', text: '+ Add heal or damage dice' }); add.onclick = function () { list.push({ type: 'Heal', n: 1, d: 4, flat: 0, stat: '', note: '' }); redraw(); };
+    box.appendChild(add); return box;
+  };
+
   /* ---------- section tabs ---------- */
   var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'chat', 'note', 'dice', 'fx'], current = 'char', lastMode = '';
   var modules = {};
@@ -92,6 +107,10 @@
   modules.map = (function () {
     var root = $('pane-map'), built = false, lobbies = [], curId = null, lob = null, timer = null, saveT = null, selTok = null, tab = 'shadow', q = '', snapMode = 'square', paint = { on: false, color: '#2ecc71', erase: false };
     var ui = {}, zm = { s: 1, x: 0, y: 0 }, npcs = [], npcOpen = {};
+    // Show or hide the names under the map tokens (on a phone they can cover a lot of the map). Remembered on this device.
+    var namesOff = false;
+    function namesOn() { try { var v = localStorage.getItem('gehenna-map-names'); return v === null ? !namesOff : v !== '0'; } catch (e) { return !namesOff; } }
+    function applyNames() { var on = namesOn(); if (ui.box) ui.box.classList.toggle('nonames', !on); if (ui.names) { ui.names.textContent = on ? 'Names: on' : 'Names: off'; ui.names.setAttribute('aria-pressed', String(on)); } }
     function isDM() { return !!G.creds(); }
     function reset() { built = false; lobbies = []; curId = null; lob = null; selTok = null; npcs = []; npcOpen = {}; zm = { s: 1, x: 0, y: 0 }; clear(root); stop(); }
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
@@ -101,11 +120,13 @@
       clear(root); built = true;
       ui.tabs = h('div', { className: 'mp-tabs', role: 'tablist' });
       ui.status = h('span', { className: 'mono hb-note' });
-      ui.box = h('div', { className: 'mp-box' + (isDM() ? ' edit' : '') });
+      ui.names = h('button', { type: 'button', className: 'btn sq mp-names' });
+      ui.names.onclick = function () { try { localStorage.setItem('gehenna-map-names', namesOn() ? '0' : '1'); } catch (e) { namesOff = !namesOff; } applyNames(); };
+      ui.box = h('div', { className: 'mp-box' + (isDM() ? ' edit' : '') }); applyNames();
       ui.msg = h('p', { className: 'mono hb-note' }); ui.npcs = h('div', { className: 'mp-npcs' });
       ui.side = h('div', { className: 'mp-side' });
       root.appendChild(h('div', { className: 'hb-wrap' }, [
-        h('div', { className: 'mp-head' }, [ui.tabs, ui.status]),
+        h('div', { className: 'mp-head' }, [ui.tabs, ui.names, ui.status]),
         h('div', { className: 'mp-body' }, [h('div', { className: 'mp-stage' }, [ui.box, ui.msg, isDM() ? null : ui.npcs]), isDM() ? ui.side : null]),
       ]));
       if (window.ResizeObserver) new ResizeObserver(fit).observe(ui.box); else window.addEventListener('resize', fit);
@@ -484,6 +505,98 @@
     return { enter: function (r) { if (!built) build(); ui.box.onpointerdown = boxDown; poll(true); start(); }, leave: stop, wake: wake, reset: reset };
   })();
 
+  /* ======================= GACHA (animation and result cards, used by the Marketplace) ======================= */
+  var RAR = {
+    common:   { label: 'Common',   tag: 'C',   title: 'SCRAPS',          sub: 'MAMMON SHRUGS' },
+    uncommon: { label: 'Uncommon', tag: 'UC',  title: 'ADEQUATE',        sub: 'AN UNCOMMON FIND' },
+    r:        { label: 'Rare',     tag: 'R',   title: 'NOT BAD',         sub: 'A RARE FIND' },
+    sr:       { label: 'SR',       tag: 'SR',  title: 'WELL DRAWN',      sub: 'A SUPER RARE PRIZE' },
+    ssr:      { label: 'SSR',      tag: 'SSR', title: 'CONGRATULATIONS', sub: 'YOU WON THE GRAND PRIZE' }
+  };
+  var RAR_ORDER = ['common', 'uncommon', 'r', 'sr', 'ssr'];
+  var reduceMotion = function () { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+  // Ransom-note lettering: every letter is a little cut-out in its own face, colour and tilt.
+  function ransom(text) {
+    var faces = ['var(--f-display)', 'var(--f-mono)', "Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif", 'var(--f-body)', "Georgia, 'Times New Roman', serif"];
+    var tiles = [['#e3151f', '#fff'], ['#f3efec', '#0a0808'], ['#0a0808', '#ff4d4d'], ['#7a0b11', '#f3efec'], ['#f3efec', '#e3151f']];
+    var box = h('div', { className: 'gc-ransom', 'aria-label': text, role: 'img' });
+    text.split('').forEach(function (ch, i) {
+      if (ch === ' ') { box.appendChild(h('span', { className: 'gap', 'aria-hidden': 'true' })); return; }
+      var s = h('span', { text: ch, 'aria-hidden': 'true' }), t = tiles[(i * 3 + 1) % tiles.length];
+      s.style.cssText = 'font-family:' + faces[(i * 2 + (i % 3)) % faces.length] + ';background:' + t[0] + ';color:' + t[1] + ';transform:rotate(' + (((i * 37) % 13) - 6) + 'deg) translateY(' + (((i * 11) % 7) - 3) + 'px);font-size:' + (1.5 + ((i * 5) % 4) * 0.22) + 'em;font-weight:' + (i % 2 ? 700 : 500) + ';animation-delay:' + (i * 45) + 'ms';
+      box.appendChild(s);
+    });
+    return box;
+  }
+  function prizeCard(it, opts) {
+    opts = opts || {};
+    var r = it.rarity;
+    var card = h('div', { className: 'gc-card r-' + r }, [
+      h('div', { className: 'gc-tag', text: RAR[r].tag }),
+      h('div', { className: 'gc-orb' }, [thumb(it.image, (it.name || '?').charAt(0), 'gc-art')]),
+      h('b', { className: 'gc-name', text: it.name }),
+      opts.desc && it.desc ? h('p', { className: 'gc-desc', text: it.desc }) : null,
+      h('small', { className: 'gc-rl', text: RAR[r].label })
+    ]);
+    if (!opts.back) return card;
+    // A face-down card for the ten-pull: flips over when revealed.
+    var wrap = h('div', { className: 'gc-slot' }, [h('div', { className: 'gc-flip' }, [h('div', { className: 'gc-back-side' }, [h('span', { text: '獄' })]), h('div', { className: 'gc-front-side' }, [card])])]);
+    wrap._rar = r; return wrap;
+  }
+  // Plays the draw: a capsule drops, shakes, bursts, then the prize card (or ten cards) appear. results = [{name, desc, image, rarity}]
+  G.gachaReveal = function (results, done) {
+    var prev = document.activeElement, quick = reduceMotion(), timers = [], finished = false;
+    var best = results.reduce(function (a, x) { return RAR_ORDER.indexOf(x.rarity) > RAR_ORDER.indexOf(a) ? x.rarity : a; }, 'common');
+    var ov = h('div', { className: 'gc-ov r-' + best, role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Gacha result' });
+    var stage = h('div', { className: 'gc-stage' }), skip = h('button', { type: 'button', className: 'btn gc-skip', text: 'Skip' });
+    ov.appendChild(stage); ov.appendChild(skip); document.body.appendChild(ov); document.body.classList.add('gc-lock');
+    function later(fn, ms) { timers.push(setTimeout(fn, quick ? Math.min(ms, 120) : ms)); }
+    function close() { timers.forEach(clearTimeout); document.removeEventListener('keydown', onKey); ov.remove(); document.body.classList.remove('gc-lock'); if (prev && prev.focus) { try { prev.focus(); } catch (e) {} } if (done) done(); }
+    function onKey(e) { if (e.key === 'Escape' && finished) close(); }
+    document.addEventListener('keydown', onKey);
+    var closeBtn = h('button', { type: 'button', className: 'btn primary gc-close', text: 'Close' }); closeBtn.onclick = close;
+
+    function showResult() {
+      clear(stage); skip.hidden = true;
+      if (results.length === 1) {
+        var it = results[0];
+        stage.appendChild(h('div', { className: 'gc-one r-' + it.rarity }, [
+          ransom(RAR[it.rarity].title),
+          h('div', { className: 'gc-big', text: RAR[it.rarity].tag }),
+          prizeCard(it, { desc: true }),
+          h('div', { className: 'gc-sub', text: RAR[it.rarity].sub }),
+          closeBtn
+        ]));
+        finished = true; closeBtn.focus();
+        return;
+      }
+      var grid = h('div', { className: 'gc-grid' }), slots = results.map(function (x) { var s = prizeCard(x, { back: true }); grid.appendChild(s); return s; });
+      var tally = h('p', { className: 'mono gc-tally', text: '\u00a0' });
+      stage.appendChild(h('div', { className: 'gc-ten' }, [ransom(RAR[best].title), grid, tally, closeBtn]));
+      closeBtn.hidden = true; skip.hidden = false; skip.textContent = 'Reveal all';
+      var i = 0;
+      function flip(s) { s.classList.add('on'); if (s._rar === 'sr' || s._rar === 'ssr') s.classList.add('pop'); }
+      function end() {
+        slots.forEach(flip); timers.forEach(clearTimeout); skip.hidden = true; closeBtn.hidden = false; finished = true;
+        var n = {}; results.forEach(function (x) { n[x.rarity] = (n[x.rarity] || 0) + 1; });
+        tally.textContent = RAR_ORDER.slice().reverse().filter(function (k) { return n[k]; }).map(function (k) { return RAR[k].tag + ' \u00d7' + n[k]; }).join('   ');
+        closeBtn.focus();
+      }
+      skip.onclick = end;
+      (function step() { if (i >= slots.length) { later(end, 400); return; } flip(slots[i++]); later(step, 330); })();
+    }
+
+    // Capsule phase
+    var cap = h('div', { className: 'gc-cap' }, [h('i', { className: 'top' }), h('i', { className: 'bot' })]), flash = h('div', { className: 'gc-flash' });
+    stage.appendChild(cap); stage.appendChild(flash);
+    cap.classList.add('drop');
+    later(function () { cap.classList.remove('drop'); cap.classList.add('shake'); }, 750);
+    later(function () { cap.classList.remove('shake'); cap.classList.add('burst'); flash.classList.add('go'); }, 1650);
+    later(showResult, 2100);
+    skip.onclick = function () { timers.forEach(clearTimeout); showResult(); };
+    skip.focus();
+  };
+
   /* ======================= MARKETPLACE ======================= */
   modules.market = (function () {
     var root = $('pane-market'), data = null, cfg = null, cat = null, sel = null, line = '', msg = '', err = false, editMammon = false, adding = false;
@@ -497,7 +610,7 @@
       Promise.all(jobs).then(function (rs) {
         if (!rs[0].ok) { clear(root).appendChild(note(rs[0].j.error || 'Could not open the marketplace.')); return; }
         data = rs[0].j; cfg = rs[1] && rs[1].ok ? rs[1].j.config : null;
-        if (!data.cats.some(function (c) { return c.id === cat; }) && cat !== 'debt') cat = data.cats[0] ? data.cats[0].id : 'debt';
+        if (!data.cats.some(function (c) { return c.id === cat; }) && cat !== 'debt' && cat !== 'gacha') cat = data.cats[0] ? data.cats[0].id : 'debt';
         sel = null; line = pickLine(); draw();
       });
     }
@@ -521,6 +634,7 @@
       var side = h('div', { className: 'mk-side' }, [fig, h('div', { className: 'mk-who' }, [h('h3', { text: data.mammon.name }), h('p', { className: 'mk-line', text: line ? '“' + line + '”' : '' })])]);
       var list = h('div', { className: 'mk-cats' });
       cats.forEach(function (k) { list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: k.name, 'aria-pressed': String(cat === k.id), onclick: function () { cat = k.id; sel = null; adding = false; msg = ''; draw(); } })); });
+      list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: 'Gacha', 'aria-pressed': String(cat === 'gacha'), onclick: function () { cat = 'gacha'; sel = null; adding = false; msg = ''; draw(); } }));
       if (!dm) list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: 'Pay debt / Loan', 'aria-pressed': String(cat === 'debt'), onclick: function () { cat = 'debt'; sel = null; msg = ''; draw(); } }));
       if (!dm) list.appendChild(h('button', { type: 'button', className: 'mk-cat', text: 'Sell items', 'aria-pressed': String(cat === 'sell'), onclick: function () { cat = 'sell'; sel = null; adding = false; msg = ''; draw(); } }));
       if (dm) {
@@ -538,9 +652,101 @@
       if (dm && editMammon && cfg) main.appendChild(mammonEditor());
       if (cat === 'sell' && !dm) main.appendChild(sellPanel());
       else if (cat === 'debt' && !dm) main.appendChild(debtPanel());
+      else if (cat === 'gacha') main.appendChild(gachaPanel());
       else if (c) main.appendChild(shelf(c));
       else main.appendChild(note('No categories yet.'));
       root.appendChild(h('div', { className: 'hb-wrap mk' }, [side, main]));
+    }
+    /* ---- Gacha machine ---- */
+    function machineSvg() {
+      var pairs = [['#e3151f', '#f3efec'], ['#1b1212', '#e3151f'], ['#f3efec', '#3a2727'], ['#7a0b11', '#ff4d4d'], ['#2a1d1d', '#b3a5a3'], ['#ff4d4d', '#0a0808']];
+      var spots = [[58, 190], [100, 192], [142, 191], [184, 189], [78, 168], [122, 170], [164, 166], [56, 150], [100, 148], [144, 146], [186, 150], [76, 128], [120, 126], [162, 124], [100, 106], [142, 104], [60, 108], [182, 110]];
+      var caps = spots.map(function (p, i) {
+        var c = pairs[i % pairs.length], x = p[0], y = p[1], r = 21;
+        return '<g class="cp" style="animation-delay:' + ((i * 83) % 600) + 'ms"><circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + c[0] + '"/><path d="M' + (x - r) + ' ' + y + 'A' + r + ' ' + r + ' 0 0 0 ' + (x + r) + ' ' + y + 'Z" fill="' + c[1] + '"/><circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="none" stroke="#000" stroke-opacity=".55" stroke-width="2"/><ellipse cx="' + (x - 8) + '" cy="' + (y - 9) + '" rx="5" ry="3" fill="#fff" fill-opacity=".35" transform="rotate(-35 ' + (x - 8) + ' ' + (y - 9) + ')"/></g>';
+      }).join('');
+      var lights = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return '<circle class="ld" style="animation-delay:' + (i * 110) + 'ms" cx="' + (46 + i * 18.5) + '" cy="224" r="3.2" fill="#ff4d4d"/>'; }).join('');
+      return '<svg viewBox="0 0 240 360" role="img" aria-label="Gacha machine" xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="M52 66a68 56 0 0 1 136 0z" fill="#e3151f" stroke="#000" stroke-width="3"/><circle cx="120" cy="38" r="11" fill="#0a0808" stroke="#f3efec" stroke-width="3"/>' +
+        '<rect x="18" y="64" width="204" height="20" rx="3" fill="#7a0b11" stroke="#000" stroke-width="3"/>' +
+        '<rect x="32" y="84" width="176" height="130" fill="#0d0a0a" stroke="#e3151f" stroke-width="6"/>' +
+        '<g class="caps">' + caps + '</g>' +
+        '<rect x="32" y="84" width="176" height="130" fill="url(#gcGlass)" opacity=".5"/>' +
+        '<rect x="18" y="214" width="204" height="20" rx="3" fill="#0a0808" stroke="#7a0b11" stroke-width="3"/>' + lights +
+        '<rect x="18" y="234" width="204" height="112" rx="4" fill="#b30f18" stroke="#000" stroke-width="3"/>' +
+        '<rect x="26" y="240" width="188" height="4" fill="#e3151f"/>' +
+        '<circle cx="120" cy="272" r="26" fill="#0a0808" stroke="#f3efec" stroke-width="3"/>' +
+        '<g class="knob"><circle cx="120" cy="272" r="16" fill="#e3151f"/><rect x="113" y="254" width="14" height="36" rx="3" fill="#f3efec"/><circle cx="120" cy="272" r="5" fill="#0a0808"/></g>' +
+        '<circle cx="190" cy="278" r="14" fill="#f3efec" stroke="#000" stroke-width="3"/><rect x="178" y="275" width="24" height="6" rx="2" fill="#0a0808"/>' +
+        '<rect x="40" y="296" width="76" height="44" rx="3" fill="#050303" stroke="#f3efec" stroke-width="3"/>' +
+        '<text x="168" y="318" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#f3efec" opacity=".85">獄</text>' +
+        '<rect x="12" y="346" width="216" height="12" rx="2" fill="#7a0b11" stroke="#000" stroke-width="3"/>' +
+        '<defs><linearGradient id="gcGlass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient></defs></svg>';
+    }
+    var gcBusy = false;
+    function gachaPanel() {
+      var dm = isDM(), g = data.gacha || { ready: false, cost1: 300, cost10: 2900 }, ready = g.ready;
+      var mach = h('div', { className: 'gc-machine' + (ready ? '' : ' off') });
+      mach.innerHTML = machineSvg();
+      var knob = h('button', { type: 'button', className: 'gc-knobbtn', 'aria-label': dm ? 'Preview one pull' : 'Pull once for ' + g.cost1 + ' karma', title: 'Start Gacha' });
+      knob.disabled = !ready; mach.appendChild(knob);
+      var b1 = h('button', { type: 'button', className: 'btn primary', text: dm ? 'Preview x1' : 'Pull x1 · ' + money(g.cost1) + ' karma' });
+      var b10 = h('button', { type: 'button', className: 'btn primary', text: dm ? 'Preview x10' : 'Pull x10 · ' + money(g.cost10) + ' karma' });
+      var wrap = h('div', { className: 'gc' }, [mach, h('div', { className: 'gc-btns' }, [b1, b10])]);
+      function spin(on) { mach.classList.toggle('busy', on); }
+      function previewPick() { var pool = cfg && cfg.gacha ? cfg.gacha.pool : [], it = pool[Math.floor(Math.random() * pool.length)], e = it && G.worldList.filter(function (x) { return x.id === it.itemId; })[0]; return e ? { name: e.name, desc: e.desc, image: e.image, rarity: it.rarity } : null; }
+      function pull(n) {
+        if (gcBusy || !ready) return;
+        if (dm) {
+          var res = []; for (var i = 0; i < n; i++) { var p = previewPick(); if (p) res.push(p); }
+          if (!res.length) { err = true; msg = 'Add items to the prize pool first.'; draw(); return; }
+          gcBusy = true; spin(true); G.gachaReveal(res, function () { gcBusy = false; draw(); }); return;
+        }
+        gcBusy = true; spin(true); b1.disabled = b10.disabled = knob.disabled = true; msg = '';
+        call('market', { action: 'gachapull', count: n }).then(function (r) {
+          if (!r.ok) { gcBusy = false; err = true; msg = r.j.error || 'The machine jammed.'; draw(); return; }
+          data.karma = r.j.karma; data.debt = r.j.debt; if (G.reloadChar) G.reloadChar();
+          G.gachaReveal(r.j.results, function () { gcBusy = false; err = false; msg = ''; draw(); });
+        });
+      }
+      knob.onclick = function () { pull(1); };
+      b1.onclick = function () { pull(1); };
+      G.two(b10, dm ? 'Preview x10' : 'Pull x10 · ' + money(g.cost10) + ' karma', function () { pull(10); });
+      if (dm) { b10.onclick = function () { pull(10); }; }
+      b1.disabled = b10.disabled = !ready || gcBusy;
+      if (!dm) { if (!ready) wrap.appendChild(note('The machine is out of order. Mammon is restocking.')); else if (data.karma < g.cost1) wrap.appendChild(note('You need ' + money(g.cost1 - data.karma) + ' more karma for a pull.')); }
+      if (dm && cfg) wrap.appendChild(gachaEditor());
+      return wrap;
+    }
+    // Headmaster: which registry items sit in the machine, and how rare each one is.
+    function gachaEditor() {
+      cfg.gacha = cfg.gacha || { pool: [] };
+      var pool = cfg.gacha.pool, byId = {}; G.worldList.forEach(function (e) { byId[e.id] = e; });
+      var box = h('div', { className: 'mk-detail gc-ed' }, [h('h4', { text: 'Gacha prize pool' }),
+        note('Only items from the World registry can go in. Rates: Common 40%, Uncommon 45.9% (everything left over), Rare 10%, SR 4%, SSR 0.1%. A ten-pull always includes an SR or better. If a rarity has no items, pulls fall back to the nearest lower rarity. The buttons above preview the animation for free and do not use real odds.')]);
+      var counts = {}; pool.forEach(function (g) { counts[g.rarity] = (counts[g.rarity] || 0) + 1; });
+      box.appendChild(h('p', { className: 'mono red', text: RAR_ORDER.slice().reverse().map(function (k) { return RAR[k].tag + ' ' + (counts[k] || 0); }).join('  ·  ') }));
+      if (pool.length && !counts.sr && !counts.ssr) box.appendChild(note('Heads up: there is no SR or SSR item yet, so the ten-pull guarantee cannot be met.', 'mono hb-note bad'));
+      var list = h('div', { className: 'gc-pool' });
+      RAR_ORDER.slice().reverse().forEach(function (rk) {
+        pool.filter(function (g) { return g.rarity === rk; }).forEach(function (g) {
+          var e = byId[g.itemId];
+          var sel = h('select', { 'aria-label': 'Rarity of ' + (e ? e.name : 'item') }, RAR_ORDER.slice().reverse().map(function (k) { return h('option', { value: k, text: RAR[k].label, selected: k === g.rarity }); }));
+          sel.onchange = function () { g.rarity = sel.value; saveCfg(); };
+          var rm = h('button', { type: 'button', className: 'btn', text: 'Remove' }); rm.onclick = function () { cfg.gacha.pool = pool.filter(function (x) { return x !== g; }); saveCfg(); };
+          list.appendChild(h('div', { className: 'gc-row r-' + g.rarity }, [thumb(e && e.image, e ? e.name.charAt(0) : '?', 'sm'), h('b', { text: e ? e.name : '(removed from registry)' }), sel, rm]));
+        });
+      });
+      if (!pool.length) list.appendChild(note('The machine is empty. Players will see it as out of order.'));
+      box.appendChild(list);
+      var have = {}; pool.forEach(function (g) { have[g.itemId] = 1; });
+      var free = G.worldList.filter(function (e) { return e.kind === 'item' && !have[e.id]; });
+      if (!free.length) { box.appendChild(note(G.worldList.some(function (e) { return e.kind === 'item'; }) ? 'Every registered item is already in the machine.' : 'No items are registered yet. Add some in Character details › World.')); return box; }
+      var s = h('select', { 'aria-label': 'Item to add' }, free.map(function (e) { return h('option', { value: e.id, text: e.name }); }));
+      var rs = h('select', { 'aria-label': 'Rarity' }, RAR_ORDER.slice().reverse().map(function (k) { return h('option', { value: k, text: RAR[k].label, selected: k === 'common' }); }));
+      var add = h('button', { type: 'button', className: 'btn primary', text: 'Add to machine' }); add.onclick = function () { pool.push({ itemId: s.value, rarity: rs.value }); saveCfg(); };
+      box.appendChild(h('div', { className: 'ef' }, [s, rs, add]));
+      return box;
     }
     // Sell your own items to Mammon (the same items and prices as the Items tab: 90% of the shop price).
     function sellPanel() {
@@ -669,21 +875,26 @@
           h('p', { className: 'mk-tot' + (r.j.debt ? ' bad' : ''), text: 'Karma: ' + money(r.j.karma) + (r.j.debt ? ' · Debt: -' + money(r.j.debt) : '') })]);
         if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
         if (!r.j.items.length) wrap.appendChild(note('Nothing here yet. The headmaster adds items as you earn them.'));
+        var ol = h('ol', { className: 'il-list' });
+        function done(r2, fail) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || fail); if (r2.ok && G.reloadChar) G.reloadChar(); mine(); }
         r.j.items.forEach(function (x) {
-          var kids = [h('div', { className: 'ef' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: 'x' + x.qty }), badge(x.usable ? 'Can use' : 'Cannot use', x.usable), x.sellable ? badge('Sells for ' + money(x.worth) + ' each', true) : null])];
-          if (x.desc) kids.push(h('p', { className: 'pre', text: x.desc }));
-          if (x.sellable) {
-            var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many to sell' }), sb = h('button', { type: 'button', className: 'btn' });
-            G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || 'Could not sell.'); if (r2.ok && G.reloadChar) G.reloadChar(); mine(); }); });
-            sb.textContent = 'Sell'; kids.push(h('div', { className: 'ef' }, [q, sb]));
-          }
-          if (x.usable) {
-            var ub = h('button', { type: 'button', className: 'btn primary' });
-            G.two(ub, 'Use', function () { call('market', { action: 'use', name: x.name }).then(function (r3) { err = !r3.ok; msg = r3.ok ? r3.j.message : (r3.j.error || 'Could not use it.'); if (r3.ok && G.reloadChar) G.reloadChar(); mine(); }); }); ub.textContent = 'Use';
-            kids.push(h('div', { className: 'ef' }, [ub, h('small', { className: 'mono', text: (x.use && x.use.length ? 'Gives: ' + x.use.join(', ') + '. ' : '') + 'The item is used up.' })]));
-          }
-          wrap.appendChild(h('div', { className: 'mk-detail' }, kids));
+          var lk = !!x.locked;
+          var ub = h('button', { type: 'button', className: 'btn sq primary' });
+          G.two(ub, 'Use', function () { call('market', { action: 'use', name: x.name }).then(function (r3) { done(r3, 'Could not use it.'); }); }); ub.textContent = 'Use'; ub.disabled = !x.usable || lk;
+          var tb = h('button', { type: 'button', className: 'btn sq', text: 'Trade' }); tb.disabled = lk;
+          tb.onclick = function () { var s = document.querySelector('#it-trade select[aria-label="Item to give"]'); if (s) { s.value = x.name; if (s.onchange) s.onchange(); } var t = $('it-trade'); if (t) t.scrollIntoView({ block: 'center' }); };
+          var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many to sell' }), sb = h('button', { type: 'button', className: 'btn sq' });
+          G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { done(r2, 'Could not sell.'); }); }); sb.textContent = 'Sell'; sb.disabled = !x.sellable || lk;
+          var kb = h('button', { type: 'button', className: 'btn sq', text: lk ? 'Unlock' : 'Lock', 'aria-pressed': String(lk), title: 'A locked item cannot be used, sold or traded by accident' });
+          kb.onclick = function () { call('market', { action: 'lock', name: x.name, locked: !lk }).then(function (r4) { done(r4, 'Could not change the lock.'); }); };
+          ol.appendChild(h('li', { className: lk ? 'locked' : '' }, [
+            h('div', { className: 'il-line' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: '×' + x.qty }), lk ? badge('Locked', true) : null, x.sellable ? badge('Sells for ' + money(x.worth) + ' each', true) : null]),
+            x.desc ? h('p', { className: 'pre hb-note', text: x.desc }) : null,
+            x.dice && x.dice.length ? h('p', { className: 'mono hb-note', text: 'Rolls when used: ' + x.dice.join(', ') }) : null,
+            x.use && x.use.length ? h('p', { className: 'mono hb-note', text: 'Gives: ' + x.use.join(', ') }) : null,
+            h('div', { className: 'il-btns' }, [ub, tb, x.sellable && x.qty > 1 ? q : null, sb, kb])]));
         });
+        if (r.j.items.length) wrap.appendChild(h('div', { className: 'mk-detail il' }, [h('h3', { className: 'il-h', text: 'List of items' }), ol]));
         wrap.appendChild(tradePanel(r.j));
         root.appendChild(wrap);
       });
@@ -760,16 +971,18 @@
         var ol = h('ol', { className: 'il-list' });
         items.forEach(function (x) {
           var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many' });
-          var rm = h('button', { type: 'button', className: 'btn', text: 'Remove' });
+          var rm = h('button', { type: 'button', className: 'btn sq', text: 'Remove' });
           G.two(rm, 'Remove', function () { act('hm_takeitem', { id: c.id, name: x.name, qty: q.value }); });
-          var tos = h('select', { 'aria-label': 'Trade to' }, cs.filter(function (o) { return o.id !== c.id; }).map(function (o) { return h('option', { value: o.id, text: o.name }); }));
-          var gv = h('button', { type: 'button', className: 'btn', text: 'Give' });
+          var tos = h('select', { 'aria-label': 'Give to' }, cs.filter(function (o) { return o.id !== c.id; }).map(function (o) { return h('option', { value: o.id, text: o.name }); }));
+          var gv = h('button', { type: 'button', className: 'btn sq', text: 'Give' });
           G.two(gv, 'Give', function () { if (tos.value) act('hm_giveitem', { id: c.id, name: x.name, qty: q.value, to: tos.value }); });
-          var panel = h('div', { className: 'ef il-act' }, [q, rm, 'or give to', tos, gv]); panel.hidden = true;
-          var tg = h('button', { type: 'button', className: 'link il-link', text: 'Remove or Trade', 'aria-expanded': 'false' });
+          var panel = h('div', { className: 'ef il-act' }, ['give to', tos, gv]); panel.hidden = true;
+          var tg = h('button', { type: 'button', className: 'btn sq', text: 'Trade', 'aria-expanded': 'false' });
           tg.onclick = function () { panel.hidden = !panel.hidden; tg.setAttribute('aria-expanded', String(!panel.hidden)); };
-          var li = h('li', {}, [h('div', { className: 'il-line' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: '×' + x.qty }), '(', tg, ')']), x.desc ? h('p', { className: 'pre hb-note', text: x.desc }) : null, panel]);
-          ol.appendChild(li);
+          var lk = !!x.locked, kb = h('button', { type: 'button', className: 'btn sq', text: lk ? 'Unlock' : 'Lock', 'aria-pressed': String(lk), title: 'A locked item cannot be used, sold or traded by its owner' });
+          kb.onclick = function () { act('hm_lockitem', { id: c.id, name: x.name, locked: !lk }); };
+          ol.appendChild(h('li', { className: lk ? 'locked' : '' }, [h('div', { className: 'il-line' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: '×' + x.qty }), lk ? badge('Locked', true) : null]), x.desc ? h('p', { className: 'pre hb-note', text: x.desc }) : null,
+            h('div', { className: 'il-btns' }, [x.qty > 1 ? q : null, rm, tg, kb]), panel]));
         });
         if (!items.length) inv.appendChild(note('Nothing carried yet.')); else inv.appendChild(ol);
       }
@@ -939,7 +1152,9 @@
         data = r.j; draw();
       });
     }
-    function act(body) { call('effects', body).then(function (r) { err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) data = r.j; draw(); }); }
+    function act(body) { call('effects', body).then(function (r) { err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) { data = r.j; data.chars.forEach(function (d) { var f = G.chars().filter(function (x) { return x.id === d.id; })[0]; if (f) f.buffs = d.buffs; }); } draw(); }); }
+    // Live: when any sheet changes on the server, redraw only the sheet on the right (never the forms on the left).
+    var syncShow = null; G.onSync = function () { if (syncShow && root.offsetParent) syncShow(); };
     function draw() {
       clear(root); var wrap = h('div', { className: 'dm-col' });
       wrap.appendChild(note('Buffs and debuffs change a soul’s stats on their sheet by themselves (the modifiers, saves and damage bonuses recalculate). The base stats are never touched, so ending an effect puts everything back.'));
@@ -991,10 +1206,11 @@
       ap.appendChild(go);
       wrap.appendChild(ap);
       // Portraits on the left pick whose sheet shows on the right (read-only), so skills, stats and effects are one glance away.
-      var cs = data.chars.map(function (d) { var full = G.chars().filter(function (x) { return x.id === d.id; })[0]; return full ? Object.assign({}, full, { buffs: d.buffs }) : null; }).filter(Boolean);
+      function fullList() { return data.chars.map(function (d) { return G.chars().filter(function (x) { return x.id === d.id; })[0]; }).filter(Boolean); }
+      var cs = fullList();
       var host = h('div', { className: 'dm-sheet' }), pk;
-      function show() { clear(host); var c = cs.filter(function (x) { return x.id === pickedId; })[0]; if (!c) { host.appendChild(note('No saved characters yet.')); return; } G.sheetInto(c, host); }
-      pickedChar(cs); pk = charPicker(cs, function (id) { markPicker(pk, id); show(); }); show();
+      function show() { clear(host); var c = fullList().filter(function (x) { return x.id === pickedId; })[0]; if (!c) { host.appendChild(note('No saved characters yet.')); return; } G.sheetInto(c, host); }
+      pickedChar(cs); pk = charPicker(cs, function (id) { markPicker(pk, id); show(); }); show(); syncShow = show;
       root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [h('div', { className: 'dm-left' }, [pk, wrap]), h('div', { className: 'dm-right' }, [host])]));
     }
     return { enter: function () { msg = ''; enter(); }, reset: reset };
@@ -1222,14 +1438,14 @@
       if (c.kind === 'item') {
         var chk = function (label, k) { var i = h('input', { type: 'checkbox', checked: !!c[k] }); i.onchange = function () { c[k] = i.checked; if (k === 'usable') draw(); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); };
         box.appendChild(h('div', { className: 'ef' }, [chk('Players can sell this back (90% of its price)', 'sellable'), chk('Players can use this item', 'usable')]));
-        if (c.usable) { c.use = c.use || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'When a soul uses it (optional): add HP, raise a stat, or give a buff. One copy is used up each time. Temporary effects stay until you end them in the Effects tab.' }), G.fxEditor(c.use, draw)])); }
+        if (c.usable) { c.use = c.use || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'When a soul uses it (optional): add HP, raise a stat, or give a buff. One copy is used up each time. Temporary effects stay until you end them in the Effects tab.' }), G.fxEditor(c.use, draw)])); c.effects = c.effects || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'Dice it rolls when used (optional), like a skill: for example Heal 1d4. The result is worked out by the server and shown in the Dice log.' }), G.diceEditor(c.effects, draw)])); }
       }
       box.appendChild(crop);
       box.appendChild(txt('Description (everyone can read this)', 'desc', 5, 2000));
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save' });
       save.onclick = function () {
         save.disabled = true; st.textContent = 'Saving…';
-        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, use: c.usable ? (c.use || []) : [] };
+        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, use: c.usable ? (c.use || []) : [], effects: c.usable ? (c.effects || []) : [] };
         if (!c.isNew) e.id = c.id; if (/^data:/.test(c.image || '') || c.image === '') e.image = c.image;
         call('world', { action: 'wsave', entry: e }).then(function (r) {
           save.disabled = false; if (!r.ok) { st.textContent = r.j.error || 'Save failed'; return; }

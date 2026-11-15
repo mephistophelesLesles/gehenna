@@ -5,9 +5,42 @@ const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { settle, reply, S, N, IMG, ID, isAdmin, who, needUser, karmaOf, parseBody, imageReply } = require('./lib/auth');
 const { loadAll } = require('./lib/world');
-const { addBuffs, label: fxLabel } = require('./lib/fx');
+const { addBuffs, label: fxLabel, rollDice, diceName } = require('./lib/fx');
 
 const LOAN_CAP = 5000;
+
+// ---- Gacha ----
+// Rarities from lowest to highest. Rates are in parts per million (1,000,000 = 100%).
+const RARITIES = ['common', 'uncommon', 'r', 'sr', 'ssr'];
+const RATE = { ssr: 1000, sr: 40000, r: 100000, common: 400000 }; // 0.1%, 4%, 10%, 40%. Uncommon takes whatever is left (45.9%).
+const COST = { 1: 300, 10: 2900 };
+const PITY_START = 60, PITY_STEP = 20000; // after 60 pulls without an SSR, +2% SSR chance on every pull
+const PPM = 1000000;
+const rint = (n) => crypto.randomInt(0, n);
+
+// The chance table for one pull. `since` = pulls since the last SSR (kept secret from players).
+function rates(since) {
+  const bonus = since >= PITY_START ? (since - PITY_START + 1) * PITY_STEP : 0;
+  const ssr = Math.min(PPM, RATE.ssr + bonus);
+  const k = (PPM - ssr) / (PPM - RATE.ssr); // squeeze everything else to make room for the pity bonus
+  const out = { ssr, sr: RATE.sr * k, r: RATE.r * k, common: RATE.common * k };
+  out.uncommon = PPM - out.ssr - out.sr - out.r - out.common;
+  return out;
+}
+function rollRarity(t, only) {
+  const keys = (only || RARITIES).slice().reverse(); // highest first
+  const total = keys.reduce((a, k) => a + t[k], 0);
+  let x = rint(Math.max(1, Math.floor(total))), acc = 0;
+  for (const k of keys) { acc += t[k]; if (x < acc) return k; }
+  return keys[keys.length - 1];
+}
+// If nothing is stocked at a rarity, hand out the nearest one below it, then the nearest above.
+function pickItem(pools, rarity) {
+  const i = RARITIES.indexOf(rarity);
+  const order = RARITIES.slice(0, i + 1).reverse().concat(RARITIES.slice(i + 1));
+  for (const r of order) if (pools[r].length) return { rarity: r, item: pools[r][rint(pools[r].length)] };
+  return null;
+}
 const LINES = [
   'Hello, young soul~ busy?',
   'Ooh, a customer! Come closer, darling. I only bite a little.',
@@ -19,9 +52,10 @@ const LINES = [
 const DEFAULT = () => ({
   mammon: { name: 'Mammon', image: '', lines: LINES.slice() },
   cats: ['Soul Marketplace', 'Weapon Marketplace', 'Others'].map((n) => ({ id: crypto.randomUUID(), name: n, items: [] })),
+  gacha: { pool: [] },
   updatedAt: new Date().toISOString(),
 });
-async function getCfg(store) { return (await store.get('config', { type: 'json' })) || DEFAULT(); }
+async function getCfg(store) { const c = (await store.get('config', { type: 'json' })) || DEFAULT(); if (!c.gacha || !Array.isArray(c.gacha.pool)) c.gacha = { pool: [] }; return c; }
 
 function cleanCfg(inc, old, worldIds) {
   let image = old.mammon.image || '';
@@ -35,6 +69,8 @@ function cleanCfg(inc, old, worldIds) {
       name: S(c.name, 40).trim() || 'Category',
       items: (Array.isArray(c.items) ? c.items : []).slice(0, 200).filter((i) => i && worldIds.has(String(i.itemId))).map((i) => { const p = N(i.price, 0, 1000000), s = N(i.sale, 0, 1000000); return { itemId: String(i.itemId), price: p, sale: s > 0 && s < p ? s : 0 }; }),
     })),
+    // The gacha pool: only registry items, each with a rarity. Anything else is dropped.
+    gacha: { pool: (inc.gacha && Array.isArray(inc.gacha.pool) ? inc.gacha.pool : (old.gacha && old.gacha.pool) || []).slice(0, 300).filter((g) => g && worldIds.has(String(g.itemId)) && RARITIES.includes(g.rarity)).map((g) => ({ itemId: String(g.itemId), rarity: g.rarity })) },
     updatedAt: new Date().toISOString(),
   };
 }
@@ -73,14 +109,16 @@ exports.handler = async (event) => {
     const worth = (e) => { const l = listed[e.id]; return Math.floor((l ? l.sale || l.price : e.price) * 0.9); };
 
     if (!b.action || b.action === 'state') {
+      const stocked = (cfg.gacha.pool || []).some((g) => byId[g.itemId]);
       return reply(200, Object.assign(view(c), {
+        gacha: { ready: stocked, cost1: COST[1], cost10: COST[10] },
         mammon: { name: cfg.mammon.name, image: cfg.mammon.image ? '/.netlify/functions/market?img=1&v=' + Date.parse(cfg.updatedAt) : '', lines: cfg.mammon.lines },
         cats: cfg.cats.map((k) => ({ id: k.id, name: k.name, items: k.items.filter((i) => byId[i.itemId]).map((i) => { const e = byId[i.itemId]; return { itemId: e.id, name: e.name, desc: e.desc, image: e.image ? '/.netlify/functions/world?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0) : '', price: i.price, sale: i.sale || 0 }; }) })),
       }));
     }
     if (u.admin) {
       // Headmaster quick tools: no need to open the character.
-      if (['hm_karma', 'hm_additem', 'hm_takeitem', 'hm_giveitem'].includes(b.action)) {
+      if (['hm_karma', 'hm_additem', 'hm_takeitem', 'hm_giveitem', 'hm_lockitem'].includes(b.action)) {
         const getC = async (id) => (ID.test(String(id || '')) ? cstore.get(String(id), { type: 'json' }) : null);
         const a = await getC(b.id); if (!a) return reply(404, { error: 'Character not found.' });
         const sameName = (x, n) => String(x.name).toLowerCase() === n.toLowerCase();
@@ -101,6 +139,7 @@ exports.handler = async (event) => {
           return reply(200, { message: 'Gave ' + qty + ' x ' + name + ' to ' + a.name + '.' });
         }
         if (!have || have.qty < qty) return reply(400, { error: a.name + ' does not have ' + qty + ' x ' + name + '.' });
+        if (b.action === 'hm_lockitem') { have.locked = !!b.locked; await cstore.setJSON(a.id, a); return reply(200, { message: name + (have.locked ? ' is locked' : ' is unlocked') + ' for ' + a.name + '.' }); }
         if (b.action === 'hm_giveitem') {
           const t = await getC(b.to); if (!t || t.id === a.id) return reply(404, { error: 'Pick a different character to give it to.' });
           if (!room(t)) return reply(400, { error: 'Their inventory is full.' });
@@ -115,23 +154,72 @@ exports.handler = async (event) => {
     }
 
     const save = async () => { await cstore.setJSON(u.id, c); };
+    if (b.action === 'gachapull') {
+      const count = Number(b.count) === 10 ? 10 : 1, cost = COST[count];
+      const pools = {}; RARITIES.forEach((r) => { pools[r] = []; });
+      (cfg.gacha.pool || []).forEach((g) => { const e = byId[g.itemId]; if (e) pools[g.rarity].push(e); });
+      if (!RARITIES.some((r) => pools[r].length)) return reply(400, { error: 'The machine is empty right now.' });
+      const bal = karmaOf(c);
+      if (bal < cost) return reply(400, { error: 'Not enough karma. You have ' + bal + ' and it costs ' + cost + '.' });
+      const gs = getStore('gehenna-gacha'), st = (await gs.get(u.id, { type: 'json' })) || { since: 0, total: 0 };
+      // Roll everything first (nothing is charged yet), so a full inventory cannot eat karma.
+      const got = []; let since = st.since || 0, hasSR = false;
+      for (let i = 0; i < count; i++) {
+        const t = rates(since);
+        const forced = count === 10 && i === 9 && !hasSR; // a ten-pull always contains an SR or better
+        const hit = pickItem(pools, rollRarity(t, forced ? ['sr', 'ssr'] : null));
+        if (!hit) break;
+        since = hit.rarity === 'ssr' ? 0 : since + 1;
+        if (hit.rarity === 'sr' || hit.rarity === 'ssr') hasSR = true;
+        got.push(hit);
+      }
+      c.items = Array.isArray(c.items) ? c.items : [];
+      const fresh = new Set(); got.forEach((g) => { const n = g.item.name.toLowerCase(); if (!c.items.some((x) => String(x.name).toLowerCase() === n)) fresh.add(n); });
+      if (c.items.length + fresh.size > 100) return reply(400, { error: 'Your inventory is too full for these. Nothing was charged.' });
+      c.karma = String(bal - cost);
+      got.forEach((g) => {
+        const e = g.item, have = c.items.find((x) => String(x.name).toLowerCase() === e.name.toLowerCase());
+        if (have) have.qty = Math.min(9999, (Number(have.qty) || 0) + 1); else c.items.push({ name: e.name, qty: 1, desc: S(e.desc, 500) });
+      });
+      await save();
+      await gs.setJSON(u.id, { since, total: (st.total || 0) + got.length });
+      return reply(200, Object.assign(view(c), {
+        results: got.map((g) => ({ itemId: g.item.id, name: g.item.name, desc: g.item.desc, rarity: g.rarity, image: g.item.image ? '/.netlify/functions/world?img=' + g.item.id + '&v=' + Date.parse(g.item.updatedAt || 0) : '' })),
+        message: 'Spent ' + cost + ' karma.',
+      }));
+    }
     if (b.action === 'myitems') {
-      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && e.usable), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
+      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && e.usable), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], dice: e && e.usable && Array.isArray(e.effects) ? e.effects.map(diceName) : [], locked: !!x.locked, sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
     }
     if (b.action === 'use') {
       // Using an item applies what the headmaster wrote on it (see the World registry) and removes one from the inventory.
       const n = S(b.name, 100).trim().toLowerCase(), e = byName[n], have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);
       if (!have || !e) return reply(404, { error: 'You do not have that item.' });
       if (!e.usable) return reply(400, { error: 'That item cannot be used.' });
+      if (have.locked) return reply(400, { error: e.name + ' is locked. Unlock it first.' });
       const fx = Array.isArray(e.use) ? e.use : [];
+      // Heal, damage and so on are rolled here and written into the dice log, then one copy is used up.
+      const rolled = rollDice(e.effects, c, e.name);
       have.qty -= 1; c.items = c.items.filter((x) => x.qty > 0);
       const added = fx.length ? addBuffs(c, e.name, fx, crypto.randomUUID()) : 0;
       await save();
-      return reply(200, Object.assign(view(c), { message: 'You used ' + e.name + '.' + (added ? ' ' + fx.map(fxLabel).join(', ') + '.' : '') }));
+      if (rolled.length) {
+        const rs = getStore('gehenna-rolls'), list = (await rs.get(c.id, { type: 'json' })) || [];
+        rolled.forEach((r) => list.unshift({ at: new Date().toISOString(), name: c.name, label: r.label, txt: r.txt, cls: '' }));
+        await rs.setJSON(c.id, list.slice(0, 60)); await rs.set('_rev', Date.now() + '-' + Math.random().toString(36).slice(2, 6));
+      }
+      return reply(200, Object.assign(view(c), { message: 'You used ' + e.name + '.' + rolled.map((r) => ' ' + r.label + ': ' + r.txt + '.').join('') + (added ? ' ' + fx.map(fxLabel).join(', ') + '.' : '') }));
+    }
+    if (b.action === 'lock') {
+      const n = S(b.name, 100).trim().toLowerCase(), have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);
+      if (!have) return reply(404, { error: 'You do not have that item.' });
+      have.locked = !!b.locked; await save();
+      return reply(200, Object.assign(view(c), { message: have.name + (have.locked ? ' is locked. It cannot be used, sold or traded until you unlock it.' : ' is unlocked.') }));
     }
     if (b.action === 'sell') {
       const n = S(b.name, 100).trim().toLowerCase(), e = byName[n], have = (c.items || []).find((x) => String(x.name).toLowerCase() === n), qty = N(b.qty, 1, 9999);
       if (!have || !e) return reply(404, { error: 'You do not have that item.' });
+      if (have.locked) return reply(400, { error: e.name + ' is locked. Unlock it first.' });
       if (!e.sellable || worth(e) < 1) return reply(400, { error: 'That item cannot be sold.' });
       if (have.qty < qty) return reply(400, { error: 'You only have ' + have.qty + '.' });
       const gain = worth(e) * qty; have.qty -= qty; c.items = c.items.filter((x) => x.qty > 0); c.karma = String(karmaOf(c) + gain); await save();
