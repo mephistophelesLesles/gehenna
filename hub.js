@@ -616,7 +616,7 @@
     }
     function after(r, okMsg) {
       err = !r.ok; msg = r.ok ? (r.j.message || okMsg || '') : (r.j.error || 'Something went wrong.');
-      if (r.ok) { data.karma = r.j.karma; data.debt = r.j.debt; if (G.reloadChar) G.reloadChar(); }
+      if (r.ok) { data.karma = r.j.karma; data.debt = r.j.debt; data.tickets = r.j.tickets; data.discount = r.j.discount; if (G.reloadChar) G.reloadChar(); }
       draw();
     }
     function saveCfg() {
@@ -695,7 +695,7 @@
       var wrap = h('div', { className: 'gc' }, [mach, h('div', { className: 'gc-btns' }, [b1, b10])]);
       function spin(on) { mach.classList.toggle('busy', on); }
       function previewPick() { var pool = cfg && cfg.gacha ? cfg.gacha.pool : [], it = pool[Math.floor(Math.random() * pool.length)], e = it && G.worldList.filter(function (x) { return x.id === it.itemId; })[0]; return e ? { name: e.name, desc: e.desc, image: e.image, rarity: it.rarity } : null; }
-      function pull(n) {
+      function pull(n, byTicket) {
         if (gcBusy || !ready) return;
         if (dm) {
           var res = []; for (var i = 0; i < n; i++) { var p = previewPick(); if (p) res.push(p); }
@@ -703,9 +703,9 @@
           gcBusy = true; spin(true); G.gachaReveal(res, function () { gcBusy = false; draw(); }); return;
         }
         gcBusy = true; spin(true); b1.disabled = b10.disabled = knob.disabled = true; msg = '';
-        call('market', { action: 'gachapull', count: n }).then(function (r) {
+        call('market', { action: 'gachapull', count: n, ticket: !!byTicket }).then(function (r) {
           if (!r.ok) { gcBusy = false; err = true; msg = r.j.error || 'The machine jammed.'; draw(); return; }
-          data.karma = r.j.karma; data.debt = r.j.debt; if (G.reloadChar) G.reloadChar();
+          data.karma = r.j.karma; data.debt = r.j.debt; data.tickets = r.j.tickets; data.discount = r.j.discount; if (G.reloadChar) G.reloadChar();
           G.gachaReveal(r.j.results, function () { gcBusy = false; err = false; msg = ''; draw(); });
         });
       }
@@ -715,6 +715,13 @@
       if (dm) { b10.onclick = function () { pull(10); }; }
       b1.disabled = b10.disabled = !ready || gcBusy;
       if (!dm) { if (!ready) wrap.appendChild(note('The machine is out of order. Mammon is restocking.')); else if (data.karma < g.cost1) wrap.appendChild(note('You need ' + money(g.cost1 - data.karma) + ' more karma for a pull.')); }
+      var tks = dm ? 0 : (data.tickets || 0);
+      if (tks > 0) {
+        var t1 = h('button', { type: 'button', className: 'btn', text: 'Use a ticket' + ' (' + tks + ' owned)' }); t1.onclick = function () { pull(1, true); }; t1.disabled = !ready || gcBusy;
+        var t10 = tks >= 10 ? h('button', { type: 'button', className: 'btn', text: 'Use 10 tickets' }) : null; if (t10) { t10.onclick = function () { pull(10, true); }; t10.disabled = !ready || gcBusy; }
+        wrap.appendChild(h('div', { className: 'gc-btns' }, [t1, t10]));
+        wrap.appendChild(note('Gacha tickets pay for pulls instead of karma. Your discount ticket never works here.'));
+      }
       if (dm && cfg) wrap.appendChild(gachaEditor());
       return wrap;
     }
@@ -788,9 +795,11 @@
       if (dm && adding && kc) wrap.appendChild(addItem(kc));
       return wrap;
     }
+    function disc(v, pct) { return v ? Math.max(1, Math.round(v * (100 - pct) / 100)) : 0; }
     function detail(c, it, kc) {
-      var p = it.sale || it.price;
-      var box = h('div', { className: 'mk-detail' }, [h('h4', { text: it.name }), it.desc && h('p', { className: 'pre', text: it.desc }), h('p', { className: 'mono red' }, [it.sale ? h('s', { text: money(it.price) }) : null, ' ' + money(p) + ' Karma' + (it.sale ? ' (on sale)' : '')])]);
+      var p0 = it.sale || it.price, p = data.discount && !isDM() ? disc(p0, data.discount.pct) : p0;
+      var box = h('div', { className: 'mk-detail' }, [h('h4', { text: it.name }), it.desc && h('p', { className: 'pre', text: it.desc }), h('p', { className: 'mono red' }, [(it.sale || p !== p0) ? h('s', { text: money(p !== p0 ? p0 : it.price) }) : null, ' ' + money(p) + ' Karma' + (p !== p0 ? ' (' + data.discount.pct + '% off, one purchase)' : (it.sale ? ' (on sale)' : ''))])]);
+      if (data.discount && !isDM()) box.appendChild(note(data.discount.name + ' is active. It is used up by your next purchase here and does not work on the gacha.'));
       if (!isDM()) {
         var buy = h('button', { type: 'button', className: 'btn primary', text: 'Buy for ' + money(p) + ' karma' });
         G.two(buy, 'Buy for ' + money(p) + ' karma', function () { buy.disabled = true; call('market', { action: 'buy', catId: c.id, itemId: it.itemId }).then(function (r) { after(r); }); });
@@ -1094,13 +1103,6 @@
       });
       box.appendChild(t);
     }
-    // Headmaster only: choose an NPC or monster from the registry and roll for it.
-    function rollerPicker() {
-      var host = h('div', { className: 'nr-host' }), reg = G.reg().filter(function (e) { return e.type !== 'player'; });
-      var s = h('select', { 'aria-label': 'NPC or monster to roll for' }, [h('option', { value: '', text: 'Choose an NPC or monster…' })].concat(reg.map(function (e) { return h('option', { value: e.id, text: e.name + ' (' + (e.type === 'npc' ? 'NPC' : 'Monster') + ')' }); })));
-      s.onchange = function () { clear(host); var e = reg.filter(function (x) { return x.id === s.value; })[0]; if (e) host.appendChild(npcRoller(e, function () { load(false); })); };
-      return h('div', { className: 'nr-pick' }, [h('p', { className: 'mono red', text: 'Roll for an NPC or monster' }), reg.length ? s : note('No NPCs or monsters yet. Add them in Character details › Registry.'), host]);
-    }
     // Headmaster only: clear out old rolls so the list never fills up with spam.
     function cleaner() {
       function run(body) { call('rolls', Object.assign({ action: 'clear' }, body)).then(function (r) { out.textContent = r.ok ? 'Deleted ' + r.j.gone + ' roll' + (r.j.gone === 1 ? '' : 's') + '.' : (r.j.error || 'Could not delete.'); rev = ''; load(false); }); }
@@ -1127,7 +1129,7 @@
         if (first) {
           var dm = !!G.creds(); sel = h('select', { 'aria-label': 'Filter by character' }); box = h('div', { className: 'dl-wrap' });
           sel.onchange = draw; fillNames();
-          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? rollerPicker() : null, dm ? cleaner() : null, h('div', { className: 'ef' }, [sel, note(dm ? 'The latest 300 rolls from every soul. New rolls appear by themselves.' : 'Everyone’s latest rolls, newest first. New rolls appear by themselves.')]), box]));
+          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? cleaner() : null, h('div', { className: 'ef' }, [sel, note(dm ? 'The latest 300 rolls from every soul. New rolls appear by themselves.' : 'Everyone’s latest rolls, newest first. New rolls appear by themselves.')]), box]));
         } else fillNames();
         draw();
       });
@@ -1142,8 +1144,8 @@
   /* ======================= EFFECTS (headmaster) ======================= */
   // Put a skill's buff or debuff (or one you type in) on chosen souls, see who is carrying what, and end it when you want.
   modules.fx = (function () {
-    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], targets = {};
-    function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; targets = {}; msg = ''; }
+    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' });
+    function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; targets = {}; msg = ''; kind = 'char'; npcQ = ''; npcSel = ''; clear(npcHost); }
     function enter() {
       var fresh = G.reloadChars ? G.reloadChars() : Promise.resolve();
       Promise.all([fresh, call('effects', { action: 'list' })]).then(function (rs) {
@@ -1177,18 +1179,7 @@
       wrap.appendChild(act1);
 
       /* ----- apply ----- */
-      var ap = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Apply an effect' })]);
-      var withBuffs = data.chars.filter(function (c) { return c.skills.some(function (s) { return s.buffs.length; }); });
-      var cs = h('select', { 'aria-label': 'Whose skill' }, [h('option', { value: '', text: 'A custom effect (type it in)' })].concat(withBuffs.map(function (c) { return h('option', { value: c.id, text: 'Skill of ' + c.name, selected: c.id === caster }); })));
-      cs.onchange = function () { caster = cs.value; skill = ''; fx = []; source = ''; draw(); };
-      var row = [cs];
-      if (caster) {
-        var cc = data.chars.filter(function (c) { return c.id === caster; })[0], sk = cc ? cc.skills.filter(function (s) { return s.buffs.length; }) : [];
-        var ss = h('select', { 'aria-label': 'Skill' }, [h('option', { value: '', text: 'Choose a skill…' })].concat(sk.map(function (s, i) { return h('option', { value: String(i), text: (s.name || s.label) + ' (' + s.buffs.length + ')', selected: skill === String(i) }); })));
-        ss.onchange = function () { skill = ss.value; var s = sk[+skill]; fx = s ? JSON.parse(JSON.stringify(s.buffs)) : []; source = s ? (s.name || s.label) : ''; draw(); };
-        row.push(ss);
-      }
-      ap.appendChild(h('div', { className: 'ef' }, row));
+      var ap = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Apply a custom effect' })]);
       var sn = h('input', { value: source, maxLength: 100, placeholder: 'Name of the effect (shown to the souls)', 'aria-label': 'Effect name' }); sn.oninput = function () { source = sn.value; };
       ap.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Name' }), sn]));
       ap.appendChild(G.fxEditor(fx, draw));
@@ -1211,7 +1202,33 @@
       var host = h('div', { className: 'dm-sheet' }), pk;
       function show() { clear(host); var c = fullList().filter(function (x) { return x.id === pickedId; })[0]; if (!c) { host.appendChild(note('No saved characters yet.')); return; } G.sheetInto(c, host); }
       pickedChar(cs); pk = charPicker(cs, function (id) { markPicker(pk, id); show(); }); show(); syncShow = show;
-      root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [h('div', { className: 'dm-left' }, [pk, wrap]), h('div', { className: 'dm-right' }, [host])]));
+      // NPCs and monsters: a searchable list of names (no pictures); the right side shows their stats with rolls for their saves, skills and attacks.
+      var tog = h('div', { className: 'mp-mini' }, [['char', 'Characters'], ['npc', 'NPCs'], ['shadow', 'Monsters']].map(function (o) {
+        var b = h('button', { type: 'button', text: o[1], 'aria-pressed': String(kind === o[0]) }); b.onclick = function () { kind = o[0]; draw(); }; return b;
+      }));
+      function npcSummary(e) {
+        var v = [['HP', e.hp], ['Armor', e.armor], ['Speed', e.speed !== '' && e.speed != null ? e.speed + ' ft' : ''], ['Size', e.size], ['Level / CR', e.level]].filter(function (x) { return x[1] !== '' && x[1] != null; });
+        var sum = [h('h3', { text: e.name }), h('p', { className: 'mono red', text: (e.type === 'npc' ? 'NPC' : 'Monster') + (e.listed === false ? ' · hidden from players' : '') + (e.statsOpen === false ? ' · stats sealed' : '') })];
+        sum.push(h('div', { className: 'mp-vit' }, v.map(function (x) { return h('div', {}, [h('span', { className: 'mono', text: x[0] }), h('b', { text: String(x[1]) })]); })));
+        return h('div', { className: 'mk-detail' }, sum);
+      }
+      function showNpc() {
+        clear(npcHost); var e = G.reg().filter(function (x) { return x.id === npcSel && x.type === kind; })[0];
+        if (!e) { npcHost.appendChild(note('Pick a name on the left to see its stats and roll for it.')); return; }
+        npcHost.appendChild(npcSummary(e));
+        npcHost.appendChild(npcRoller(e, function () { if (modules.dice && modules.dice.wake) modules.dice.wake(); }));
+      }
+      var npcPane = null;
+      if (kind !== 'char') {
+        var reg = G.reg().filter(function (e) { return e.type === kind; }), q = h('input', { type: 'search', value: npcQ, placeholder: 'Search ' + (kind === 'npc' ? 'NPCs' : 'monsters') + '…', 'aria-label': 'Search' }), nl = h('div', { className: 'fx-nlist' });
+        var fill = function () {
+          clear(nl); var f = reg.filter(function (e) { return !npcQ || e.name.toLowerCase().indexOf(npcQ.toLowerCase()) >= 0; });
+          if (!f.length) nl.appendChild(note(reg.length ? 'Nothing found.' : 'None yet. Add them in Character details › Registry.'));
+          f.forEach(function (e) { var b = h('button', { type: 'button', className: 'fx-nbtn', text: e.name, 'aria-pressed': String(e.id === npcSel) }); b.onclick = function () { npcSel = e.id; fill(); showNpc(); }; nl.appendChild(b); });
+        };
+        q.oninput = function () { npcQ = q.value; fill(); }; fill(); showNpc(); npcPane = h('div', { className: 'fx-npc' }, [q, nl]);
+      }
+      root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [h('div', { className: 'dm-left' }, [tog, kind === 'char' ? pk : npcPane, wrap]), h('div', { className: 'dm-right' }, [kind === 'char' ? host : npcHost])]));
     }
     return { enter: function () { msg = ''; enter(); }, reset: reset };
   })();
@@ -1438,14 +1455,23 @@
       if (c.kind === 'item') {
         var chk = function (label, k) { var i = h('input', { type: 'checkbox', checked: !!c[k] }); i.onchange = function () { c[k] = i.checked; if (k === 'usable') draw(); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); };
         box.appendChild(h('div', { className: 'ef' }, [chk('Players can sell this back (90% of its price)', 'sellable'), chk('Players can use this item', 'usable')]));
+        var tk = h('select', { 'aria-label': 'Ticket type' }, [['', 'Not a ticket'], ['gacha', 'Gacha ticket (pays for one gacha pull)'], ['discount', 'Discount ticket (percent off the next shop purchase, not the gacha)']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: (c.ticket || '') === o[0] }); }));
+        tk.onchange = function () { c.ticket = tk.value; if (c.ticket === 'discount' && !c.pct) c.pct = 30; draw(); };
+        var tkRow = [h('label', { className: 'fl' }, [h('span', { text: 'Ticket' }), tk])];
+        if (c.ticket === 'discount') { var pc = h('input', { type: 'number', min: 1, max: 90, value: c.pct || 30, className: 'ni', 'aria-label': 'Percent off' }); pc.oninput = function () { c.pct = Math.max(1, Math.min(90, Math.floor(+pc.value) || 30)); }; tkRow.push(h('label', { className: 'fl' }, [h('span', { text: 'Percent off' }), pc])); }
+        box.appendChild(h('div', { className: 'g2' }, tkRow));
+        if (c.ticket === 'discount') box.appendChild(note('Players use it from their inventory. It takes the percent off their next shop purchase, then it is used up. It never applies to the gacha.'));
+        if (c.ticket === 'gacha') box.appendChild(note('One ticket pays for one pull (ten for a ten-pull). Players choose it at the gacha machine. Locked tickets cannot be used.'));
         if (c.usable) { c.use = c.use || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'When a soul uses it (optional): add HP, raise a stat, or give a buff. One copy is used up each time. Temporary effects stay until you end them in the Effects tab.' }), G.fxEditor(c.use, draw)])); c.effects = c.effects || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'Dice it rolls when used (optional), like a skill: for example Heal 1d4. The result is worked out by the server and shown in the Dice log.' }), G.diceEditor(c.effects, draw)])); }
       }
+      var hid = h('input', { type: 'checkbox', checked: !!c.hidden }); hid.onchange = function () { c.hidden = hid.checked; };
+      box.appendChild(h('label', { className: 'chk' }, [hid, h('span', { text: 'Hide from the public registry (it can still be sold, given and used)' })]));
       box.appendChild(crop);
       box.appendChild(txt('Description (everyone can read this)', 'desc', 5, 2000));
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save' });
       save.onclick = function () {
         save.disabled = true; st.textContent = 'Saving…';
-        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, use: c.usable ? (c.use || []) : [], effects: c.usable ? (c.effects || []) : [] };
+        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, hidden: !!c.hidden, ticket: c.kind === 'item' ? (c.ticket || '') : '', pct: c.pct || 30, use: c.usable ? (c.use || []) : [], effects: c.usable ? (c.effects || []) : [] };
         if (!c.isNew) e.id = c.id; if (/^data:/.test(c.image || '') || c.image === '') e.image = c.image;
         call('world', { action: 'wsave', entry: e }).then(function (r) {
           save.disabled = false; if (!r.ok) { st.textContent = r.j.error || 'Save failed'; return; }

@@ -22,13 +22,16 @@ function clean(e, old) {
     desc: S(e.desc, 2000), category: S(e.category, 60).trim(),
     price: N(e.price, 0, 1000000),
     sellable: e.sellable == null ? !!(old && old.sellable) : !!e.sellable, usable: e.usable == null ? !!(old && old.usable) : !!e.usable,
+    hidden: e.hidden == null ? !!(old && old.hidden) : !!e.hidden,
+    ticket: kind !== 'item' ? '' : (['gacha', 'discount'].includes(e.ticket) ? e.ticket : (e.ticket == null ? (old && old.ticket) || '' : '')),
+    pct: e.pct == null ? (old && old.pct) || 30 : N(e.pct, 1, 90),
     use: e.use == null ? (old && old.use) || [] : cleanFx(e.use),
     effects: e.effects == null ? (old && old.effects) || [] : cleanDice(e.effects),
     createdAt: old ? old.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
 }
 const imgUrl = (e) => (e.image ? '/.netlify/functions/world?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0) : '');
-const pub = (e) => ({ id: e.id, kind: e.kind, name: e.name, image: imgUrl(e), desc: e.desc, category: e.category, price: e.price, sellable: !!e.sellable, usable: !!e.usable, use: Array.isArray(e.use) ? e.use : [], effects: Array.isArray(e.effects) ? e.effects : [] });
+const pub = (e) => ({ id: e.id, kind: e.kind, name: e.name, image: imgUrl(e), desc: e.desc, category: e.category, price: e.price, sellable: !!e.sellable, usable: !!e.usable, hidden: !!e.hidden, ticket: e.ticket || '', pct: e.pct || 30, use: Array.isArray(e.use) ? e.use : [], effects: Array.isArray(e.effects) ? e.effects : [] });
 
 async function worldAdmin(b, store) {
   if (b.action === 'wlist') {

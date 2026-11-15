@@ -379,3 +379,11 @@ body.gc-lock { overflow: hidden; }
   .gc-ov *, .gc-machine * { animation-duration: 0.01s !important; animation-iteration-count: 1 !important; transition-duration: 0.01s !important; }
   .gc-card.r-ssr, .gc-card.r-sr { animation: none !important; }
 }
+
+
+/* ---- Effects: NPC / monster list ---- */
+.fx-npc { display: grid; gap: 0.5rem; }
+.fx-nlist { display: grid; gap: 0.3rem; max-height: 22rem; overflow: auto; }
+.fx-nbtn { text-align: left; padding: 0.55rem 0.8rem; background: var(--surface); color: var(--fg); border: 1px solid var(--line); font: 600 1rem var(--f-body); cursor: pointer; }
+.fx-nbtn:hover { background: var(--surface-2); }
+.fx-nbtn[aria-pressed="true"] { border-color: var(--red); background: var(--surface-2); }

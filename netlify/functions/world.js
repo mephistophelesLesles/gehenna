@@ -20,6 +20,6 @@ exports.handler = async (event) => {
     }
     const all = await loadAll(store);
     all.sort((x, y) => x.name.localeCompare(y.name));
-    return reply(200, { entries: all.map(pub) });
+    return reply(200, { entries: all.filter((e) => !e.hidden).map(pub) }); // hidden entries never reach the public registry
   } catch (e) { return reply(502, { error: 'Server error: ' + e.message }); }
 };

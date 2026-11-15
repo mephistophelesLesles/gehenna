@@ -102,7 +102,11 @@ exports.handler = async (event) => {
     const world = await loadAll(wstore), byId = {}; world.forEach((e) => { byId[e.id] = e; });
     let c = null;
     if (!u.admin) { c = await cstore.get(u.id, { type: 'json' }); if (!c) return reply(404, { error: 'Character not found.' }); if (settle(c)) await cstore.setJSON(u.id, c); }
-    const view = (c) => ({ karma: c ? karmaOf(c) : 0, debt: c ? c.debt || 0 : 0 });
+    const view = (c) => ({ karma: c ? karmaOf(c) : 0, debt: c ? c.debt || 0 : 0, tickets: gTickets(c), discount: c && c.discount ? { pct: c.discount.pct, name: c.discount.name } : null });
+    // Gacha tickets are World items marked "Gacha ticket". Locked ones do not count.
+    const tkOf = (x) => { const e = byName[String(x.name).toLowerCase()]; return e && e.ticket === 'gacha' && !x.locked ? Number(x.qty) || 0 : 0; };
+    const gTickets = (c) => (c && Array.isArray(c.items) ? c.items.reduce((a, x) => a + tkOf(x), 0) : 0);
+    const spendTickets = (ch, n) => { let need = n; ch.items.forEach((x) => { const t = Math.min(need, tkOf(x)); if (t > 0) { x.qty -= t; need -= t; } }); ch.items = ch.items.filter((x) => x.qty > 0); };
     const byName = {}; world.forEach((e) => { if (e.kind === 'item') byName[e.name.toLowerCase()] = e; });
     const listed = {}; cfg.cats.forEach((k) => k.items.forEach((i) => { if (!listed[i.itemId]) listed[i.itemId] = i; }));
     // Sells back at 90% of the shop price (the sale price while a sale is on, so a sale cannot be farmed), else the registry price.
@@ -155,12 +159,13 @@ exports.handler = async (event) => {
 
     const save = async () => { await cstore.setJSON(u.id, c); };
     if (b.action === 'gachapull') {
-      const count = Number(b.count) === 10 ? 10 : 1, cost = COST[count];
+      const count = Number(b.count) === 10 ? 10 : 1, cost = COST[count], byTicket = b.ticket === true || b.ticket === 'true';
       const pools = {}; RARITIES.forEach((r) => { pools[r] = []; });
       (cfg.gacha.pool || []).forEach((g) => { const e = byId[g.itemId]; if (e) pools[g.rarity].push(e); });
       if (!RARITIES.some((r) => pools[r].length)) return reply(400, { error: 'The machine is empty right now.' });
       const bal = karmaOf(c);
-      if (bal < cost) return reply(400, { error: 'Not enough karma. You have ' + bal + ' and it costs ' + cost + '.' });
+      if (byTicket) { if (gTickets(c) < count) return reply(400, { error: 'You need ' + count + ' gacha ticket' + (count > 1 ? 's' : '') + ' for that. You have ' + gTickets(c) + '.' }); }
+      else if (bal < cost) return reply(400, { error: 'Not enough karma. You have ' + bal + ' and it costs ' + cost + '.' });
       const gs = getStore('gehenna-gacha'), st = (await gs.get(u.id, { type: 'json' })) || { since: 0, total: 0 };
       // Roll everything first (nothing is charged yet), so a full inventory cannot eat karma.
       const got = []; let since = st.since || 0, hasSR = false;
@@ -176,7 +181,7 @@ exports.handler = async (event) => {
       c.items = Array.isArray(c.items) ? c.items : [];
       const fresh = new Set(); got.forEach((g) => { const n = g.item.name.toLowerCase(); if (!c.items.some((x) => String(x.name).toLowerCase() === n)) fresh.add(n); });
       if (c.items.length + fresh.size > 100) return reply(400, { error: 'Your inventory is too full for these. Nothing was charged.' });
-      c.karma = String(bal - cost);
+      if (byTicket) spendTickets(c, count); else c.karma = String(bal - cost);
       got.forEach((g) => {
         const e = g.item, have = c.items.find((x) => String(x.name).toLowerCase() === e.name.toLowerCase());
         if (have) have.qty = Math.min(9999, (Number(have.qty) || 0) + 1); else c.items.push({ name: e.name, qty: 1, desc: S(e.desc, 500) });
@@ -185,18 +190,26 @@ exports.handler = async (event) => {
       await gs.setJSON(u.id, { since, total: (st.total || 0) + got.length });
       return reply(200, Object.assign(view(c), {
         results: got.map((g) => ({ itemId: g.item.id, name: g.item.name, desc: g.item.desc, rarity: g.rarity, image: g.item.image ? '/.netlify/functions/world?img=' + g.item.id + '&v=' + Date.parse(g.item.updatedAt || 0) : '' })),
-        message: 'Spent ' + cost + ' karma.',
+        message: byTicket ? 'Used ' + count + ' gacha ticket' + (count > 1 ? 's' : '') + '.' : 'Spent ' + cost + ' karma.',
       }));
     }
     if (b.action === 'myitems') {
-      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && e.usable), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], dice: e && e.usable && Array.isArray(e.effects) ? e.effects.map(diceName) : [], locked: !!x.locked, sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
+      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && (e.usable || e.ticket === 'discount')), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], dice: e && e.usable && Array.isArray(e.effects) ? e.effects.map(diceName) : [], locked: !!x.locked, sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
     }
     if (b.action === 'use') {
       // Using an item applies what the headmaster wrote on it (see the World registry) and removes one from the inventory.
       const n = S(b.name, 100).trim().toLowerCase(), e = byName[n], have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);
       if (!have || !e) return reply(404, { error: 'You do not have that item.' });
-      if (!e.usable) return reply(400, { error: 'That item cannot be used.' });
+      if (e.ticket === 'gacha' && !e.usable) return reply(400, { error: 'Use this ticket at the gacha machine in the Marketplace.' });
+      if (!e.usable && e.ticket !== 'discount') return reply(400, { error: 'That item cannot be used.' });
       if (have.locked) return reply(400, { error: e.name + ' is locked. Unlock it first.' });
+      if (e.ticket === 'discount') {
+        if (c.discount) return reply(400, { error: 'You already have ' + c.discount.pct + '% off waiting. Buy something in the shop first.' });
+        have.qty -= 1; c.items = c.items.filter((x) => x.qty > 0);
+        c.discount = { pct: e.pct ? N(e.pct, 1, 90) : 30, name: e.name };
+        await save();
+        return reply(200, Object.assign(view(c), { message: e.name + ' is active: ' + c.discount.pct + '% off your next shop purchase. It does not work on the gacha, and it is used up after one purchase.' }));
+      }
       const fx = Array.isArray(e.use) ? e.use : [];
       // Heal, damage and so on are rolled here and written into the dice log, then one copy is used up.
       const rolled = rollDice(e.effects, c, e.name);
@@ -228,14 +241,15 @@ exports.handler = async (event) => {
     if (b.action === 'buy') {
       const cat = cfg.cats.find((k) => k.id === String(b.catId)), li = cat && cat.items.find((i) => i.itemId === String(b.itemId)), e = li && byId[li.itemId];
       if (!e) return reply(404, { error: 'That item is not for sale.' });
-      const bal = karmaOf(c), price = li.sale || li.price;
+      const bal = karmaOf(c), base = li.sale || li.price, off = c.discount ? N(c.discount.pct, 0, 90) : 0, price = off && base ? Math.max(1, Math.round(base * (100 - off) / 100)) : base;
       if (bal < price) return reply(400, { error: 'Not enough karma. You have ' + bal + ' and it costs ' + price + '.' });
       c.karma = String(bal - price);
+      const used = c.discount || null; delete c.discount; // the discount is used up by this purchase
       c.items = Array.isArray(c.items) ? c.items : [];
       const have = c.items.find((x) => String(x.name).toLowerCase() === e.name.toLowerCase());
       if (have) have.qty = Math.min(9999, (Number(have.qty) || 0) + 1); else if (c.items.length < 100) c.items.push({ name: e.name, qty: 1, desc: S(e.desc, 500) });
       await save();
-      return reply(200, Object.assign(view(c), { message: 'Bought ' + e.name + ' for ' + price + ' karma.' }));
+      return reply(200, Object.assign(view(c), { message: 'Bought ' + e.name + ' for ' + price + ' karma.' + (used ? ' (' + used.pct + '% off with ' + used.name + '. The ticket is used up.)' : '') }));
     }
     if (b.action === 'paydebt') {
       const amt = N(b.amount, 0, 1e9), debt = c.debt || 0, bal = karmaOf(c);
