@@ -1,5 +1,4 @@
-// Using an item: the checks, the changes, and the queue the headmaster approves from while a soul is in battle.
-// Shared by market.js (a player uses an item) and effects.js (the headmaster allows a waiting request).
+// Using an item: the checks and the changes. Used by market.js when a player uses an item.
 const crypto = require('crypto');
 const { getStore } = require('@netlify/blobs');
 const { addBuffs, label: fxLabel, rollDice, ST, maxHp, curHp, modFromScore, cures } = require('./fx');
@@ -55,7 +54,4 @@ async function logRolls(c, rolled) {
 }
 const doneMsg = (e, changes) => 'You used ' + e.name + '. ' + changes.map((x) => x.text).join('. ') + '.';
 
-// Requests waiting for the headmaster (one per soul). A decided request stays until the player has seen the answer.
-const qStore = () => getStore('gehenna-useq');
-async function getQ(st) { const q = await st.get('q', { type: 'json' }); return Array.isArray(q) ? q : []; }
-module.exports = { checkUse, applyUse, logRolls, doneMsg, qStore, getQ };
+module.exports = { checkUse, applyUse, logRolls, doneMsg };

@@ -657,7 +657,8 @@
     }
     function after(r, okMsg) {
       err = !r.ok; msg = r.ok ? (r.j.message || okMsg || '') : (r.j.error || 'Something went wrong.');
-      if (r.ok) { data.karma = r.j.karma; data.debt = r.j.debt; data.tickets = r.j.tickets; data.discount = r.j.discount; if (G.reloadChar) G.reloadChar(); }
+      if (!r.ok && r.j.battle) data.battle = true;
+      if (r.ok) { data.battle = !!r.j.battle; data.karma = r.j.karma; data.debt = r.j.debt; data.tickets = r.j.tickets; data.discount = r.j.discount; if (G.reloadChar) G.reloadChar(); }
       draw();
     }
     function saveCfg() {
@@ -691,7 +692,8 @@
       var main = h('div', { className: 'mk-main' }, [top]);
       if (msg) main.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
       if (dm && editMammon && cfg) main.appendChild(mammonEditor());
-      if (cat === 'sell' && !dm) main.appendChild(sellPanel());
+      if (data.battle && !dm) main.appendChild(h('div', { className: 'mk-detail' }, [h('h4', { text: 'The marketplace is closed' }), note('You are in battle. Nothing can be bought, sold or borrowed until the headmaster ends the battle.')]));
+      else if (cat === 'sell' && !dm) main.appendChild(sellPanel());
       else if (cat === 'debt' && !dm) main.appendChild(debtPanel());
       else if (cat === 'gacha') main.appendChild(gachaPanel());
       else if (c) main.appendChild(shelf(c));
@@ -912,26 +914,10 @@
 
   /* ======================= ITEMS (players: inventory and selling; headmaster: quick tools) ======================= */
   modules.items = (function () {
-    var root = $('pane-items'), msg = '', err = false, waiting = '', wtimer = null;
+    var root = $('pane-items'), msg = '', err = false;
     function isDM() { return !!G.creds(); }
-    // In battle the headmaster has to allow each use. Ask the server every couple of seconds until she answers, then show the result.
-    function stopWait() { clearInterval(wtimer); wtimer = null; }
-    function watch() {
-      if (wtimer) return;
-      function poll() {
-        call('market', { action: 'myreq' }).then(function (r) {
-          if (!r.ok) { stopWait(); waiting = ''; return; }
-          var q = r.j.request;
-          if (!q) { stopWait(); if (waiting) { waiting = ''; mine(); } return; }
-          if (q.status === 'pending') { if (waiting !== q.item) { waiting = q.item; mine(); } return; }
-          stopWait(); waiting = ''; err = q.status !== 'allowed'; msg = q.message; if (!err && G.reloadChar) G.reloadChar(); mine();
-          if (!err && q.changes && q.changes.length) G.showResult(q.item, q.changes);
-        });
-      }
-      wtimer = setInterval(poll, 2000); poll();
-    }
     function money(n) { return Number(n || 0).toLocaleString('en-US'); }
-    function reset() { clear(root); msg = ''; stopWait(); waiting = ''; }
+    function reset() { clear(root); msg = ''; }
     function badge(t, on) { return h('span', { className: 'bdg' + (on ? ' on' : ''), text: t }); }
     function mine() {
       call('market', { action: 'myitems' }).then(function (r) {
@@ -939,22 +925,21 @@
         var total = 0; r.j.items.forEach(function (x) { total += x.qty; });
         var wrap = h('div', { className: 'hb-wrap' }, [h('p', { className: 'mk-tot', text: 'You carry ' + total + ' item' + (total === 1 ? '' : 's') + ' (' + r.j.items.length + ' kind' + (r.j.items.length === 1 ? '' : 's') + ')' }),
           h('p', { className: 'mk-tot' + (r.j.debt ? ' bad' : ''), text: 'Karma: ' + money(r.j.karma) + (r.j.debt ? ' · Debt: -' + money(r.j.debt) : '') })]);
-        if (r.j.battle) wrap.appendChild(h('p', { className: 'mk-msg bad', text: 'You are in battle. The headmaster has to allow each item you use, and an item is not used up until she does.' }));
-        if (waiting) wrap.appendChild(h('p', { className: 'mk-msg', text: 'Waiting for the headmaster to allow ' + waiting + '…', role: 'status' }));
+        if (r.j.battle) wrap.appendChild(h('p', { className: 'mk-msg bad', text: 'You are in battle. You cannot use items or the Marketplace until the headmaster ends the battle.' }));
         if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
         if (!r.j.items.length) wrap.appendChild(note('Nothing here yet. The headmaster adds items as you earn them.'));
         var ol = h('ol', { className: 'il-list' });
-        function done(r2, fail) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || fail); if (r2.ok && r2.j.pending) { waiting = r2.j.item || 'it'; watch(); } if (r2.ok && G.reloadChar) G.reloadChar(); mine(); if (r2.ok && r2.j.changes && r2.j.changes.length) G.showResult(r2.j.item || 'Item', r2.j.changes); }
+        function done(r2, fail) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || fail); if (r2.ok && G.reloadChar) G.reloadChar(); mine(); if (r2.ok && r2.j.changes && r2.j.changes.length) G.showResult(r2.j.item || 'Item', r2.j.changes); }
         r.j.items.forEach(function (x) {
           var lk = !!x.locked;
           var ub = h('button', { type: 'button', className: 'btn sq primary' });
           function useGo(stat) { call('market', { action: 'use', name: x.name, stat: stat || '' }).then(function (r3) { done(r3, 'Could not use it.'); }); }
           if (x.statUp && x.statUp.mode === 'choose') ub.onclick = function () { G.pickStat(x, useGo); }; else G.two(ub, 'Use', function () { useGo(); });
-          ub.textContent = 'Use'; ub.disabled = !x.usable || lk || !!waiting;
+          ub.textContent = 'Use'; ub.disabled = !x.usable || lk || !!r.j.battle;
           var tb = h('button', { type: 'button', className: 'btn sq', text: 'Trade' }); tb.disabled = lk;
           tb.onclick = function () { var s = document.querySelector('#it-trade select[aria-label="Item to give"]'); if (s) { s.value = x.name; if (s.onchange) s.onchange(); } var t = $('it-trade'); if (t) t.scrollIntoView({ block: 'center' }); };
           var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many to sell' }), sb = h('button', { type: 'button', className: 'btn sq' });
-          G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { done(r2, 'Could not sell.'); }); }); sb.textContent = 'Sell'; sb.disabled = !x.sellable || lk;
+          G.two(sb, 'Sell', function () { call('market', { action: 'sell', name: x.name, qty: q.value }).then(function (r2) { done(r2, 'Could not sell.'); }); }); sb.textContent = 'Sell'; sb.disabled = !x.sellable || lk || !!r.j.battle;
           var kb = h('button', { type: 'button', className: 'btn sq', text: lk ? 'Unlock' : 'Lock', 'aria-pressed': String(lk), title: 'A locked item cannot be used, sold or traded by accident' });
           kb.onclick = function () { call('market', { action: 'lock', name: x.name, locked: !lk }).then(function (r4) { done(r4, 'Could not change the lock.'); }); };
           ol.appendChild(h('li', { className: lk ? 'locked' : '' }, [
@@ -1053,8 +1038,18 @@
           tg.onclick = function () { panel.hidden = !panel.hidden; tg.setAttribute('aria-expanded', String(!panel.hidden)); };
           var lk = !!x.locked, kb = h('button', { type: 'button', className: 'btn sq', text: lk ? 'Unlock' : 'Lock', 'aria-pressed': String(lk), title: 'A locked item cannot be used, sold or traded by its owner' });
           kb.onclick = function () { act('hm_lockitem', { id: c.id, name: x.name, locked: !lk }); };
+          // Use it for them (works in battle): applies the item's registry effect, rolls the dice, logs the rolls, removes one.
+          var ub = h('button', { type: 'button', className: 'btn sq primary', text: 'Use for them' });
+          function useGo(stat) {
+            call('market', { action: 'hm_useitem', id: c.id, name: x.name, stat: stat || '' }).then(function (r) {
+              if (!r.ok && r.j.needStat && r.j.stats) { G.pickStat({ name: x.name, statUp: { amt: r.j.amt, stats: r.j.stats } }, useGo); return; }
+              out.className = 'mono hb-note' + (r.ok ? '' : ' bad'); out.textContent = r.ok ? r.j.message : (r.j.error || 'Failed.');
+              if (r.ok) { if (G.reloadChars) G.reloadChars().then(function () { drawInv(); drawEveryone(); }); if (r.j.changes && r.j.changes.length) G.showResult(r.j.item, r.j.changes); }
+            });
+          }
+          G.two(ub, 'Use for them', function () { useGo(); });
           ol.appendChild(h('li', { className: lk ? 'locked' : '' }, [h('div', { className: 'il-line' }, [h('b', { text: x.name }), h('span', { className: 'mono', text: '×' + x.qty }), lk ? badge('Locked', true) : null]), x.desc ? h('p', { className: 'pre hb-note', text: x.desc }) : null,
-            h('div', { className: 'il-btns' }, [x.qty > 1 ? q : null, rm, tg, kb]), panel]));
+            h('div', { className: 'il-btns' }, [x.qty > 1 ? q : null, ub, rm, tg, kb]), panel]));
         });
         if (!items.length) inv.appendChild(note('Nothing carried yet.')); else inv.appendChild(ol);
       }
@@ -1086,7 +1081,7 @@
           note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), everyone]);
       root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [left, h('div', { className: 'dm-right' }, [out, inv])]));
     }
-    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) { (G.reloadChars ? G.reloadChars() : Promise.resolve()).then(tools); } else { mine(); watch(); } }, reset: reset };
+    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) { (G.reloadChars ? G.reloadChars() : Promise.resolve()).then(tools); } else { mine(); } }, reset: reset };
   })();
 
   /* ======================= ROLL FOR AN NPC OR MONSTER ======================= */
@@ -1207,7 +1202,7 @@
   /* ======================= EFFECTS (headmaster) ======================= */
   // Put a skill's buff or debuff (or one you type in) on chosen souls, see who is carrying what, and end it when you want.
   modules.fx = (function () {
-    var root = $('pane-fx'), reqRef = null, lastReqs = -1, data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], pickFx = '', stEdit = null, targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' });
+    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], pickFx = '', stEdit = null, targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' });
     function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; pickFx = ''; stEdit = null; targets = {}; msg = ''; kind = 'char'; npcQ = ''; npcSel = ''; clear(npcHost); }
     function enter() {
       var fresh = G.reloadChars ? G.reloadChars() : Promise.resolve();
@@ -1218,23 +1213,6 @@
       });
     }
     function act(body) { call('effects', body).then(function (r) { err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) { data = r.j; data.chars.forEach(function (d) { var f = G.chars().filter(function (x) { return x.id === d.id; })[0]; if (f) f.buffs = d.buffs; }); } draw(); }); }
-    // The Effects button shows how many item requests are waiting, even from other tabs. Only that list is redrawn, never your forms.
-    // Alerts for new requests: the browser tab title flashes "(1) Request!" while the tab is hidden, and an optional beep plays.
-    var baseTitle = document.title, flashT = null, ac = null, beepOn = false;
-    try { beepOn = localStorage.getItem('gehenna-beep') === '1'; } catch (e) { }
-    function beep() {
-      if (!beepOn) return;
-      try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); [0, 0.25].forEach(function (t) { var o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(ac.destination); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.15); }); } catch (e) { }
-    }
-    function stopFlash() { clearInterval(flashT); flashT = null; document.title = baseTitle; }
-    function flash(n) { clearInterval(flashT); var on = false; flashT = setInterval(function () { on = !on; document.title = on ? '(' + n + ') Request!' : baseTitle; }, 1000); }
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) stopFlash(); });
-    G.onReqs = function (n) {
-      var nb = $('nav-fx'); if (nb) nb.textContent = 'Effects' + (n ? ' (' + n + ')' : '');
-      if (n > Math.max(lastReqs, 0)) { beep(); if (document.hidden) flash(n); } else if (flashT && n > 0) flash(n); else if (!n) stopFlash();
-      if (n === lastReqs) return; lastReqs = n;
-      if (data && reqRef && root.offsetParent) call('effects', { action: 'list' }).then(function (r) { if (r.ok) { data.requests = r.j.requests || []; data.chars.forEach(function (d) { var f = r.j.chars.filter(function (x) { return x.id === d.id; })[0]; if (f) d.inBattle = f.inBattle; }); reqRef(); } });
-    };
     // Live: when any sheet changes on the server, redraw only the sheet on the right (never the forms on the left).
     var syncShow = null; G.onSync = function () { if (syncShow && root.offsetParent) syncShow(); };
     function draw() {
@@ -1242,29 +1220,14 @@
       wrap.appendChild(note('Buffs and debuffs change a soul’s stats on their sheet by themselves (the modifiers, saves and damage bonuses recalculate). The base stats are never touched, so ending an effect puts everything back.'));
       if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
 
-      /* ----- item requests from souls in battle ----- */
-      var reqHost = h('div', {});
-      function drawReq() {
-        clear(reqHost); var rs = data.requests || []; if (!rs.length) return;
-        var bx = h('div', { className: 'mk-detail ur-reqs' }, [h('h4', { text: 'Item requests (' + rs.length + ')' }), note('These souls are in battle. Nothing is used up until you allow it.')]);
-        rs.forEach(function (q) {
-          var yes = h('button', { type: 'button', className: 'btn primary', text: 'Allow' }), no = h('button', { type: 'button', className: 'btn', text: 'Deny' });
-          yes.onclick = function () { yes.disabled = no.disabled = true; act({ action: 'allow', rid: q.id }); }; no.onclick = function () { yes.disabled = no.disabled = true; act({ action: 'deny', rid: q.id }); };
-          bx.appendChild(h('div', { className: 'fx-row temp' }, [h('div', { className: 'ef' }, [h('b', { text: q.charName }), h('span', { text: 'wants to use' }), h('b', { text: q.item + (q.stat ? ' (' + q.stat + ')' : '') }), yes, no])]));
-        });
-        reqHost.appendChild(bx);
-      }
-      reqRef = drawReq; drawReq(); wrap.appendChild(reqHost);
-
       /* ----- battle: while in battle a soul's items wait for you ----- */
-      var bp = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Battle' }), note('Tap a soul to mark them In battle. While in battle, every item they use waits here for you to allow it. Tap again when the battle is over.')]);
+      var bp = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Battle' }), note('Tap a soul to mark them In battle. While in battle they cannot use items or the Marketplace. Tap again, or press End battle for everyone, when it is over.')]);
       var bchips = h('div', { className: 'fx-chips' }, data.chars.map(function (c) {
         var x = h('button', { type: 'button', className: 'fx-chip', 'aria-pressed': String(!!c.inBattle), text: c.name + (c.inBattle ? ' · in battle' : '') }); x.onclick = function () { act({ action: 'battle', targets: [c.id], on: !c.inBattle }); }; return x;
       }));
       var allIn = h('button', { type: 'button', className: 'btn', text: 'Everyone in battle' }), allOut = h('button', { type: 'button', className: 'btn', text: 'End battle for everyone' });
       allIn.onclick = function () { act({ action: 'battle', targets: data.chars.map(function (c) { return c.id; }), on: true }); }; allOut.onclick = function () { act({ action: 'battle', targets: data.chars.map(function (c) { return c.id; }), on: false }); };
-      var bz = h('input', { type: 'checkbox', checked: beepOn }); bz.onchange = function () { beepOn = bz.checked; try { localStorage.setItem('gehenna-beep', beepOn ? '1' : '0'); } catch (e) { } if (beepOn) beep(); };
-      bp.appendChild(bchips); bp.appendChild(h('div', { className: 'ef' }, [allIn, allOut])); bp.appendChild(h('label', { className: 'chk' }, [bz, h('span', { text: 'Beep when an item request arrives (this browser only)' })])); wrap.appendChild(bp);
+      bp.appendChild(bchips); bp.appendChild(h('div', { className: 'ef' }, [allIn, allOut])); wrap.appendChild(bp);
 
       /* ----- active effects, grouped by the cast that made them ----- */
       var groups = {}, order = [];

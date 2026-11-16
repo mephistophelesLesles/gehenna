@@ -7,7 +7,7 @@ const { settle, reply, S, N, IMG, ID, isAdmin, who, needUser, karmaOf, parseBody
 const { loadAll } = require('./lib/world');
 const { addBuffs, label: fxLabel, rollDice, diceName, ST, maxHp, curHp, modFromScore, cures } = require('./lib/fx');
 const { loadStatuses } = require('./lib/status');
-const { checkUse, applyUse, logRolls, doneMsg, qStore, getQ } = require('./lib/use');
+const { checkUse, applyUse, logRolls, doneMsg } = require('./lib/use');
 
 const LOAN_CAP = 5000;
 
@@ -104,7 +104,7 @@ exports.handler = async (event) => {
     const world = await loadAll(wstore), byId = {}; world.forEach((e) => { byId[e.id] = e; });
     let c = null;
     if (!u.admin) { c = await cstore.get(u.id, { type: 'json' }); if (!c) return reply(404, { error: 'Character not found.' }); if (settle(c)) await cstore.setJSON(u.id, c); }
-    const view = (c) => ({ karma: c ? karmaOf(c) : 0, debt: c ? c.debt || 0 : 0, tickets: gTickets(c), discount: c && c.discount ? { pct: c.discount.pct, name: c.discount.name } : null });
+    const view = (c) => ({ battle: !!(c && c.inBattle), karma: c ? karmaOf(c) : 0, debt: c ? c.debt || 0 : 0, tickets: gTickets(c), discount: c && c.discount ? { pct: c.discount.pct, name: c.discount.name } : null });
     // Gacha tickets are World items marked "Gacha ticket". Locked ones do not count.
     const tkOf = (x) => { const e = byName[String(x.name).toLowerCase()]; return e && e.ticket === 'gacha' && !x.locked ? Number(x.qty) || 0 : 0; };
     const gTickets = (c) => (c && Array.isArray(c.items) ? c.items.reduce((a, x) => a + tkOf(x), 0) : 0);
@@ -124,7 +124,7 @@ exports.handler = async (event) => {
     }
     if (u.admin) {
       // Headmaster quick tools: no need to open the character.
-      if (['hm_karma', 'hm_additem', 'hm_takeitem', 'hm_giveitem', 'hm_lockitem'].includes(b.action)) {
+      if (['hm_karma', 'hm_additem', 'hm_takeitem', 'hm_giveitem', 'hm_lockitem', 'hm_useitem'].includes(b.action)) {
         const getC = async (id) => (ID.test(String(id || '')) ? cstore.get(String(id), { type: 'json' }) : null);
         const a = await getC(b.id); if (!a) return reply(404, { error: 'Character not found.' });
         const sameName = (x, n) => String(x.name).toLowerCase() === n.toLowerCase();
@@ -145,6 +145,17 @@ exports.handler = async (event) => {
           return reply(200, { message: 'Gave ' + qty + ' x ' + name + ' to ' + a.name + '.' });
         }
         if (!have || have.qty < qty) return reply(400, { error: a.name + ' does not have ' + qty + ' x ' + name + '.' });
+        if (b.action === 'hm_useitem') {
+          // The headmaster uses the item for them: the same effect and dice as when a soul uses it, but it works during battle and ignores the lock.
+          const e = byName[name.toLowerCase()];
+          if (!e) return reply(400, { error: name + ' is not in the World registry, so it has no effect to apply.' });
+          if (!e.usable) return reply(400, { error: e.name + ' is not marked usable in the World registry.' });
+          if (e.ticket === 'discount') return reply(400, { error: 'Discount tickets are used by the soul in the shop.' });
+          const chk = checkUse(a, e, have, b.stat);
+          if (chk.error) return reply(400, Object.assign({ error: chk.error, needStat: !!chk.needStat }, chk.needStat ? { amt: e.statUp.amt, stats: (e.statUp.stats && e.statUp.stats.length ? e.statUp.stats : ST).map((k) => ({ k, score: Number(((a.stats || {})[k] || {}).score) || 0 })) } : {}));
+          const out = applyUse(a, e, have, b.stat); await cstore.setJSON(a.id, a); await logRolls(a, out.rolled);
+          return reply(200, { item: e.name, changes: out.changes, message: a.name + ' used ' + e.name + '. ' + out.changes.map((x) => x.text).join('. ') + '.' });
+        }
         if (b.action === 'hm_lockitem') { have.locked = !!b.locked; await cstore.setJSON(a.id, a); return reply(200, { message: name + (have.locked ? ' is locked' : ' is unlocked') + ' for ' + a.name + '.' }); }
         if (b.action === 'hm_giveitem') {
           const t = await getC(b.to); if (!t || t.id === a.id) return reply(404, { error: 'Pick a different character to give it to.' });
@@ -160,6 +171,8 @@ exports.handler = async (event) => {
     }
 
     const save = async () => { await cstore.setJSON(u.id, c); };
+    // In battle the Marketplace is closed (the headmaster ends the battle in the Effects tab).
+    if (c.inBattle && ['gachapull', 'sell', 'buy', 'paydebt', 'loan'].includes(b.action)) return reply(400, { error: 'You are in battle. The Marketplace is closed until the headmaster ends the battle.', battle: true });
     if (b.action === 'gachapull') {
       const count = Number(b.count) === 10 ? 10 : 1, cost = COST[count], byTicket = b.ticket === true || b.ticket === 'true';
       const pools = {}; RARITIES.forEach((r) => { pools[r] = []; });
@@ -202,6 +215,7 @@ exports.handler = async (event) => {
         cures: e && e.usable && e.cleanse ? (e.cleanse.all ? ['every debuff'] : []).concat((e.cleanse.ids || []).map((id) => (stl.find((s2) => s2.id === id) || {}).name).filter(Boolean)) : [], locked: !!x.locked, sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
     }
     if (b.action === 'use') {
+      if (c.inBattle) return reply(400, { error: 'You are in battle, so you cannot use items until the headmaster ends the battle.', battle: true });
       // Using an item applies what the headmaster wrote on it (see the World registry) and removes one from the inventory.
       const n = S(b.name, 100).trim().toLowerCase(), e = byName[n], have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);
       if (!have || !e) return reply(404, { error: 'You do not have that item.' });
@@ -217,24 +231,9 @@ exports.handler = async (event) => {
       }
       const chk = checkUse(c, e, have, b.stat);
       if (chk.error) return reply(400, { error: chk.error, needStat: !!chk.needStat });
-      if (!u.admin && c.inBattle) {
-        // In battle the headmaster has to allow each use first. Nothing is used up until she does.
-        const qs = qStore(), q = await getQ(qs);
-        if (q.some((r) => r.charId === c.id)) return reply(400, { error: 'You already have a request waiting for the headmaster.' });
-        q.push({ id: crypto.randomUUID(), charId: c.id, charName: c.name, item: e.name, stat: S(b.stat, 10), status: 'pending', at: new Date().toISOString() });
-        await qs.setJSON('q', q.slice(-100));
-        return reply(200, Object.assign(view(c), { pending: true, item: e.name, message: 'You are in battle. The headmaster has to allow ' + e.name + ' first. It is not used up until she does.' }));
-      }
       const out = applyUse(c, e, have, b.stat);
       await save(); await logRolls(c, out.rolled);
       return reply(200, Object.assign(view(c), { item: e.name, changes: out.changes, message: doneMsg(e, out.changes) }));
-    }
-    // The player's own waiting request: returns it, and once it has been decided the answer is handed over one time.
-    if (b.action === 'myreq') {
-      const qs = qStore(), q = await getQ(qs), r = q.find((x) => x.charId === c.id);
-      if (!r) return reply(200, { none: true });
-      if (r.status !== 'pending') await qs.setJSON('q', q.filter((x) => x.id !== r.id));
-      return reply(200, { request: { item: r.item, status: r.status, changes: r.changes || [], message: r.message || '' } });
     }
     if (b.action === 'lock') {
       const n = S(b.name, 100).trim().toLowerCase(), have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);
