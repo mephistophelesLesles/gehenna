@@ -2,7 +2,7 @@
 // The Marketplace can only sell items that exist here.
 const crypto = require('crypto');
 const { S, N, IMG, ID } = require('./auth');
-const { cleanFx, cleanDice, diceName } = require('./fx');
+const { cleanFx, cleanDice, diceName, cleanStatUp, cleanCleanse } = require('./fx');
 
 const KINDS = ['location', 'item'];
 
@@ -27,11 +27,13 @@ function clean(e, old) {
     pct: e.pct == null ? (old && old.pct) || 30 : N(e.pct, 1, 90),
     use: e.use == null ? (old && old.use) || [] : cleanFx(e.use),
     effects: e.effects == null ? (old && old.effects) || [] : cleanDice(e.effects),
+    statUp: e.statUp == null ? (old && old.statUp) || cleanStatUp() : cleanStatUp(e.statUp),
+    cleanse: e.cleanse == null ? (old && old.cleanse) || cleanCleanse() : cleanCleanse(e.cleanse),
     createdAt: old ? old.createdAt : new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
 }
 const imgUrl = (e) => (e.image ? '/.netlify/functions/world?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0) : '');
-const pub = (e) => ({ id: e.id, kind: e.kind, name: e.name, image: imgUrl(e), desc: e.desc, category: e.category, price: e.price, sellable: !!e.sellable, usable: !!e.usable, hidden: !!e.hidden, ticket: e.ticket || '', pct: e.pct || 30, use: Array.isArray(e.use) ? e.use : [], effects: Array.isArray(e.effects) ? e.effects : [] });
+const pub = (e) => ({ id: e.id, kind: e.kind, name: e.name, image: imgUrl(e), desc: e.desc, category: e.category, price: e.price, sellable: !!e.sellable, usable: !!e.usable, hidden: !!e.hidden, ticket: e.ticket || '', pct: e.pct || 30, use: Array.isArray(e.use) ? e.use : [], effects: Array.isArray(e.effects) ? e.effects : [], statUp: e.statUp || cleanStatUp(), cleanse: e.cleanse || cleanCleanse() });
 
 async function worldAdmin(b, store) {
   if (b.action === 'wlist') {

@@ -5,7 +5,9 @@ const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { settle, reply, S, N, IMG, ID, isAdmin, who, needUser, karmaOf, parseBody, imageReply } = require('./lib/auth');
 const { loadAll } = require('./lib/world');
-const { addBuffs, label: fxLabel, rollDice, diceName } = require('./lib/fx');
+const { addBuffs, label: fxLabel, rollDice, diceName, ST, maxHp, curHp, modFromScore, cures } = require('./lib/fx');
+const { loadStatuses } = require('./lib/status');
+const { checkUse, applyUse, logRolls, doneMsg, qStore, getQ } = require('./lib/use');
 
 const LOAN_CAP = 5000;
 
@@ -194,7 +196,10 @@ exports.handler = async (event) => {
       }));
     }
     if (b.action === 'myitems') {
-      return reply(200, Object.assign(view(c), { items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && (e.usable || e.ticket === 'discount')), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], dice: e && e.usable && Array.isArray(e.effects) ? e.effects.map(diceName) : [], locked: !!x.locked, sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
+      const stl = await loadStatuses(getStore('gehenna-statuses'));
+      return reply(200, Object.assign(view(c), { battle: !!c.inBattle, items: (c.items || []).map((x) => { const e = byName[String(x.name).toLowerCase()]; return { name: x.name, qty: x.qty, desc: x.desc || (e && e.desc) || '', usable: !!(e && (e.usable || e.ticket === 'discount')), use: e && e.usable && Array.isArray(e.use) ? e.use.map(fxLabel) : [], dice: e && e.usable && Array.isArray(e.effects) ? e.effects.map(diceName) : [],
+        statUp: e && e.usable && e.statUp && e.statUp.mode !== 'none' ? { mode: e.statUp.mode, amt: e.statUp.amt, stats: (e.statUp.stats && e.statUp.stats.length ? e.statUp.stats : ST).map((k) => ({ k, score: Number(((c.stats || {})[k] || {}).score) || 0 })) } : null,
+        cures: e && e.usable && e.cleanse ? (e.cleanse.all ? ['every debuff'] : []).concat((e.cleanse.ids || []).map((id) => (stl.find((s2) => s2.id === id) || {}).name).filter(Boolean)) : [], locked: !!x.locked, sellable: !!(e && e.sellable && worth(e) > 0), worth: e ? worth(e) : 0 }; }) }));
     }
     if (b.action === 'use') {
       // Using an item applies what the headmaster wrote on it (see the World registry) and removes one from the inventory.
@@ -210,18 +215,26 @@ exports.handler = async (event) => {
         await save();
         return reply(200, Object.assign(view(c), { message: e.name + ' is active: ' + c.discount.pct + '% off your next shop purchase. It does not work on the gacha, and it is used up after one purchase.' }));
       }
-      const fx = Array.isArray(e.use) ? e.use : [];
-      // Heal, damage and so on are rolled here and written into the dice log, then one copy is used up.
-      const rolled = rollDice(e.effects, c, e.name);
-      have.qty -= 1; c.items = c.items.filter((x) => x.qty > 0);
-      const added = fx.length ? addBuffs(c, e.name, fx, crypto.randomUUID()) : 0;
-      await save();
-      if (rolled.length) {
-        const rs = getStore('gehenna-rolls'), list = (await rs.get(c.id, { type: 'json' })) || [];
-        rolled.forEach((r) => list.unshift({ at: new Date().toISOString(), name: c.name, label: r.label, txt: r.txt, cls: '' }));
-        await rs.setJSON(c.id, list.slice(0, 60)); await rs.set('_rev', Date.now() + '-' + Math.random().toString(36).slice(2, 6));
+      const chk = checkUse(c, e, have, b.stat);
+      if (chk.error) return reply(400, { error: chk.error, needStat: !!chk.needStat });
+      if (!u.admin && c.inBattle) {
+        // In battle the headmaster has to allow each use first. Nothing is used up until she does.
+        const qs = qStore(), q = await getQ(qs);
+        if (q.some((r) => r.charId === c.id)) return reply(400, { error: 'You already have a request waiting for the headmaster.' });
+        q.push({ id: crypto.randomUUID(), charId: c.id, charName: c.name, item: e.name, stat: S(b.stat, 10), status: 'pending', at: new Date().toISOString() });
+        await qs.setJSON('q', q.slice(-100));
+        return reply(200, Object.assign(view(c), { pending: true, item: e.name, message: 'You are in battle. The headmaster has to allow ' + e.name + ' first. It is not used up until she does.' }));
       }
-      return reply(200, Object.assign(view(c), { message: 'You used ' + e.name + '.' + rolled.map((r) => ' ' + r.label + ': ' + r.txt + '.').join('') + (added ? ' ' + fx.map(fxLabel).join(', ') + '.' : '') }));
+      const out = applyUse(c, e, have, b.stat);
+      await save(); await logRolls(c, out.rolled);
+      return reply(200, Object.assign(view(c), { item: e.name, changes: out.changes, message: doneMsg(e, out.changes) }));
+    }
+    // The player's own waiting request: returns it, and once it has been decided the answer is handed over one time.
+    if (b.action === 'myreq') {
+      const qs = qStore(), q = await getQ(qs), r = q.find((x) => x.charId === c.id);
+      if (!r) return reply(200, { none: true });
+      if (r.status !== 'pending') await qs.setJSON('q', q.filter((x) => x.id !== r.id));
+      return reply(200, { request: { item: r.item, status: r.status, changes: r.changes || [], message: r.message || '' } });
     }
     if (b.action === 'lock') {
       const n = S(b.name, 100).trim().toLowerCase(), have = (c.items || []).find((x) => String(x.name).toLowerCase() === n);

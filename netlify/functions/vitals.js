@@ -4,6 +4,7 @@
 // - "set": headmaster only (HP now and max, EXP, speed, initiative). Players see their sheet but cannot edit it.
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { reply, N, ID, needUser, parseBody, settle } = require('./lib/auth');
+const { qStore, getQ } = require('./lib/use');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return reply(405, { error: 'POST only' });
@@ -22,7 +23,8 @@ exports.handler = async (event) => {
       if (!u.admin) return reply(403, { error: 'Headmaster only.' });
       const { blobs } = await cs.list(), revs = {};
       blobs.forEach((x) => { revs[x.key] = x.etag || ''; });
-      return reply(200, { revs });
+      const reqs = (await getQ(qStore())).filter((r) => r.status === 'pending').length;
+      return reply(200, { revs, reqs });
     }
 
     const id = u.admin ? String(b.id || '') : u.id;

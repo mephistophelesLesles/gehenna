@@ -83,6 +83,47 @@
   };
 
   /* ---------- section tabs ---------- */
+  /* ---------- fixed effects library (poison, stun, corruption...) ---------- */
+  G.statuses = [];
+  G.loadStatuses = function () { return call('effects', { action: 'list' }).then(function (r) { if (r.ok && r.j.statuses) { G.statuses.length = 0; r.j.statuses.forEach(function (x) { G.statuses.push(x); }); } return r; }); };
+
+  /* ---------- "what just happened" pop-ups for items: big, obvious, one line per change ---------- */
+  function overlay(label, kids, onClose) {
+    var prev = document.activeElement, back = h('div', { className: 'ur-back' }), card = h('div', { className: 'ur-card', role: 'dialog', 'aria-modal': 'true', 'aria-label': label }, kids);
+    function close() { document.removeEventListener('keydown', key, true); back.remove(); if (prev && prev.focus) try { prev.focus(); } catch (e) { } if (onClose) onClose(); }
+    function key(ev) { if (ev.key === 'Escape') { ev.stopPropagation(); close(); } }
+    back.onclick = function (ev) { if (ev.target === back) close(); };
+    document.addEventListener('keydown', key, true);
+    back.appendChild(card); document.body.appendChild(back);
+    return { close: close, card: card };
+  }
+  G.showResult = function (item, changes) {
+    var lines = changes.map(function (x) {
+      if (x.kind === 'stat') return h('div', { className: 'ur-line stat' }, [h('span', { className: 'ur-tag', text: x.random ? 'Random stat' : 'Stat raised' }), h('div', { className: 'ur-statrow' }, [h('b', { className: 'ur-big', text: x.stat }), h('span', { className: 'ur-num', text: x.from + ' → ' + x.to }), h('span', { className: 'ur-up', text: '+' + x.amt + ' forever' })])]);
+      if (x.kind === 'heal' || x.kind === 'damage') {
+        var pct = x.max > 0 ? Math.max(0, Math.min(100, (x.to / x.max) * 100)) : 0;
+        return h('div', { className: 'ur-line ' + x.kind }, [h('span', { className: 'ur-tag', text: x.kind === 'heal' ? 'Healed' : 'Damage' }), h('div', { className: 'ur-statrow' }, [h('b', { className: 'ur-big', text: (x.kind === 'heal' ? '+' : '−') + Math.abs(x.to - x.from) + ' HP' }), h('span', { className: 'ur-num', text: x.from + ' → ' + x.to + ' / ' + x.max })]), h('div', { className: 'ur-bar' }, [h('i', { style: 'width:' + pct + '%' })])]);
+      }
+      if (x.kind === 'cleanse') return h('div', { className: 'ur-line cleanse' }, [h('span', { className: 'ur-tag', text: 'Cured' }), h('b', { className: 'ur-med', text: x.text.replace(/^Cured:\s*/, '') })]);
+      if (x.kind === 'buff') return h('div', { className: 'ur-line ' + (x.bad ? 'damage' : 'buff') }, [h('span', { className: 'ur-tag', text: x.bad ? 'Debuff' : 'Buff' }), h('b', { className: 'ur-med', text: x.text })]);
+      return h('div', { className: 'ur-line' }, [h('span', { className: 'mono', text: x.text })]);
+    });
+    var ok = h('button', { type: 'button', className: 'btn primary', text: 'OK' }), o;
+    ok.onclick = function () { o.close(); };
+    o = overlay('Item used', [h('p', { className: 'mono red', text: 'Item used' }), h('h3', { text: item })].concat(lines, [ok]));
+    ok.focus();
+  };
+  // Items that let the player choose which stat to raise.
+  G.pickStat = function (item, onPick) {
+    var up = item.statUp, o, btns = up.stats.map(function (s) {
+      var b = h('button', { type: 'button', className: 'btn ur-pick' }, [h('b', { text: s.k }), h('span', { className: 'mono', text: s.score + ' → ' + (s.score + up.amt) })]);
+      b.onclick = function () { o.close(); onPick(s.k); }; return b;
+    }), cancel = h('button', { type: 'button', className: 'btn', text: 'Cancel' });
+    cancel.onclick = function () { o.close(); };
+    o = overlay('Choose a stat', [h('p', { className: 'mono red', text: item.name }), h('h3', { text: 'Which stat do you want to raise by +' + up.amt + '?' }), h('p', { className: 'mono hb-note', text: 'This is permanent. It cannot be undone.' }), h('div', { className: 'ur-picks' }, btns), cancel]);
+    if (btns[0]) btns[0].focus();
+  };
+
   var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'chat', 'note', 'dice', 'fx'], current = 'char', lastMode = '';
   var modules = {};
   function pane(name) {
@@ -871,10 +912,26 @@
 
   /* ======================= ITEMS (players: inventory and selling; headmaster: quick tools) ======================= */
   modules.items = (function () {
-    var root = $('pane-items'), msg = '', err = false;
+    var root = $('pane-items'), msg = '', err = false, waiting = '', wtimer = null;
     function isDM() { return !!G.creds(); }
+    // In battle the headmaster has to allow each use. Ask the server every couple of seconds until she answers, then show the result.
+    function stopWait() { clearInterval(wtimer); wtimer = null; }
+    function watch() {
+      if (wtimer) return;
+      function poll() {
+        call('market', { action: 'myreq' }).then(function (r) {
+          if (!r.ok) { stopWait(); waiting = ''; return; }
+          var q = r.j.request;
+          if (!q) { stopWait(); if (waiting) { waiting = ''; mine(); } return; }
+          if (q.status === 'pending') { if (waiting !== q.item) { waiting = q.item; mine(); } return; }
+          stopWait(); waiting = ''; err = q.status !== 'allowed'; msg = q.message; if (!err && G.reloadChar) G.reloadChar(); mine();
+          if (!err && q.changes && q.changes.length) G.showResult(q.item, q.changes);
+        });
+      }
+      wtimer = setInterval(poll, 2000); poll();
+    }
     function money(n) { return Number(n || 0).toLocaleString('en-US'); }
-    function reset() { clear(root); msg = ''; }
+    function reset() { clear(root); msg = ''; stopWait(); waiting = ''; }
     function badge(t, on) { return h('span', { className: 'bdg' + (on ? ' on' : ''), text: t }); }
     function mine() {
       call('market', { action: 'myitems' }).then(function (r) {
@@ -882,14 +939,18 @@
         var total = 0; r.j.items.forEach(function (x) { total += x.qty; });
         var wrap = h('div', { className: 'hb-wrap' }, [h('p', { className: 'mk-tot', text: 'You carry ' + total + ' item' + (total === 1 ? '' : 's') + ' (' + r.j.items.length + ' kind' + (r.j.items.length === 1 ? '' : 's') + ')' }),
           h('p', { className: 'mk-tot' + (r.j.debt ? ' bad' : ''), text: 'Karma: ' + money(r.j.karma) + (r.j.debt ? ' · Debt: -' + money(r.j.debt) : '') })]);
+        if (r.j.battle) wrap.appendChild(h('p', { className: 'mk-msg bad', text: 'You are in battle. The headmaster has to allow each item you use, and an item is not used up until she does.' }));
+        if (waiting) wrap.appendChild(h('p', { className: 'mk-msg', text: 'Waiting for the headmaster to allow ' + waiting + '…', role: 'status' }));
         if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
         if (!r.j.items.length) wrap.appendChild(note('Nothing here yet. The headmaster adds items as you earn them.'));
         var ol = h('ol', { className: 'il-list' });
-        function done(r2, fail) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || fail); if (r2.ok && G.reloadChar) G.reloadChar(); mine(); }
+        function done(r2, fail) { err = !r2.ok; msg = r2.ok ? r2.j.message : (r2.j.error || fail); if (r2.ok && r2.j.pending) { waiting = r2.j.item || 'it'; watch(); } if (r2.ok && G.reloadChar) G.reloadChar(); mine(); if (r2.ok && r2.j.changes && r2.j.changes.length) G.showResult(r2.j.item || 'Item', r2.j.changes); }
         r.j.items.forEach(function (x) {
           var lk = !!x.locked;
           var ub = h('button', { type: 'button', className: 'btn sq primary' });
-          G.two(ub, 'Use', function () { call('market', { action: 'use', name: x.name }).then(function (r3) { done(r3, 'Could not use it.'); }); }); ub.textContent = 'Use'; ub.disabled = !x.usable || lk;
+          function useGo(stat) { call('market', { action: 'use', name: x.name, stat: stat || '' }).then(function (r3) { done(r3, 'Could not use it.'); }); }
+          if (x.statUp && x.statUp.mode === 'choose') ub.onclick = function () { G.pickStat(x, useGo); }; else G.two(ub, 'Use', function () { useGo(); });
+          ub.textContent = 'Use'; ub.disabled = !x.usable || lk || !!waiting;
           var tb = h('button', { type: 'button', className: 'btn sq', text: 'Trade' }); tb.disabled = lk;
           tb.onclick = function () { var s = document.querySelector('#it-trade select[aria-label="Item to give"]'); if (s) { s.value = x.name; if (s.onchange) s.onchange(); } var t = $('it-trade'); if (t) t.scrollIntoView({ block: 'center' }); };
           var q = h('input', { type: 'number', min: 1, max: x.qty, value: 1, className: 'ni', 'aria-label': 'How many to sell' }), sb = h('button', { type: 'button', className: 'btn sq' });
@@ -901,6 +962,8 @@
             x.desc ? h('p', { className: 'pre hb-note', text: x.desc }) : null,
             x.dice && x.dice.length ? h('p', { className: 'mono hb-note', text: 'Rolls when used: ' + x.dice.join(', ') }) : null,
             x.use && x.use.length ? h('p', { className: 'mono hb-note', text: 'Gives: ' + x.use.join(', ') }) : null,
+            x.statUp ? h('p', { className: 'mono hb-note', text: x.statUp.mode === 'random' ? 'Raises a random stat (' + x.statUp.stats.map(function (t) { return t.k; }).join(', ') + ') by +' + x.statUp.amt + ' for good.' : 'Raises one stat of your choice by +' + x.statUp.amt + ' for good.' }) : null,
+            x.cures && x.cures.length ? h('p', { className: 'mono hb-note', text: 'Cures: ' + x.cures.join(', ') }) : null,
             h('div', { className: 'il-btns' }, [ub, tb, x.sellable && x.qty > 1 ? q : null, sb, kb])]));
         });
         if (r.j.items.length) wrap.appendChild(h('div', { className: 'mk-detail il' }, [h('h3', { className: 'il-h', text: 'List of items' }), ol]));
@@ -1023,7 +1086,7 @@
           note('Add creates the item for the character. Take removes it. Give moves it from the character above to the one beside the Give button.')]), everyone]);
       root.appendChild(h('div', { className: 'hb-wrap dm-split' }, [left, h('div', { className: 'dm-right' }, [out, inv])]));
     }
-    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) { (G.reloadChars ? G.reloadChars() : Promise.resolve()).then(tools); } else mine(); }, reset: reset };
+    return { enter: function () { msg = ''; clear(root).appendChild(note('Opening…')); if (isDM()) { (G.reloadChars ? G.reloadChars() : Promise.resolve()).then(tools); } else { mine(); watch(); } }, reset: reset };
   })();
 
   /* ======================= ROLL FOR AN NPC OR MONSTER ======================= */
@@ -1144,8 +1207,8 @@
   /* ======================= EFFECTS (headmaster) ======================= */
   // Put a skill's buff or debuff (or one you type in) on chosen souls, see who is carrying what, and end it when you want.
   modules.fx = (function () {
-    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' });
-    function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; targets = {}; msg = ''; kind = 'char'; npcQ = ''; npcSel = ''; clear(npcHost); }
+    var root = $('pane-fx'), reqRef = null, lastReqs = -1, data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], pickFx = '', stEdit = null, targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' });
+    function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; pickFx = ''; stEdit = null; targets = {}; msg = ''; kind = 'char'; npcQ = ''; npcSel = ''; clear(npcHost); }
     function enter() {
       var fresh = G.reloadChars ? G.reloadChars() : Promise.resolve();
       Promise.all([fresh, call('effects', { action: 'list' })]).then(function (rs) {
@@ -1155,12 +1218,53 @@
       });
     }
     function act(body) { call('effects', body).then(function (r) { err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.'); if (r.ok) { data = r.j; data.chars.forEach(function (d) { var f = G.chars().filter(function (x) { return x.id === d.id; })[0]; if (f) f.buffs = d.buffs; }); } draw(); }); }
+    // The Effects button shows how many item requests are waiting, even from other tabs. Only that list is redrawn, never your forms.
+    // Alerts for new requests: the browser tab title flashes "(1) Request!" while the tab is hidden, and an optional beep plays.
+    var baseTitle = document.title, flashT = null, ac = null, beepOn = false;
+    try { beepOn = localStorage.getItem('gehenna-beep') === '1'; } catch (e) { }
+    function beep() {
+      if (!beepOn) return;
+      try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); [0, 0.25].forEach(function (t) { var o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; g.gain.value = 0.15; o.connect(g); g.connect(ac.destination); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.15); }); } catch (e) { }
+    }
+    function stopFlash() { clearInterval(flashT); flashT = null; document.title = baseTitle; }
+    function flash(n) { clearInterval(flashT); var on = false; flashT = setInterval(function () { on = !on; document.title = on ? '(' + n + ') Request!' : baseTitle; }, 1000); }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) stopFlash(); });
+    G.onReqs = function (n) {
+      var nb = $('nav-fx'); if (nb) nb.textContent = 'Effects' + (n ? ' (' + n + ')' : '');
+      if (n > Math.max(lastReqs, 0)) { beep(); if (document.hidden) flash(n); } else if (flashT && n > 0) flash(n); else if (!n) stopFlash();
+      if (n === lastReqs) return; lastReqs = n;
+      if (data && reqRef && root.offsetParent) call('effects', { action: 'list' }).then(function (r) { if (r.ok) { data.requests = r.j.requests || []; data.chars.forEach(function (d) { var f = r.j.chars.filter(function (x) { return x.id === d.id; })[0]; if (f) d.inBattle = f.inBattle; }); reqRef(); } });
+    };
     // Live: when any sheet changes on the server, redraw only the sheet on the right (never the forms on the left).
     var syncShow = null; G.onSync = function () { if (syncShow && root.offsetParent) syncShow(); };
     function draw() {
       clear(root); var wrap = h('div', { className: 'dm-col' });
       wrap.appendChild(note('Buffs and debuffs change a soul’s stats on their sheet by themselves (the modifiers, saves and damage bonuses recalculate). The base stats are never touched, so ending an effect puts everything back.'));
       if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
+
+      /* ----- item requests from souls in battle ----- */
+      var reqHost = h('div', {});
+      function drawReq() {
+        clear(reqHost); var rs = data.requests || []; if (!rs.length) return;
+        var bx = h('div', { className: 'mk-detail ur-reqs' }, [h('h4', { text: 'Item requests (' + rs.length + ')' }), note('These souls are in battle. Nothing is used up until you allow it.')]);
+        rs.forEach(function (q) {
+          var yes = h('button', { type: 'button', className: 'btn primary', text: 'Allow' }), no = h('button', { type: 'button', className: 'btn', text: 'Deny' });
+          yes.onclick = function () { yes.disabled = no.disabled = true; act({ action: 'allow', rid: q.id }); }; no.onclick = function () { yes.disabled = no.disabled = true; act({ action: 'deny', rid: q.id }); };
+          bx.appendChild(h('div', { className: 'fx-row temp' }, [h('div', { className: 'ef' }, [h('b', { text: q.charName }), h('span', { text: 'wants to use' }), h('b', { text: q.item + (q.stat ? ' (' + q.stat + ')' : '') }), yes, no])]));
+        });
+        reqHost.appendChild(bx);
+      }
+      reqRef = drawReq; drawReq(); wrap.appendChild(reqHost);
+
+      /* ----- battle: while in battle a soul's items wait for you ----- */
+      var bp = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Battle' }), note('Tap a soul to mark them In battle. While in battle, every item they use waits here for you to allow it. Tap again when the battle is over.')]);
+      var bchips = h('div', { className: 'fx-chips' }, data.chars.map(function (c) {
+        var x = h('button', { type: 'button', className: 'fx-chip', 'aria-pressed': String(!!c.inBattle), text: c.name + (c.inBattle ? ' · in battle' : '') }); x.onclick = function () { act({ action: 'battle', targets: [c.id], on: !c.inBattle }); }; return x;
+      }));
+      var allIn = h('button', { type: 'button', className: 'btn', text: 'Everyone in battle' }), allOut = h('button', { type: 'button', className: 'btn', text: 'End battle for everyone' });
+      allIn.onclick = function () { act({ action: 'battle', targets: data.chars.map(function (c) { return c.id; }), on: true }); }; allOut.onclick = function () { act({ action: 'battle', targets: data.chars.map(function (c) { return c.id; }), on: false }); };
+      var bz = h('input', { type: 'checkbox', checked: beepOn }); bz.onchange = function () { beepOn = bz.checked; try { localStorage.setItem('gehenna-beep', beepOn ? '1' : '0'); } catch (e) { } if (beepOn) beep(); };
+      bp.appendChild(bchips); bp.appendChild(h('div', { className: 'ef' }, [allIn, allOut])); bp.appendChild(h('label', { className: 'chk' }, [bz, h('span', { text: 'Beep when an item request arrives (this browser only)' })])); wrap.appendChild(bp);
 
       /* ----- active effects, grouped by the cast that made them ----- */
       var groups = {}, order = [];
@@ -1179,10 +1283,20 @@
       wrap.appendChild(act1);
 
       /* ----- apply ----- */
-      var ap = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Apply a custom effect' })]);
-      var sn = h('input', { value: source, maxLength: 100, placeholder: 'Name of the effect (shown to the souls)', 'aria-label': 'Effect name' }); sn.oninput = function () { source = sn.value; };
-      ap.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Name' }), sn]));
-      ap.appendChild(G.fxEditor(fx, draw));
+      var lib = data.statuses || [], chosen = lib.filter(function (x) { return x.id === pickFx; })[0];
+      if (!chosen) pickFx = '';
+      var ap = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Apply an effect' })]);
+      var ps = h('select', { 'aria-label': 'Which effect' }, [h('option', { value: '', text: 'A custom effect (type it in)', selected: !pickFx })].concat(lib.length ? [h('optgroup', { label: 'Fixed effects' }, lib.map(function (x) { return h('option', { value: x.id, text: x.name + (x.kind === 'buff' ? ' (buff)' : ''), selected: x.id === pickFx }); }))] : []));
+      ps.onchange = function () { pickFx = ps.value; draw(); };
+      ap.appendChild(ps);
+      if (chosen) {
+        ap.appendChild(note(chosen.desc || 'No description.'));
+        ap.appendChild(note(chosen.fx.length ? 'Changes: ' + chosen.fx.map(fxText).join(' · ') : 'A status only: no stat changes. An item that cures it removes it automatically.'));
+      } else {
+        var sn = h('input', { value: source, maxLength: 100, placeholder: 'Name of the effect (shown to the souls)', 'aria-label': 'Effect name' }); sn.oninput = function () { source = sn.value; };
+        ap.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Name' }), sn]));
+        ap.appendChild(G.fxEditor(fx, draw));
+      }
       ap.appendChild(h('p', { className: 'mono red', text: 'Apply to' }));
       var all = h('button', { type: 'button', className: 'link', text: 'All' }), none = h('button', { type: 'button', className: 'link', text: 'None' });
       all.onclick = function () { data.chars.forEach(function (c) { targets[c.id] = true; }); draw(); }; none.onclick = function () { targets = {}; draw(); };
@@ -1192,10 +1306,32 @@
       go.onclick = function () {
         var ids = data.chars.filter(function (c) { return targets[c.id]; }).map(function (c) { return c.id; });
         if (!ids.length) { err = true; msg = 'Tick at least one soul to apply it to.'; draw(); return; }
-        act({ action: 'apply', targets: ids, source: source, fx: fx });
+        act(pickFx ? { action: 'apply', targets: ids, statusId: pickFx } : { action: 'apply', targets: ids, source: source, fx: fx });
       };
       ap.appendChild(go);
       wrap.appendChild(ap);
+
+      /* ----- fixed effects library ----- */
+      var fl = h('div', { className: 'mk-detail' }, [h('h4', { text: 'Fixed effects' }), note('Effects you use again and again (poison, stun, corruption…). Apply one in a click above. An item that cures it takes it off by itself, so you never have to remove it by hand.')]);
+      lib.forEach(function (x) {
+        var ed = h('button', { type: 'button', className: 'btn', text: 'Edit' }), del = h('button', { type: 'button', className: 'btn' });
+        ed.onclick = function () { stEdit = JSON.parse(JSON.stringify(x)); draw(); };
+        G.two(del, 'Delete', function () { act({ action: 'sdelete', id: x.id }); }); del.textContent = 'Delete';
+        fl.appendChild(h('div', { className: 'fx-row' }, [h('div', { className: 'ef' }, [h('b', { text: x.name }), h('span', { className: 'bdg' + (x.kind === 'debuff' ? ' on' : ''), text: x.kind === 'debuff' ? 'Debuff' : 'Buff' }), ed, del]), h('p', { className: 'mono', text: (x.desc || '') + (x.fx.length ? (x.desc ? ' · ' : '') + x.fx.map(fxText).join(' · ') : '') })]));
+      });
+      if (stEdit) {
+        var nm = h('input', { value: stEdit.name || '', maxLength: 60, placeholder: 'Name (e.g. Poison)', 'aria-label': 'Fixed effect name' }); nm.oninput = function () { stEdit.name = nm.value; };
+        var kd = h('select', { 'aria-label': 'Buff or debuff' }, [['debuff', 'Debuff'], ['buff', 'Buff']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: (stEdit.kind || 'debuff') === o[0] }); })); kd.onchange = function () { stEdit.kind = kd.value; };
+        var ds = h('input', { value: stEdit.desc || '', maxLength: 200, placeholder: 'What it does (shown to the souls)', 'aria-label': 'Description' }); ds.oninput = function () { stEdit.desc = ds.value; };
+        var sv = h('button', { type: 'button', className: 'btn primary', text: 'Save fixed effect' }), cn = h('button', { type: 'button', className: 'btn', text: 'Cancel' });
+        sv.onclick = function () { var st = stEdit; stEdit = null; act({ action: 'ssave', status: st }); }; cn.onclick = function () { stEdit = null; draw(); };
+        stEdit.fx = stEdit.fx || [];
+        fl.appendChild(h('div', { className: 'fx-row temp' }, [h('div', { className: 'ef' }, [nm, kd]), h('label', { className: 'fl' }, [h('span', { text: 'Description' }), ds]), h('div', { className: 'fl' }, [h('span', { text: 'Stat changes it causes (optional). Leave empty for a status like Poison or Stun that only needs to be tracked and cured.' }), G.fxEditor(stEdit.fx, draw)]), h('div', { className: 'ef' }, [sv, cn])]));
+      } else {
+        var nw = h('button', { type: 'button', className: 'btn', text: '+ New fixed effect' }); nw.onclick = function () { stEdit = { id: '', name: '', kind: 'debuff', desc: '', fx: [] }; draw(); };
+        fl.appendChild(nw);
+      }
+      wrap.appendChild(fl);
       // Portraits on the left pick whose sheet shows on the right (read-only), so skills, stats and effects are one glance away.
       function fullList() { return data.chars.map(function (d) { return G.chars().filter(function (x) { return x.id === d.id; })[0]; }).filter(Boolean); }
       var cs = fullList();
@@ -1462,7 +1598,23 @@
         box.appendChild(h('div', { className: 'g2' }, tkRow));
         if (c.ticket === 'discount') box.appendChild(note('Players use it from their inventory. It takes the percent off their next shop purchase, then it is used up. It never applies to the gacha.'));
         if (c.ticket === 'gacha') box.appendChild(note('One ticket pays for one pull (ten for a ten-pull). Players choose it at the gacha machine. Locked tickets cannot be used.'));
-        if (c.usable) { c.use = c.use || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'When a soul uses it (optional): add HP, raise a stat, or give a buff. One copy is used up each time. Temporary effects stay until you end them in the Effects tab.' }), G.fxEditor(c.use, draw)])); c.effects = c.effects || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'Dice it rolls when used (optional), like a skill: for example Heal 1d4. The result is worked out by the server and shown in the Dice log.' }), G.diceEditor(c.effects, draw)])); }
+        if (c.usable && !c._st) { c._st = 1; G.loadStatuses().then(function () { if (box.isConnected) draw(); }); }
+        if (c.usable) { c.use = c.use || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'When a soul uses it (optional): add HP, raise a stat, or give a buff. One copy is used up each time. Temporary effects stay until you end them in the Effects tab.' }), G.fxEditor(c.use, draw)])); c.effects = c.effects || []; box.appendChild(h('div', { className: 'fl' }, [h('span', { text: 'Dice it rolls when used (optional), like a skill: for example Heal 1d4. Heal and Damage really change the soul’s HP (it never goes above max or below 0). The roll is also shown in the Dice log.' }), G.diceEditor(c.effects, draw)]));
+          // Raise a stat for good, and cure fixed effects.
+          c.statUp = c.statUp || { mode: 'none', amt: 1, stats: [] }; c.cleanse = c.cleanse || { all: false, ids: [] };
+          var um = h('select', { 'aria-label': 'Permanent stat raise' }, [['none', 'Does not raise a stat'], ['random', 'Raises a random stat'], ['choose', 'Raises a stat the player chooses']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: c.statUp.mode === o[0] }); }));
+          um.onchange = function () { c.statUp.mode = um.value; draw(); };
+          var ur = [h('span', { text: 'Raise a stat permanently (optional). The base stat changes for good, and the player is shown exactly what went up.' }), um];
+          if (c.statUp.mode !== 'none') {
+            var ua = h('input', { type: 'number', min: 1, max: 20, value: c.statUp.amt || 1, className: 'ni', 'aria-label': 'How much' }); ua.oninput = function () { c.statUp.amt = Math.max(1, Math.min(20, Math.floor(+ua.value) || 1)); };
+            ur.push(h('div', { className: 'ef' }, [h('span', { text: 'Raises by' }), ua].concat(['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'].map(function (k) { var i = h('input', { type: 'checkbox', checked: c.statUp.stats.indexOf(k) >= 0 }); i.onchange = function () { var j = c.statUp.stats.indexOf(k); if (i.checked && j < 0) c.statUp.stats.push(k); if (!i.checked && j >= 0) c.statUp.stats.splice(j, 1); }; return h('label', { className: 'chk' }, [i, h('span', { text: k })]); }))));
+            ur.push(note('Tick the stats it can raise. Tick none and any of the six can be raised.'));
+          }
+          box.appendChild(h('div', { className: 'fl' }, ur));
+          var cr = [h('span', { text: 'Cures (optional). When used, it removes these fixed effects from the soul by itself. Make them in the Effects tab. If the soul has none of them, the item is not used up.' })];
+          var any = h('input', { type: 'checkbox', checked: !!c.cleanse.all }); any.onchange = function () { c.cleanse.all = any.checked; };
+          cr.push(h('div', { className: 'ef' }, [h('label', { className: 'chk' }, [any, h('span', { text: 'Any debuff' })])].concat(G.statuses.map(function (st) { var i = h('input', { type: 'checkbox', checked: c.cleanse.ids.indexOf(st.id) >= 0 }); i.onchange = function () { var j = c.cleanse.ids.indexOf(st.id); if (i.checked && j < 0) c.cleanse.ids.push(st.id); if (!i.checked && j >= 0) c.cleanse.ids.splice(j, 1); }; return h('label', { className: 'chk' }, [i, h('span', { text: st.name })]); }))));
+          box.appendChild(h('div', { className: 'fl' }, cr)); }
       }
       var hid = h('input', { type: 'checkbox', checked: !!c.hidden }); hid.onchange = function () { c.hidden = hid.checked; };
       box.appendChild(h('label', { className: 'chk' }, [hid, h('span', { text: 'Hide from the public registry (it can still be sold, given and used)' })]));
@@ -1471,7 +1623,7 @@
       var save = h('button', { type: 'button', className: 'btn primary', text: 'Save' });
       save.onclick = function () {
         save.disabled = true; st.textContent = 'Saving…';
-        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, hidden: !!c.hidden, ticket: c.kind === 'item' ? (c.ticket || '') : '', pct: c.pct || 30, use: c.usable ? (c.use || []) : [], effects: c.usable ? (c.effects || []) : [] };
+        var e = { kind: c.kind, name: c.name, desc: c.desc, category: c.category, price: c.price, sellable: !!c.sellable, usable: !!c.usable, hidden: !!c.hidden, ticket: c.kind === 'item' ? (c.ticket || '') : '', pct: c.pct || 30, use: c.usable ? (c.use || []) : [], effects: c.usable ? (c.effects || []) : [], statUp: c.usable && c.statUp ? c.statUp : { mode: 'none', amt: 1, stats: [] }, cleanse: c.usable && c.cleanse ? c.cleanse : { all: false, ids: [] } };
         if (!c.isNew) e.id = c.id; if (/^data:/.test(c.image || '') || c.image === '') e.image = c.image;
         call('world', { action: 'wsave', entry: e }).then(function (r) {
           save.disabled = false; if (!r.ok) { st.textContent = r.j.error || 'Save failed'; return; }

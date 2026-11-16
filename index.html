@@ -2296,7 +2296,7 @@
   /* ---------- live sync: the sheet follows the server within a second or two, no reload needed ---------- */
   var VURL = '/.netlify/functions/vitals';
   function vpost(body) { return fetch(VURL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); }); }
-  function stopLive() { clearInterval(liveT); clearInterval(adminT); liveT = adminT = null; liveRev = ''; adminRevs = {}; busyLive = false; editing = false; }
+  function stopLive() { clearInterval(liveT); if (adminT && adminT.stop) adminT.stop(); liveT = adminT = null; liveRev = ''; adminRevs = {}; busyLive = false; editing = false; }
   function startPlayerLive() {
     stopLive();
     liveT = setInterval(function () {
@@ -2311,11 +2311,17 @@
   }
   function startAdminLive() {
     stopLive();
-    adminT = setInterval(function () {
-      if (document.hidden || editing || busyLive || !creds || adm.hidden) return;
+    // Ticks once a second from a background worker (browsers slow down ordinary timers in hidden tabs, workers are not slowed as much).
+    // Visible tab: check every 2 seconds. Hidden tab: every 5 seconds, so item requests still reach you while you are on another tab.
+    var lastRun = 0;
+    adminT = startTicker(function () {
+      var need = document.hidden ? 5000 : 2000;
+      if (Date.now() - lastRun < need - 300 || editing || busyLive || !creds || adm.hidden) return;
+      lastRun = Date.now();
       busyLive = true;
       vpost(Object.assign({ action: 'snap' }, creds)).then(function (r) {
         if (!r.ok || !r.j.revs) { busyLive = false; return; }
+        if (window.GEH && GEH.onReqs) GEH.onReqs(r.j.reqs || 0);
         var revs = r.j.revs, first = !Object.keys(adminRevs).length;
         var ids = Object.keys(revs).filter(function (id) { return !first && adminRevs[id] !== undefined && adminRevs[id] !== revs[id] && chars.some(function (x) { return x.id === id; }); });
         adminRevs = revs;
@@ -2323,7 +2329,13 @@
           busyLive = false; if (res && res.some(Boolean) && !editing && window.GEH && GEH.onSync) GEH.onSync();
         });
       }).catch(function () { busyLive = false; });
-    }, 2000);
+    }, 1000);
+  }
+  function startTicker(fn, ms) {
+    var w = null, t = null;
+    try { var url = URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},' + ms + ')'], { type: 'text/javascript' })); w = new Worker(url); w.onmessage = fn; w.onerror = function () { w.terminate(); w = null; t = setInterval(fn, ms); }; URL.revokeObjectURL(url); }
+    catch (e) { w = null; t = setInterval(fn, ms); }
+    return { stop: function () { if (w) w.terminate(); if (t) clearInterval(t); } };
   }
   function reloadChar() {
     if (!pkey) return;

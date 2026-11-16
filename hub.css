@@ -387,3 +387,24 @@ body.gc-lock { overflow: hidden; }
 .fx-nbtn { text-align: left; padding: 0.55rem 0.8rem; background: var(--surface); color: var(--fg); border: 1px solid var(--line); font: 600 1rem var(--f-body); cursor: pointer; }
 .fx-nbtn:hover { background: var(--surface-2); }
 .fx-nbtn[aria-pressed="true"] { border-color: var(--red); background: var(--surface-2); }
+
+/* Item-use pop-up: big, obvious lines for what changed */
+.ur-back { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.78); display: grid; place-items: center; padding: 1rem; overflow: auto; }
+.ur-card { width: min(30rem, 100%); background: var(--bg); border: 1px solid var(--line); border-top: 3px solid var(--red); padding: 1.2rem; display: grid; gap: 0.8rem; box-shadow: 0 0 40px rgba(227, 21, 31, 0.25); }
+.ur-card h3 { margin: 0; }
+.ur-line { display: grid; gap: 0.35rem; padding: 0.7rem 0.8rem; border: 1px solid var(--line); border-left: 4px solid var(--muted); background: var(--surface); }
+.ur-line.stat { border-left-color: #e8b923; background: color-mix(in srgb, #e8b923 10%, var(--surface)); }
+.ur-line.heal, .ur-line.buff { border-left-color: #2fb344; background: color-mix(in srgb, #2fb344 10%, var(--surface)); }
+.ur-line.damage { border-left-color: var(--red-hi); background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
+.ur-line.cleanse { border-left-color: #2f9bf0; background: color-mix(in srgb, #2f9bf0 10%, var(--surface)); }
+.ur-tag { font: 700 0.68rem var(--f-body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.ur-statrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.9rem; }
+.ur-big { font-size: 2.1rem; line-height: 1; font-weight: 700; } .ur-med { font-size: 1.25rem; } .ur-num { font-size: 1.15rem; }
+.ur-up { font: 700 0.8rem var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: #e8b923; }
+.ur-bar { height: 5px; background: color-mix(in srgb, var(--fg) 14%, transparent); } .ur-bar i { display: block; height: 100%; background: #2f6df0; }
+.ur-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.ur-pick { display: grid; gap: 0.2rem; justify-items: center; padding: 0.7rem 0.3rem; } .ur-pick b { font-size: 1.3rem; }
+@media (max-width: 30rem) { .ur-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.fx-chip[aria-pressed="true"] { border-color: var(--red); background: color-mix(in srgb, var(--red) 22%, transparent); }
+.ur-reqs { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }

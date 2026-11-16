@@ -15,12 +15,12 @@ function cleanFx(list) {
 const signed = (e) => (e.kind === 'debuff' ? -e.amt : e.amt);
 const label = (e) => (e.stat === 'Other' ? e.note : (signed(e) > 0 ? '+' : '-') + e.amt + ' ' + e.stat + (e.note ? ' (' + e.note + ')' : '')) + (e.perm ? ' (permanent)' : ' (until ended)');
 // Put the effects on a character. Returns how many were added (a character carries at most 40).
-function addBuffs(c, source, fx, group) {
+function addBuffs(c, source, fx, group, extra) {
   c.buffs = Array.isArray(c.buffs) ? c.buffs : [];
   let n = 0;
   fx.forEach((e) => {
     if (c.buffs.length >= 40) return;
-    c.buffs.push({ id: crypto.randomUUID(), group, source: S(source, 100), kind: e.kind, stat: e.stat, amt: signed(e), perm: !!e.perm, note: e.note, at: new Date().toISOString() });
+    c.buffs.push(Object.assign({ id: crypto.randomUUID(), group, source: S(source, 100), kind: e.kind, stat: e.stat, amt: signed(e), perm: !!e.perm, note: e.note, at: new Date().toISOString() }, extra && extra.status ? { status: extra.status } : {}));
     n++;
   });
   return n;
@@ -46,7 +46,24 @@ function rollDice(list, c, source) {
   return (Array.isArray(list) ? list : []).map((e) => {
     const m = (e.stat ? effMod(c, e.stat) : 0) + (Number(e.flat) || 0), vals = [];
     let t = m; for (let i = 0; i < e.n; i++) { const v = crypto.randomInt(1, Math.max(1, e.d) + 1); vals.push(v); t += v; }
-    return { label: source + ' ' + diceName(e), txt: '[' + vals.join(', ') + ']' + (m ? (m > 0 ? ' + ' : ' - ') + Math.abs(m) : '') + ' = ' + t };
+    return { type: e.type, total: Math.max(0, t), label: source + ' ' + diceName(e), txt: '[' + vals.join(', ') + ']' + (m ? (m > 0 ? ' + ' : ' - ') + Math.abs(m) : '') + ' = ' + t };
   });
 }
-module.exports = { FXSTATS, cleanFx, addBuffs, label, signed, cleanDice, diceName, rollDice, effMod };
+// HP as the sheet shows it: saved max plus live HP buffs; current HP stays at full until someone changes it.
+const maxHp = (c) => Math.max(0, (Number(c.hp) || 0) + (Array.isArray(c.buffs) ? c.buffs : []).reduce((a, x) => a + (x.stat === 'HP' ? Number(x.amt) || 0 : 0), 0));
+const curHp = (c) => (c.hpNow == null ? maxHp(c) : Math.max(0, Math.min(Number(c.hpNow) || 0, maxHp(c))));
+const modFromScore = (sc) => Math.max(0, Math.floor(((Number(sc) || 0) - 8) / 2));
+
+// What an item does beyond buffs and dice: raise a stat for good (at random, or one the player picks), and cure fixed effects.
+function cleanStatUp(o) {
+  o = o || {};
+  const mode = ['random', 'choose'].includes(o.mode) ? o.mode : 'none';
+  return { mode, amt: N(o.amt == null ? 1 : o.amt, 1, 20), stats: (Array.isArray(o.stats) ? o.stats : []).filter((k, i, a) => ST.includes(k) && a.indexOf(k) === i) };
+}
+function cleanCleanse(o) {
+  o = o || {};
+  return { all: !!o.all, ids: (Array.isArray(o.ids) ? o.ids : []).map((x) => String(x)).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 40) };
+}
+// Which of a character's effects does this cure list remove?
+const cures = (cl, b) => !!cl && ((cl.all && (b.kind === 'debuff' || Number(b.amt) < 0)) || (b.status && (cl.ids || []).includes(b.status)));
+module.exports = { ST, maxHp, curHp, modFromScore, cleanStatUp, cleanCleanse, cures, FXSTATS, cleanFx, addBuffs, label, signed, cleanDice, diceName, rollDice, effMod };

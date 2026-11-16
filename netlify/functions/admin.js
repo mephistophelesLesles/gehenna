@@ -53,7 +53,7 @@ function clean(c, old) {
   return {
     id: old.id, key: old.key, createdAt: old.createdAt, image: c.image ? old.image : '', buffs: Array.isArray(old.buffs) ? old.buffs : [],
     // Live vitals are changed only through vitals.js, so saving the form never overwrites them (HP now is only trimmed to the new max).
-    hpNow: old.hpNow == null ? undefined : Math.min(old.hpNow, N(c.hp, 0, 9999) + (Array.isArray(old.buffs) ? old.buffs : []).reduce((a, x) => a + (x.stat === 'HP' ? Number(x.amt) || 0 : 0), 0)), exp: old.exp, expMax: old.expMax,
+    hpNow: old.hpNow == null ? undefined : Math.min(old.hpNow, N(c.hp, 0, 9999) + (Array.isArray(old.buffs) ? old.buffs : []).reduce((a, x) => a + (x.stat === 'HP' ? Number(x.amt) || 0 : 0), 0)), exp: old.exp, expMax: old.expMax, inBattle: old.inBattle || undefined,
     name: S(c.name, 100), gender: S(c.gender, 100), dates: S(c.dates, 200), persona: S(c.persona), destiny: S(c.destiny), karma: S(c.karma), appearance: S(c.appearance),
     itemName: S(c.itemName, 200), itemDesc: S(c.itemDesc),
     items: (Array.isArray(c.items) ? c.items : []).slice(0, 100).map(i => ({ name: S(i.name, 100), qty: N(i.qty, 0, 9999), desc: S(i.desc, 500), locked: !!i.locked })), debt: N(c.debt, 0, 1000000000), quirk: quirks(c.quirk), level: N(c.level == null ? 1 : c.level, 1, 99), hp: N(c.hp, 0, 9999), armor: N(c.armor, 0, 999), initiative: N(c.initiative, -99, 99), size: S(c.size, 40), languages: S(c.languages, 200), speed: N(c.speed, 0, 999),
