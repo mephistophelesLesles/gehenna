@@ -51,6 +51,22 @@ function cleanCells(a) {
   });
   return Array.from(seen.values());
 }
+// Hidden tiles ("fog"): [column, row] squares the headmaster blacks out. While fog is on, players are never sent a token standing in one,
+// so a monster under the black cannot be found by looking at the page. (The map picture itself is still the one picture.)
+function cleanFog(a) {
+  const seen = new Set(), out = [];
+  (Array.isArray(a) ? a : []).slice(0, 5000).forEach((c) => {
+    if (!Array.isArray(c) || !Number.isInteger(c[0]) || !Number.isInteger(c[1]) || c[0] < 0 || c[1] < 0 || c[0] > 120 || c[1] > 120) return;
+    const k = c[0] + ',' + c[1]; if (!seen.has(k)) { seen.add(k); out.push([c[0], c[1]]); }
+  });
+  return out;
+}
+// The map box is 16 : 9, so a token's row is y * 100 * (9/16) / squareSize.
+function forPlayer(l) {
+  if (l.fogOn === false || !Array.isArray(l.fog) || !l.fog.length) return Object.assign({}, l, { fog: [], fogOn: l.fogOn !== false });
+  const hid = new Set(l.fog.map((f) => f[0] + ',' + f[1]));
+  return Object.assign({}, l, { tokens: l.tokens.filter((t) => !hid.has(Math.floor(t.x * 100 / l.cell) + ',' + Math.floor(t.y * 100 * 0.5625 / l.cell))) });
+}
 function clean(inc, old) {
   return {
     id: old ? old.id : crypto.randomUUID(),
@@ -58,6 +74,8 @@ function clean(inc, old) {
     rev: Date.now(),
     cell: num(inc.cell, 2, 25, 6), tokScale: num(inc.tokScale, 0.3, 4, 1), tileAlpha: num(inc.tileAlpha, 0.1, 0.9, 0.4),
     cells: cleanCells(inc.cells),
+    fog: inc.fog === undefined && old ? (old.fog || []) : cleanFog(inc.fog),
+    fogOn: inc.fogOn === undefined ? (old ? old.fogOn !== false : true) : inc.fogOn !== false,
     imgScale: num(inc.imgScale, 0.1, 6, 1), imgX: num(inc.imgX, -3, 3, 0), imgY: num(inc.imgY, -3, 3, 0),
     members: (Array.isArray(inc.members) ? inc.members : []).filter((x) => ID.test(String(x))).slice(0, 200).map(String),
     tokens: (Array.isArray(inc.tokens) ? inc.tokens : []).slice(0, 150).map((t) => ({
@@ -99,13 +117,13 @@ exports.handler = async (event) => {
         all = all.map((x) => (x.id === l.id ? l : x)); await store.setJSON('lobbies', all);
       }
       const image = (await store.get('img/' + l.id)) || '';
-      return reply(200, { lobby: Object.assign({}, l, { image }) });
+      return reply(200, { lobby: Object.assign({}, u.admin ? l : forPlayer(l), { image }) });
     }
     if (b.action === 'npcs') {
       // The NPCs and monsters standing on this map, as a player is allowed to see them (sealed stats and undisclosed NPCs stay sealed).
       const l = all.find((x) => x.id === String(b.id));
       if (!l || !mine(l)) return reply(404, { error: 'You are not in that lobby.' });
-      const ids = Array.from(new Set(l.tokens.map((t) => /^reg:([A-Za-z0-9-]+)$/.exec(String(t.src || ''))).filter(Boolean).map((m) => m[1]))).filter((i) => RID.test(i));
+      const ids = Array.from(new Set((u.admin ? l : forPlayer(l)).tokens.map((t) => /^reg:([A-Za-z0-9-]+)$/.exec(String(t.src || ''))).filter(Boolean).map((m) => m[1]))).filter((i) => RID.test(i));
       const reg = getStore('gehenna-registry'), entries = [];
       for (const id of ids) {
         const e = await reg.get(id, { type: 'json' });

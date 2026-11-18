@@ -156,6 +156,14 @@
 
 /* map: coloured tiles, quick tokens, stacked tokens */
 .mp-paint { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.mp-fogl { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 6; }
+.mp-fog { position: absolute; background: #000; }
+.mp-box:not(.edit) .mp-fog { box-shadow: 0 0 0 1px #000; }
+.mp-box.edit .mp-fogl { opacity: 0.6; }
+.mp-box.edit .mp-fog { outline: 1px dashed rgba(255, 90, 90, 0.8); outline-offset: -1px; }
+.mp-box.edit.fogprev .mp-fogl { opacity: 1; }
+.mp-box.edit.fogprev .mp-fog { outline: 0; box-shadow: 0 0 0 1px #000; }
+.mp-box.edit.fogoff .mp-fog { background: transparent; }
 .mp-tile { position: absolute; }
 .mp-box.painting { cursor: crosshair; }
 .mp-box.painting .mp-tok { pointer-events: none; }
@@ -408,3 +416,42 @@ body.gc-lock { overflow: hidden; }
 
 .fx-chip[aria-pressed="true"] { border-color: var(--red); background: color-mix(in srgb, var(--red) 22%, transparent); }
 .ur-reqs { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+
+/* ---- Chat: the unread ping (a pill under the top bar, plus a dot on the Chat tab) ---- */
+.chat-ping { display: flex; align-items: center; justify-content: center; gap: 0.2rem; width: fit-content; max-width: calc(100% - 24px); margin: 0.6rem auto 0; padding: 0.15rem 0.3rem 0.15rem 0.2rem; border-radius: 999px; background: var(--red); color: #fff; box-shadow: 0 2px 14px rgba(227, 21, 31, 0.45); }
+.chat-ping[hidden] { display: none; }
+.chat-ping button { background: none; border: 0; color: inherit; font: 800 0.95rem var(--f-body); cursor: pointer; padding: 0.3rem 0.5rem; }
+.chat-ping-go { letter-spacing: 0.02em; text-align: left; }
+.chat-ping-go:hover { text-decoration: underline; }
+.chat-ping-x { font-size: 1.35rem !important; line-height: 1; border-radius: 50%; min-width: 2.2rem; min-height: 2.2rem; }
+.chat-ping-x:hover { background: rgba(0, 0, 0, 0.25); }
+.adm-nav button.has-ping::after { content: ''; display: inline-block; width: 0.5rem; height: 0.5rem; margin-left: 0.35rem; border-radius: 50%; background: var(--red-hi); vertical-align: 0.15em; animation: chat-dot 1.6s ease-out infinite; }
+@keyframes chat-dot { 0% { box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); } 100% { box-shadow: 0 0 0 0.55rem rgba(255, 77, 77, 0); } }
+@media (prefers-reduced-motion: reduce) { .adm-nav button.has-ping::after { animation: none; } }
+
+/* ---- Chat: groups, NPC chats, tools ---- */
+.cht-top { display: grid; gap: 0.4rem; }
+.cht-toprow { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.cht-sub { margin: 0; }
+.cht-tag { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); padding: 0.05rem 0.35rem; align-self: center; }
+.cht-gset { display: grid; gap: 0.7rem; padding: 0.8rem; border: 1px solid var(--line); background: var(--bg); }
+.cht-gset[hidden], .cht-gbtn[hidden], .cht-sub[hidden] { display: none; }
+.cht-grow { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.7rem; }
+.cht-inl { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; } .cht-inl input, .cht-inl select { flex: 1 1 8rem; min-width: 0; }
+.cht-bottom { display: grid; }
+.cht-watch { margin: 0; padding: 0.5rem 0.2rem; }
+.cht-new-gc, .cht-sec { display: grid; gap: 0.7rem; align-content: start; }
+.cht-sec { padding-bottom: 1.2rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
+.cht-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.3rem 0.8rem; }
+.cht-chk { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; min-width: 0; } .cht-chk input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--red); } .cht-chk small { color: var(--muted); font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; margin-left: auto; }
+.cht-chk .hb-thumb.av { width: 1.8rem; }
+.cht-npc { display: grid; gap: 0.6rem; padding: 0.7rem; border: 1px solid var(--line); background: var(--bg); }
+.cht-npc-top { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; } .cht-npc-top b { flex: 1 1 8rem; }
+.cht-npc-opts { display: grid; gap: 0.5rem; padding-left: 0.2rem; } .cht-npc-opts[hidden], .cht-checks[hidden] { display: none; }
+.cht-pick .cht-tag { margin-left: 0.2rem; }
+@media (max-width: 52rem) {
+  .cht-gset { padding: 0.6rem; }
+  .cht-main { grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
+  .cht-gset { max-height: 40dvh; overflow-y: auto; }
+  .chat-ping { margin-top: 0.4rem; } .chat-ping button { font-size: 0.88rem; }
+}

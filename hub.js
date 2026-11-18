@@ -138,15 +138,15 @@
   Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) { b.addEventListener('click', function () { pane(b.getAttribute('data-pane')); }); });
   G.onMode = function (m) {
     nav.hidden = m === 'login'; var fxb = $('nav-fx'); if (fxb) fxb.hidden = m !== 'admin';
-    if (m === 'login') { if (modules[current] && modules[current].leave) modules[current].leave(); Object.keys(modules).forEach(function (k) { if (modules[k].reset) modules[k].reset(); }); current = 'char'; lastMode = m; return; }
-    if (m !== lastMode) { lastMode = m; pane('char'); }
+    if (m === 'login') { stopPing(); if (modules[current] && modules[current].leave) modules[current].leave(); Object.keys(modules).forEach(function (k) { if (modules[k].reset) modules[k].reset(); }); current = 'char'; lastMode = m; return; }
+    if (m !== lastMode) { lastMode = m; pane('char'); startPing(); }
   };
   $('adm-refresh').addEventListener('click', function () { if (current !== 'char' && modules[current] && modules[current].enter) modules[current].enter(true); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && modules[current] && modules[current].wake) modules[current].wake(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) return; if (modules[current] && modules[current].wake) modules[current].wake(); if (lastMode && lastMode !== 'login') pollPing(); });
 
   /* ======================= MAP ======================= */
   modules.map = (function () {
-    var root = $('pane-map'), built = false, lobbies = [], curId = null, lob = null, timer = null, saveT = null, selTok = null, tab = 'shadow', q = '', snapMode = 'square', paint = { on: false, color: '#2ecc71', erase: false };
+    var root = $('pane-map'), built = false, lobbies = [], curId = null, lob = null, timer = null, saveT = null, selTok = null, tab = 'shadow', q = '', snapMode = 'square', paint = { on: false, color: '#2ecc71', erase: false, fog: false }, fogPrev = false, markers = [];
     var ui = {}, zm = { s: 1, x: 0, y: 0 }, npcs = [], npcOpen = {};
     // Show or hide the names under the map tokens (on a phone they can cover a lot of the map). Remembered on this device.
     var namesOff = false;
@@ -218,6 +218,7 @@
       zApply();
       if (!lob || !ui.grid) return; var w = ui.box.clientWidth, c = w * lob.cell / 100; ui.grid.style.backgroundSize = c + 'px ' + c + 'px';
       Object.keys(ui.tiles || {}).forEach(function (k) { layTile(ui.tiles[k], c); });
+      Object.keys(ui.ftiles || {}).forEach(function (k) { layTile(ui.ftiles[k], c); });
     }
     /* coloured squares: they belong to the grid, so they follow the square size */
     function layTile(t, c) { var s = t.el.style; s.left = (t.col * c) + 'px'; s.top = (t.row * c) + 'px'; s.width = c + 'px'; s.height = c + 'px'; }
@@ -231,6 +232,20 @@
       lob.cells = lob.cells.filter(function (c) { return !(c[0] === col && c[1] === row); });
       if (color) { lob.cells.push([col, row, color]); addTile(col, row, color); }
     }
+    /* hidden tiles: solid black over the picture and the tokens. The headmaster sees them see-through (with a dashed edge) so the map stays workable. */
+    function addFog(col, row) {
+      var el = h('div', { className: 'mp-fog' }); ui.fogl.appendChild(el);
+      var t = { el: el, col: col, row: row }; ui.ftiles[col + ',' + row] = t; layTile(t, ui.box.clientWidth * lob.cell / 100);
+    }
+    function setFog(col, row, on) {
+      var k = col + ',' + row, cur = ui.ftiles[k];
+      if (!!cur === !!on) return;
+      if (cur) { cur.el.remove(); delete ui.ftiles[k]; }
+      lob.fog = (lob.fog || []).filter(function (c) { return !(c[0] === col && c[1] === row); });
+      if (on) { lob.fog.push([col, row]); addFog(col, row); }
+      if (ui.fcnt) ui.fcnt.textContent = lob.fog.length + ' hidden';
+    }
+    function fogClasses() { if (!ui.box) return; ui.box.classList.toggle('fogoff', lob && lob.fogOn === false); ui.box.classList.toggle('fogprev', !!fogPrev); }
     function place(t, el) { el.style.left = (t.x * 100) + '%'; el.style.top = (t.y * 100) + '%'; el.style.width = (lob.cell * 0.9 * (lob.tokScale || 1) * (t.size || 1)) + '%'; }
     function drawBox() {
       clear(ui.box); ui.grid = null; ui.zoom = null;
@@ -243,6 +258,8 @@
       lob.cells.forEach(function (c) { addTile(c[0], c[1], c[2]); });
       ui.box.classList.toggle('painting', isDM() && paint.on);
       lob.tokens.forEach(function (t) { ui.box.appendChild(tokenEl(t)); });
+      lob.fog = lob.fog || []; ui.fogl = h('div', { className: 'mp-fogl' }); ui.box.appendChild(ui.fogl); ui.ftiles = {};
+      lob.fog.forEach(function (c) { addFog(c[0], c[1]); }); fogClasses();
       if (!lob.image && isDM()) ui.box.appendChild(h('p', { className: 'mp-hint mono', text: 'Upload a map image on the right.' }));
       if (!isDM()) wrapZoom();
       fit();
@@ -284,7 +301,7 @@
       ev.preventDefault(); ui.box.setPointerCapture(ev.pointerId);
       var prev = null;
       var cellAt = function (m) { var r = ui.box.getBoundingClientRect(), c = ui.box.clientWidth * lob.cell / 100; return { x: m.clientX - r.left - ui.box.clientLeft, y: m.clientY - r.top - ui.box.clientTop, c: c, w: ui.box.clientWidth, h: ui.box.clientHeight }; };
-      var hit = function (x, y, c, w, hh) { if (x < 0 || y < 0 || x >= w || y >= hh) return; setTile(Math.floor(x / c), Math.floor(y / c), paint.erase ? null : paint.color); };
+      var hit = function (x, y, c, w, hh) { if (x < 0 || y < 0 || x >= w || y >= hh) return; if (paint.fog) setFog(Math.floor(x / c), Math.floor(y / c), !paint.erase); else setTile(Math.floor(x / c), Math.floor(y / c), paint.erase ? null : paint.color); };
       var go = function (m) {
         var a = cellAt(m);
         if (prev) { var n = Math.max(1, Math.ceil(Math.hypot(a.x - prev.x, a.y - prev.y) / (a.c / 3))); for (var i = 1; i <= n; i++) hit(prev.x + (a.x - prev.x) * i / n, prev.y + (a.y - prev.y) * i / n, a.c, a.w, a.h); } else hit(a.x, a.y, a.c, a.w, a.h);
@@ -413,7 +430,7 @@
       if (!lob) return;
       ui.status.textContent = 'Saving…'; clearTimeout(saveT);
       saveT = setTimeout(function () {
-        var l = { id: lob.id, name: lob.name, cell: lob.cell, tokScale: lob.tokScale || 1, tileAlpha: lob.tileAlpha || 0.4, cells: lob.cells || [], imgScale: lob.imgScale, imgX: lob.imgX, imgY: lob.imgY, members: lob.members, tokens: lob.tokens.map(function (t) { return { id: t.id, label: t.label, src: t.src, up: t.up || '', size: t.size, x: t.x, y: t.y }; }) };
+        var l = { id: lob.id, name: lob.name, cell: lob.cell, tokScale: lob.tokScale || 1, tileAlpha: lob.tileAlpha || 0.4, cells: lob.cells || [], fog: lob.fog || [], fogOn: lob.fogOn !== false, imgScale: lob.imgScale, imgX: lob.imgX, imgY: lob.imgY, members: lob.members, tokens: lob.tokens.map(function (t) { return { id: t.id, label: t.label, src: t.src, up: t.up || '', size: t.size, x: t.x, y: t.y }; }) };
         if (lob._img) l.image = lob.image;
         var id = lob.id;
         call('map', { action: 'save', lobby: l }).then(function (r) {
@@ -462,23 +479,24 @@
         h('label', { className: 'fl' }, [h('span', { text: 'Token placing' }), sn]),
         note('Drag the map image to move it. Drag a token to move it. Use Fine or Free to put several tokens in one square.'),
       ]));
-      ui.side.appendChild(paintCard());
+      markers = []; ui.side.appendChild(paintCard()); ui.side.appendChild(fogCard());
       ui.side.appendChild(h('div', { className: 'mp-card' }, [h('p', { className: 'mono red', text: 'Souls in this lobby' }), mem, note('Players only see lobbies they are in.')]));
       ui.side.appendChild(tokenCard());
       ui.side.appendChild(h('div', { className: 'mp-card' }, [del]));
     }
     function paintCard() {
       var COL = [['#2ecc71', 'Green'], ['#3b82f6', 'Blue'], ['#ef4444', 'Red'], ['#f59e0b', 'Orange'], ['#eab308', 'Yellow'], ['#a855f7', 'Purple'], ['#06b6d4', 'Cyan'], ['#ffffff', 'White']];
-      var onb = h('button', { type: 'button', className: 'btn', text: paint.on ? 'Painting: ON' : 'Paint tiles: OFF', 'aria-pressed': String(paint.on) });
+      var onb = h('button', { type: 'button', className: 'btn', text: paint.on && !paint.fog ? 'Painting: ON' : 'Paint tiles: OFF', 'aria-pressed': String(paint.on && !paint.fog) });
       var custom = h('input', { type: 'color', value: paint.color, 'aria-label': 'Custom colour' }), er = h('button', { type: 'button', className: 'mp-sw er', text: 'Erase', 'aria-pressed': String(paint.erase) });
-      var sws = COL.map(function (c) { var b = h('button', { type: 'button', className: 'mp-sw', title: c[1], 'aria-label': c[1], 'aria-pressed': String(!paint.erase && paint.color === c[0]) }); b.style.background = c[0]; b.onclick = function () { paint.color = c[0]; paint.erase = false; paint.on = true; mark(); }; return b; });
+      var sws = COL.map(function (c) { var b = h('button', { type: 'button', className: 'mp-sw', title: c[1], 'aria-label': c[1], 'aria-pressed': String(!paint.erase && paint.color === c[0]) }); b.style.background = c[0]; b.onclick = function () { paint.color = c[0]; paint.erase = false; paint.fog = false; paint.on = true; markAll(); }; return b; });
       function mark() {
-        onb.textContent = paint.on ? 'Painting: ON' : 'Paint tiles: OFF'; onb.setAttribute('aria-pressed', String(paint.on)); ui.box.classList.toggle('painting', paint.on);
-        sws.forEach(function (b, i) { b.setAttribute('aria-pressed', String(!paint.erase && paint.color === COL[i][0])); }); er.setAttribute('aria-pressed', String(paint.erase)); custom.value = paint.color;
+        var mine = paint.on && !paint.fog; onb.textContent = mine ? 'Painting: ON' : 'Paint tiles: OFF'; onb.setAttribute('aria-pressed', String(mine));
+        sws.forEach(function (b, i) { b.setAttribute('aria-pressed', String(mine && !paint.erase && paint.color === COL[i][0])); }); er.setAttribute('aria-pressed', String(mine && paint.erase)); custom.value = paint.color;
       }
-      onb.onclick = function () { paint.on = !paint.on; mark(); };
-      er.onclick = function () { paint.erase = true; paint.on = true; mark(); };
-      custom.oninput = function () { paint.color = custom.value; paint.erase = false; paint.on = true; mark(); };
+      markers.push(mark);
+      onb.onclick = function () { if (paint.on && !paint.fog) paint.on = false; else { paint.fog = false; paint.on = true; } markAll(); };
+      er.onclick = function () { paint.erase = true; paint.fog = false; paint.on = true; markAll(); };
+      custom.oninput = function () { paint.color = custom.value; paint.erase = false; paint.fog = false; paint.on = true; markAll(); };
       var clr = h('button', { type: 'button', className: 'btn', text: 'Clear all tiles' });
       G.two(clr, 'Clear all tiles', function () { lob.cells = []; ui.tiles = {}; clear(ui.paint); save(); });
       return h('div', { className: 'mp-card' }, [
@@ -486,6 +504,34 @@
         h('div', { className: 'mp-sws' }, sws.concat([custom, er])),
         slider('Tile strength', 0.1, 0.9, 0.05, lob.tileAlpha || 0.4, function (v) { lob.tileAlpha = v; if (ui.paint) ui.paint.style.opacity = v; }, save),
         clr, note('Turn painting on, pick a colour, then click or drag over squares to tint them. Erase takes a colour off. Tokens cannot be dragged while painting is on.'),
+      ]);
+    }
+    function markAll() { markers.forEach(function (f) { f(); }); if (ui.box) ui.box.classList.toggle('painting', !!paint.on); }
+    function fogCard() {
+      var hideB = h('button', { type: 'button', className: 'btn', 'aria-pressed': 'false' }), showB = h('button', { type: 'button', className: 'btn', 'aria-pressed': 'false' });
+      function mark() {
+        var hm = paint.on && paint.fog && !paint.erase, rm = paint.on && paint.fog && paint.erase;
+        hideB.textContent = hm ? 'Hiding tiles: ON' : 'Hide tiles'; hideB.setAttribute('aria-pressed', String(hm));
+        showB.textContent = rm ? 'Revealing tiles: ON' : 'Reveal a tile'; showB.setAttribute('aria-pressed', String(rm));
+      }
+      markers.push(mark); mark();
+      hideB.onclick = function () { if (paint.on && paint.fog && !paint.erase) paint.on = false; else { paint.fog = true; paint.erase = false; paint.on = true; } markAll(); };
+      showB.onclick = function () { if (paint.on && paint.fog && paint.erase) paint.on = false; else { paint.fog = true; paint.erase = true; paint.on = true; } markAll(); };
+      var tick = h('input', { type: 'checkbox', checked: lob.fogOn !== false });
+      var cnt = h('span', { className: 'mono', text: (lob.fog || []).length + ' hidden' });
+      tick.onchange = function () { lob.fogOn = tick.checked; fogClasses(); save(true); };
+      var prev = h('input', { type: 'checkbox', checked: fogPrev });
+      prev.onchange = function () { fogPrev = prev.checked; fogClasses(); };
+      var clr = h('button', { type: 'button', className: 'btn', text: 'Reveal all tiles' });
+      G.two(clr, 'Reveal all tiles', function () { lob.fog = []; ui.ftiles = {}; clear(ui.fogl); cnt.textContent = '0 hidden'; save(); });
+      ui.fcnt = cnt;
+      return h('div', { className: 'mp-card' }, [
+        h('p', { className: 'mono red', text: 'Hidden tiles' }),
+        h('div', { className: 'ef' }, [hideB, showB]),
+        h('label', { className: 'chk' }, [tick, h('span', { text: 'Hidden from players (untick to show everyone)' })]),
+        h('label', { className: 'chk' }, [prev, h('span', { text: 'Preview as a player sees it (solid black)' })]),
+        h('div', { className: 'ef' }, [cnt, clr]),
+        note('Turn on Hide tiles, then click or drag over squares to black them out. Anything standing on a hidden square is also hidden from players, and its stats stay off their page. Unticking the box shows every tile to everyone at once and keeps your tiles for next time.'),
       ]);
     }
     function drawBoxKeepImg() { if (!lob || !ui.grid) return; fit(); Array.prototype.forEach.call(ui.box.querySelectorAll('.mp-tok'), function (n, i) { if (lob.tokens[i]) place(lob.tokens[i], n); }); }
@@ -1332,32 +1378,83 @@
     return { enter: function () { msg = ''; enter(); }, reset: reset };
   })();
 
+  /* ---------- the unread ping: a pill under the top bar (every tab) and a dot on the Chat tab ----------
+     The unread messages live on the server, so the ping is still there after logging out and back in.
+     It goes away when the message is opened, or with the X (until something new arrives). */
+  var ping = { on: false, n: 0 }, pingT = null, banner = null, chatBtn = nav.querySelector('button[data-pane="chat"]');
+  function buildBanner() {
+    if (banner) return;
+    var bar = document.querySelector('#adm .adm-bar'); if (!bar) return;
+    var go = h('button', { type: 'button', className: 'chat-ping-go' }), x = h('button', { type: 'button', className: 'chat-ping-x', 'aria-label': 'Dismiss', text: '×' });
+    banner = h('div', { className: 'chat-ping', hidden: true, role: 'status' }, [go, x]); banner.go = go;
+    go.onclick = function () { modules.chat.focusUnread = true; pane('chat'); };
+    x.onclick = function () { ping.on = false; drawPing(); call('chat', { action: 'dismiss' }); };
+    bar.parentNode.insertBefore(banner, bar.nextSibling);
+  }
+  function drawPing() {
+    buildBanner(); if (!banner) return;
+    banner.hidden = !ping.on; banner.go.textContent = ping.n > 1 ? 'You have ' + ping.n + ' unread messages' : 'You have unread message';
+    if (chatBtn) chatBtn.classList.toggle('has-ping', ping.on);
+  }
+  function setPing(on, n) { ping.on = !!on; ping.n = n || 0; drawPing(); }
+  function pollPing() { if (!authBody()) return; call('chat', { action: 'ping' }).then(function (r) { if (r.ok) setPing(r.j.ping, r.j.n); }); }
+  function startPing() { stopPing(); pollPing(); pingT = setInterval(function () { if (!document.hidden) pollPing(); }, 6000); }
+  function stopPing() { clearInterval(pingT); pingT = null; setPing(false, 0); }
+
   /* ======================= CHAT ======================= */
+  // Rooms (OOC, RP), private messages, group chats and NPC chats.
   modules.chat = (function () {
-    var root = $('pane-chat'), ui = {}, built = false, me = null, members = [], byId = {}, unread = {}, ch = 'ooc', who = null, lastKey = '', timer = null, mtimer = null, recent = [], picking = false, editing = false, seen = {}, pending = [];
+    var root = $('pane-chat'), ui = {}, built = false, me = null, members = [], byId = {}, contactIds = [], unread = {}, threads = [], groups = [], npcs = [], hiddenIds = [];
+    var cur = { kind: 'ooc' }, mode = 'chat', lastKey = '', timer = null, mtimer = null, recent = [], recentNpc = [], editing = false, seen = {}, pending = [], info = null, mod = null;
     function isDM() { return !!G.creds(); }
-    function reset() { built = false; clear(root); stop(); me = null; members = []; recent = []; ch = 'ooc'; who = null; lastKey = ''; seen = {}; pending = []; }
+    function reset() { built = false; clear(root); stop(); me = null; members = []; byId = {}; contactIds = []; unread = {}; threads = []; groups = []; npcs = []; hiddenIds = []; recent = []; recentNpc = []; cur = { kind: 'ooc' }; mode = 'chat'; lastKey = ''; seen = {}; pending = []; info = null; editing = false; }
     function stop() { clearInterval(timer); clearInterval(mtimer); timer = mtimer = null; }
-    function body(extra) { return Object.assign(ch === 'ooc' || ch === 'rp' ? { channel: ch } : { with: who }, extra || {}); }
+    function body(extra) {
+      var b = cur.kind === 'ooc' || cur.kind === 'rp' ? { channel: cur.kind } : cur.kind === 'pm' ? { with: cur.id } : cur.kind === 'gc' ? { gid: cur.id } : isDM() ? { npc: cur.id, with: cur.pid } : { npc: cur.id };
+      return Object.assign(b, extra || {});
+    }
+    function keyOf(c) { return c.kind === 'pm' ? c.id : c.kind === 'gc' ? 'gc:' + c.id : c.kind === 'npc' ? 'npc:' + c.id + (isDM() ? ':' + c.pid : '') : ''; }
+    function same(a, b) { return a.kind === b.kind && a.id === b.id && a.pid === b.pid; }
+    function npcById(id) { var r = null; npcs.forEach(function (n) { if (n.id === id) r = n; }); if (!r && info && info.npc && info.npc.id === id) r = info.npc; return r; }
+    function groupById(id) { var r = null; groups.forEach(function (g) { if (g.id === id) r = g; }); return r; }
+    function nameOf(id) { return (byId[id] && byId[id].name) || '?'; }
 
     function enter() {
       if (!built) { clear(root).appendChild(note('Opening the chat…')); }
       call('chat', { action: 'members' }).then(function (r) {
         if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the chat.')); return; }
         take(r.j); if (!built) { build(); }
-        drawSide(); openChannel(ch, who, true);
+        if (mod.focusUnread) { mod.focusUnread = false; var u = firstUnread(); if (u) cur = u; mode = 'chat'; }
+        drawSide(); open(cur);
         stop(); timer = setInterval(function () { if (!document.hidden) fetchNew(); }, 2500); mtimer = setInterval(function () { if (!document.hidden) refreshMembers(); }, 12000);
       });
     }
     function take(j) {
-      me = j.me; members = j.members; unread = j.unread || {}; byId = {}; members.forEach(function (m) { byId[m.id] = m; });
-      Object.keys(unread).forEach(function (k) { if (recent.indexOf(k) < 0) recent.push(k); });
+      me = j.me; members = j.members; contactIds = j.contactIds || []; unread = j.unread || {}; threads = j.threads || []; groups = j.groups || []; npcs = j.npcs || []; hiddenIds = j.hidden || hiddenIds;
+      byId = {}; members.forEach(function (m) { byId[m.id] = m; });
+      if (info && info.people) Object.keys(info.people).forEach(function (id) { if (!byId[id]) byId[id] = info.people[id]; });
+      if (j.ping !== undefined) setPing(j.ping, j.n);
     }
-    function refreshMembers() { call('chat', { action: 'members' }).then(function (r) { if (!r.ok) return; var was = JSON.stringify(unread) + members.length; take(r.j); if (was !== JSON.stringify(unread) + members.length && !editing) drawSide(); }); }
+    function sig() { return JSON.stringify([unread, members.length, threads, groups, npcs.map(function (n) { return n.id + n.name; }), hiddenIds]); }
+    function refreshMembers() { call('chat', { action: 'members' }).then(function (r) { if (!r.ok) return; var was = sig(); take(r.j); if (was !== sig() && !editing && mode !== 'manage') { drawSide(); if (mode === 'chat') setHead(); } }); }
+    // The conversation the ping points at.
+    function firstUnread() {
+      var out = null;
+      Object.keys(unread).forEach(function (k) {
+        if (out) return; var p = k.split(':');
+        if (p.length === 1 && byId[k] && contactIds.indexOf(k) >= 0) out = { kind: 'pm', id: k };
+        else if (p[0] === 'gc' && groupById(p[1])) out = { kind: 'gc', id: p[1] };
+        else if (p[0] === 'npc' && npcById(p[1])) out = isDM() ? (p[2] && byId[p[2]] ? { kind: 'npc', id: p[1], pid: p[2] } : null) : { kind: 'npc', id: p[1], pid: me };
+      });
+      return out;
+    }
 
     function build() {
       clear(root); built = true;
       ui.side = h('div', { className: 'cht-side' }); ui.log = h('div', { className: 'cht-log', 'aria-live': 'polite' }); ui.head = h('h3', { className: 'cht-title' });
+      ui.sub = h('p', { className: 'mono hb-note cht-sub', hidden: true });
+      ui.gbtn = h('button', { type: 'button', className: 'btn sq cht-gbtn', text: 'Group settings', hidden: true }); ui.gbtn.onclick = function () { ui.gset.hidden = !ui.gset.hidden; if (!ui.gset.hidden) drawGset(); };
+      ui.gset = h('div', { className: 'cht-gset', hidden: true });
       ui.in = h('input', { type: 'text', maxLength: 500, placeholder: 'Type…', 'aria-label': 'Message' });
       ui.file = h('input', { type: 'file', accept: 'image/*', hidden: true });
       ui.imgBtn = h('button', { type: 'button', className: 'btn', text: '+ image' }); ui.imgBtn.onclick = function () { ui.file.click(); };
@@ -1369,105 +1466,272 @@
         ui.file.value = '';
       };
       ui.send.onclick = send; ui.in.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
-      ui.main = h('div', { className: 'cht-main' }, [ui.head, ui.log, h('div', { className: 'cht-compose' }, [ui.imgBtn, ui.in, ui.send, ui.file]), ui.err, note('Players appear by their first name. Chat logs are deleted every month.')]);
+      ui.cmp = h('div', { className: 'cht-compose' }, [ui.imgBtn, ui.in, ui.send, ui.file]);
+      ui.wnote = h('p', { className: 'mono hb-note cht-watch', hidden: true, text: 'Read only. You can see this chat, but you are not in it.' });
+      ui.top = h('div', { className: 'cht-top' }, [h('div', { className: 'cht-toprow' }, [ui.head, ui.gbtn]), ui.sub, ui.gset]);
+      ui.main = h('div', { className: 'cht-main' }, [ui.top, ui.log, h('div', { className: 'cht-bottom' }, [ui.cmp, ui.wnote]), ui.err, note('Players appear by their first name. Chat logs are deleted every month.')]);
       root.appendChild(h('div', { className: 'hb-wrap cht' }, [ui.side, ui.main]));
+      mod.ui = ui;
     }
     function avatar(m, cls) { return thumb(m && m.avatar, (m && m.name || '?').charAt(0).toUpperCase(), 'av ' + (cls || '')); }
 
+    /* ----- the left column ----- */
+    function sideBtn(label, count, active, fn, tag) {
+      var b = h('button', { type: 'button', className: 'cht-btn', 'aria-pressed': String(!!active) }, [h('span', { text: label }), tag ? h('span', { className: 'cht-tag mono', text: tag }) : null, count ? h('span', { className: 'cht-new', text: '+' + count + ' new message' + (count > 1 ? 's' : '') }) : null]);
+      b.onclick = fn; return b;
+    }
+    function pmList() {
+      var ids = [];
+      function add(id) { if (id && id !== me && ids.indexOf(id) < 0 && byId[id] && contactIds.indexOf(id) >= 0) ids.push(id); }
+      Object.keys(unread).forEach(function (k) { if (k.indexOf(':') < 0) add(k); });
+      threads.forEach(function (t) { if (t.indexOf('u:') === 0) add(t.slice(2)); });
+      recent.forEach(add); return ids;
+    }
+    function npcItems() {
+      var out = [], dup = {};
+      function add(nid, pid) { var k = nid + '|' + pid; if (dup[k] || !npcById(nid) || (isDM() && !byId[pid])) return; dup[k] = 1; out.push({ nid: nid, pid: pid }); }
+      Object.keys(unread).forEach(function (k) { var p = k.split(':'); if (p[0] !== 'npc') return; if (isDM() && p.length === 3) add(p[1], p[2]); else if (!isDM() && p.length === 2) add(p[1], me); });
+      threads.forEach(function (t) { var p = t.split(':'); if (p[0] !== 'n') return; if (isDM() && p.length === 3) add(p[1], p[2]); else if (!isDM() && p.length === 2) add(p[1], me); });
+      recentNpc.forEach(function (x) { add(x.nid, x.pid); });
+      return out;
+    }
     function drawSide() {
       if (!ui.side) return;
       clear(ui.side);
       var meM = byId[me] || { name: isDM() ? 'Headmaster' : '?' };
       if (isDM()) meM = byId.hm || meM;
-      var prof = h('div', { className: 'cht-me' }, [avatar(meM, 'lg'), h('b', { text: meM.name }), h('small', { className: 'mono', text: isDM() ? 'Headmaster' : 'You' })]);
-      ui.side.appendChild(prof);
+      ui.side.appendChild(h('div', { className: 'cht-me' }, [avatar(meM, 'lg'), h('b', { text: meM.name }), h('small', { className: 'mono', text: isDM() ? 'Headmaster' : 'You' })]));
       if (isDM()) {
         var ed = h('button', { type: 'button', className: 'link', text: editing ? 'Close profile editor' : 'Edit my profile' }); ed.onclick = function () { editing = !editing; drawSide(); }; ui.side.appendChild(ed);
         if (editing) ui.side.appendChild(profileEditor(meM));
       } else ui.side.appendChild(note('Your name and icon come from your character.'));
+      var on = function (kind, id, pid) { return mode === 'chat' && cur.kind === kind && cur.id === id && cur.pid === pid; };
+
       ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Chat logs' }));
-      [['ooc', 'OOC'], ['rp', 'RP chat']].forEach(function (c) { ui.side.appendChild(h('button', { type: 'button', className: 'cht-btn', text: c[1], 'aria-pressed': String(!picking && ch === c[0]), onclick: function () { picking = false; openChannel(c[0], null); } })); });
+      [['ooc', 'OOC'], ['rp', 'RP chat']].forEach(function (c) { ui.side.appendChild(sideBtn(c[1], 0, on(c[0], undefined, undefined), function () { open({ kind: c[0] }); })); });
+
       ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Private messages' }));
-      var nw = h('button', { type: 'button', className: 'cht-btn new', text: '+ New message', 'aria-pressed': String(picking) }); nw.onclick = function () { picking = true; showPicker(); drawSide(); }; ui.side.appendChild(nw);
-      recent.filter(function (id) { return byId[id]; }).forEach(function (id) {
-        var m = byId[id], n = unread[id] || 0;
-        var b = h('button', { type: 'button', className: 'cht-btn', 'aria-pressed': String(!picking && ch === 'pm' && who === id) }, [h('span', { text: m.name }), n ? h('span', { className: 'cht-new', text: '+' + n + ' new message' + (n > 1 ? 's' : '') }) : null]);
-        b.onclick = function () { picking = false; openChannel('pm', id); }; ui.side.appendChild(b);
-      });
+      ui.side.appendChild(sideBtn('+ New message', 0, mode === 'pick', function () { showPicker(); }, '')).classList.add('new');
+      pmList().forEach(function (id) { ui.side.appendChild(sideBtn(byId[id].name, unread[id] || 0, on('pm', id, undefined), function () { open({ kind: 'pm', id: id }); })); });
+      if (!isDM()) npcItems().forEach(function (it) { ui.side.appendChild(sideBtn(npcById(it.nid).name, unread['npc:' + it.nid] || 0, on('npc', it.nid, it.pid), function () { open({ kind: 'npc', id: it.nid, pid: it.pid }); }, 'NPC')); });
+
+      ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Group chats' }));
+      ui.side.appendChild(sideBtn('+ New group', 0, mode === 'gcnew', function () { showGcNew(); })).classList.add('new');
+      groups.forEach(function (g) { ui.side.appendChild(sideBtn(g.name, unread['gc:' + g.id] || 0, on('gc', g.id, undefined), function () { open({ kind: 'gc', id: g.id }); }, g.watch ? 'watching' : '')); });
+
+      if (isDM()) {
+        ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'NPC chats' }));
+        ui.side.appendChild(sideBtn('+ Message as NPC', 0, mode === 'npcpick', function () { showNpcPicker(); })).classList.add('new');
+        npcItems().forEach(function (it) { ui.side.appendChild(sideBtn(npcById(it.nid).name + ' → ' + nameOf(it.pid), unread['npc:' + it.nid + ':' + it.pid] || 0, on('npc', it.nid, it.pid), function () { open({ kind: 'npc', id: it.nid, pid: it.pid }); })); });
+        ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Headmaster tools' }));
+        ui.side.appendChild(sideBtn('Contacts & NPCs', 0, mode === 'manage', function () { showManage(); }));
+      }
     }
     function profileEditor(m) {
       var c = { image: m.avatar || '' }, crop = G.cropper(c), nm = h('input', { value: m.name === '?' ? '' : m.name, maxLength: 30, 'aria-label': 'Display name' });
       var sv = h('button', { type: 'button', className: 'btn primary', text: 'Save profile' }), st = h('small', { className: 'mono' });
       sv.onclick = function () {
-        var body = { action: 'setprofile', name: nm.value }; if (/^data:/.test(c.image) || c.image === '') body.image = c.image;
-        call('chat', body).then(function (r) { st.textContent = r.ok ? 'Saved.' : (r.j.error || 'Could not save.'); if (r.ok) { editing = false; enter(); } });
+        var b = { action: 'setprofile', name: nm.value }; if (/^data:/.test(c.image) || c.image === '') b.image = c.image;
+        call('chat', b).then(function (r) { st.textContent = r.ok ? 'Saved.' : (r.j.error || 'Could not save.'); if (r.ok) { editing = false; enter(); } });
       };
       return h('div', { className: 'ed cht-prof' }, [h('label', { className: 'fl' }, [h('span', { text: 'Display name' }), nm]), crop, sv, st]);
     }
-    function showPicker() {
-      clear(ui.head); ui.head.textContent = 'Who do you want to message?'; clear(ui.log);
-      members.filter(function (m) { return m.id !== me; }).forEach(function (m) {
-        var b = h('button', { type: 'button', className: 'cht-pick' }, [avatar(m), h('b', { text: m.name })]);
-        b.onclick = function () { picking = false; if (recent.indexOf(m.id) < 0) recent.push(m.id); openChannel('pm', m.id); drawSide(); };
-        ui.log.appendChild(b);
-      });
-      if (members.length < 2) ui.log.appendChild(note('Nobody else is here yet.'));
+
+    /* ----- the middle: heading, group settings, log ----- */
+    function setHead() {
+      var t = '', sub = '';
+      if (mode === 'pick') t = 'Who do you want to message?'; else if (mode === 'gcnew') t = 'New group chat'; else if (mode === 'npcpick') t = 'Message as an NPC'; else if (mode === 'manage') t = 'Contacts & NPCs';
+      else if (cur.kind === 'ooc') t = 'OOC'; else if (cur.kind === 'rp') t = 'RP chat';
+      else if (cur.kind === 'pm') t = nameOf(cur.id);
+      else if (cur.kind === 'gc') { var g = groupById(cur.id); t = g ? g.name : 'Group chat'; if (g && g.watch) sub = 'You are reading this group without being in it. Players cannot see that you are here.'; }
+      else if (cur.kind === 'npc') { var n = npcById(cur.id); t = isDM() ? (n ? n.name : 'NPC') + ' ↔ ' + nameOf(cur.pid) : (n ? n.name : 'NPC'); if (isDM()) sub = 'You are writing as ' + (n ? n.name : 'the NPC') + '. ' + nameOf(cur.pid) + ' sees you as the NPC.'; }
+      ui.head.textContent = t; ui.sub.textContent = sub; ui.sub.hidden = !sub;
+      ui.gbtn.hidden = !(mode === 'chat' && cur.kind === 'gc');
+      ui.in.placeholder = cur.kind === 'npc' && isDM() && npcById(cur.id) ? 'Reply as ' + npcById(cur.id).name + '…' : 'Type…';
     }
-    function openChannel(c, w, keep) {
-      ch = c; who = w; lastKey = ''; seen = {}; pending = []; clear(ui.log);
-      ui.head.textContent = c === 'ooc' ? 'OOC' : c === 'rp' ? 'RP chat' : (byId[w] ? byId[w].name : 'Private message');
-      if (picking) { showPicker(); return; }
-      if (c === 'pm') { delete unread[w]; }
-      drawSide(); fetchNew(true);
+    function setCan(can) { ui.cmp.hidden = !can || mode !== 'chat'; ui.wnote.hidden = can || mode !== 'chat'; }
+    function showMode(m) { mode = m; lastKey = ''; seen = {}; pending = []; info = null; clear(ui.log); ui.gset.hidden = true; ui.cmp.hidden = true; ui.wnote.hidden = true; setHead(); drawSide(); }
+    function open(c) {
+      cur = c; mode = 'chat'; lastKey = ''; seen = {}; pending = []; info = null; clear(ui.log); clear(ui.gset); ui.gset.hidden = true;
+      delete unread[keyOf(c)]; setCan(true); setHead(); drawSide(); fetchNew(true);
     }
     function fetchNew(first) {
-      if (picking || !built) return;
-      var mine = ch + '|' + who;
+      if (mode !== 'chat' || !built) return;
+      var mine = JSON.stringify(cur);
       call('chat', body(lastKey ? { action: 'history', after: lastKey } : { action: 'history' })).then(function (r) {
-        if (!r.ok || mine !== ch + '|' + who) return;
-        var msgs = r.j.msgs || []; if (!msgs.length) { if (first && !ui.log.children.length) ui.log.appendChild(h('p', { className: 'mono hb-note cht-empty', text: 'No messages yet. Say something.' })); return; }
-        var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
-        var near = ui.log.scrollHeight - ui.log.scrollTop - ui.log.clientHeight < 80 || first;
-        msgs.forEach(function (m) {
-          lastKey = m.k;
-          if (seen[m.k]) return;
-          if (m.from === me) { // our own message came back: drop the "sending" copy of it
-            var pi = -1; pending.forEach(function (p, n) { if (pi < 0 && p.text === (m.text || '') && !!p.image === !!m.img) pi = n; });
-            if (pi >= 0) { pending[pi].el.remove(); pending.splice(pi, 1); }
-          }
-          seen[m.k] = 1; ui.log.appendChild(bubble(m));
-        });
-        if (near) ui.log.scrollTop = ui.log.scrollHeight;
+        if (!r.ok) { if (first && mine === JSON.stringify(cur) && mode === 'chat') { clear(ui.log); ui.log.appendChild(note(r.j.error || 'Could not open this chat.')); setCan(false); } return; }
+        if (mine !== JSON.stringify(cur) || mode !== 'chat') return;
+        var j = r.j;
+        if (j.people) { info = info || {}; info.people = Object.assign(info.people || {}, j.people); Object.keys(j.people).forEach(function (id) { if (!byId[id]) byId[id] = j.people[id]; }); }
+        if (j.gc) { info = info || {}; var was = JSON.stringify(groupById(j.gc.id)); info.gc = j.gc; var i = groups.map(function (g) { return g.id; }).indexOf(j.gc.id); if (i >= 0) groups[i] = j.gc; else groups.push(j.gc); setHead(); if (was !== JSON.stringify(j.gc) && !ui.gset.hidden && !ui.gset.contains(document.activeElement)) drawGset(); }
+        if (j.npc) { info = info || {}; info.npc = j.npc; setHead(); }
+        setCan(j.canSend !== false);
+        var msgs = j.msgs || []; if (!msgs.length) { if (first && !ui.log.children.length) ui.log.appendChild(h('p', { className: 'mono hb-note cht-empty', text: j.canSend === false ? 'Nothing written yet.' : 'No messages yet. Say something.' })); }
+        else {
+          var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
+          var near = ui.log.scrollHeight - ui.log.scrollTop - ui.log.clientHeight < 80 || first;
+          msgs.forEach(function (m) {
+            lastKey = m.k;
+            if (seen[m.k]) return;
+            if (isMine(m)) { // our own message came back: drop the "sending" copy of it
+              var pi = -1; pending.forEach(function (p, n) { if (pi < 0 && p.text === (m.text || '') && !!p.image === !!m.img) pi = n; });
+              if (pi >= 0) { pending[pi].el.remove(); pending.splice(pi, 1); }
+            }
+            seen[m.k] = 1; ui.log.appendChild(bubble(m));
+          });
+          if (near) ui.log.scrollTop = ui.log.scrollHeight;
+        }
+        if (first) setTimeout(pollPing, 700); // opening the conversation cleared its unread count on the server
       });
     }
+    function isMine(m) { return m.from === me || (cur.kind === 'npc' && isDM() && String(m.from).indexOf('npc:') === 0); }
+    // Who a message looks like it is from: a nickname inside a group, the NPC when the headmaster speaks as one.
+    function sender(from) {
+      if (String(from).indexOf('npc:') === 0) return npcById(from.slice(4)) || { name: 'NPC', avatar: '' };
+      var p = byId[from] || { name: '?', avatar: '' };
+      if (cur.kind === 'gc' && info && info.gc && info.gc.nick && info.gc.nick[from]) return { name: info.gc.nick[from], avatar: p.avatar };
+      return p;
+    }
     function bubble(m) {
-      var mine = m.from === me, p = byId[m.from] || { name: '?', avatar: '' };
+      var mine = isMine(m), p = sender(m.from);
       var txt = h('div', { className: 'cht-txt' }, [mine ? null : h('small', { className: 'mono', text: p.name }), m.text ? h('p', { text: m.text }) : null, m.img ? h('img', { className: 'cht-img', src: FN + 'chat?mimg=' + encodeURIComponent(m.img), alt: 'Shared image', loading: 'lazy' }) : null]);
       return h('div', { className: 'cht-msg' + (mine ? ' mine' : '') }, mine ? [txt, avatar(p, 'sm')] : [avatar(p, 'sm'), txt]);
     }
     // The message shows up at once, a little faded with "Sending…", and settles when the server confirms it.
     function send() {
-      if (ch === 'pm' && !who) return;
+      if (mode !== 'chat' || ui.cmp.hidden) return;
       var text = ui.in.value.trim(), image = ui.pend; if (!text && !image) return;
       ui.in.value = ''; ui.pend = null; ui.imgBtn.textContent = '+ image'; ui.err.textContent = '';
-      var p = byId[me] || { name: '?', avatar: '' }, state = h('small', { className: 'mono cht-state', text: 'Sending…' });
+      var p = cur.kind === 'npc' && isDM() ? (npcById(cur.id) || { name: '?' }) : sender(me), state = h('small', { className: 'mono cht-state', text: 'Sending…' }), at = JSON.stringify(cur);
       var txt = h('div', { className: 'cht-txt' }, [text ? h('p', { text: text }) : null, image ? h('img', { className: 'cht-img', src: image, alt: 'Image being sent' }) : null, state]);
       var el = h('div', { className: 'cht-msg mine pending' }, [txt, avatar(p, 'sm')]);
       var rec = { text: text, image: image, el: el }; pending.push(rec);
       var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
       ui.log.appendChild(el); ui.log.scrollTop = ui.log.scrollHeight; ui.in.focus();
+      var reqBody = body({ action: 'send', text: text, image: image || undefined });
       function go() {
         el.classList.remove('failed'); state.textContent = 'Sending…';
-        call('chat', body({ action: 'send', text: text, image: image || undefined })).then(function (r) {
+        call('chat', reqBody).then(function (r) {
           if (!r.ok) { el.classList.add('failed'); state.textContent = (r.j.error || 'Not sent') + ' · tap to retry'; el.onclick = function () { el.onclick = null; go(); }; return; }
           seen[r.j.k] = 1;
           var i = pending.indexOf(rec);
           if (i >= 0) { pending.splice(i, 1); el.classList.remove('pending'); state.remove(); } // the server confirmed it: it simply becomes a normal message
+          if (cur.kind === 'pm' && recent.indexOf(cur.id) < 0) recent.push(cur.id);
         });
       }
       go();
     }
-    return { enter: enter, leave: stop, reset: reset, wake: function () { if (built) fetchNew(); } };
+
+    /* ----- group settings (name, your name inside the group, people) ----- */
+    function drawGset() {
+      var g = info && info.gc; clear(ui.gset); if (!g) return;
+      var peopleNames = g.members.map(function (id) { var nn = g.nick && g.nick[id]; return (nn || nameOf(id)) + (g.watch && nn ? ' (' + nameOf(id) + ')' : ''); });
+      if (g.watch) { ui.gset.appendChild(h('p', { className: 'mono hb-note', text: 'In this group: ' + peopleNames.join(', ') })); return; }
+      var gn = h('input', { value: g.name, maxLength: 40, 'aria-label': 'Group name' }), gs = h('button', { type: 'button', className: 'btn sq', text: 'Save' }), st = h('small', { className: 'mono' });
+      gs.onclick = function () { call('chat', { action: 'gcrename', gid: g.id, name: gn.value }).then(function (r) { st.textContent = r.ok ? 'Saved.' : (r.j.error || 'Could not save.'); if (r.ok) { applyGc(r.j.gc); } }); };
+      var nn = h('input', { value: (g.nick && g.nick[me]) || '', maxLength: 30, placeholder: nameOf(me), 'aria-label': 'Your name in this group' }), ns = h('button', { type: 'button', className: 'btn sq', text: 'Save' });
+      ns.onclick = function () { call('chat', { action: 'gcnick', gid: g.id, nick: nn.value }).then(function (r) { st.textContent = r.ok ? 'Saved. New messages use that name.' : (r.j.error || 'Could not save.'); if (r.ok) applyGc(r.j.gc); }); };
+      var addable = contactIds.filter(function (id) { return id !== me && g.members.indexOf(id) < 0 && byId[id]; });
+      var sel = h('select', { 'aria-label': 'Add someone' }, [h('option', { value: '', text: 'Add someone…' })].concat(addable.map(function (id) { return h('option', { value: id, text: nameOf(id) }); })));
+      var ad = h('button', { type: 'button', className: 'btn sq', text: 'Add' });
+      ad.onclick = function () { if (!sel.value) return; call('chat', { action: 'gcadd', gid: g.id, ids: [sel.value] }).then(function (r) { st.textContent = r.ok ? 'Added.' : (r.j.error || 'Could not add.'); if (r.ok) { applyGc(r.j.gc); drawGset(); } }); };
+      var lv = h('button', { type: 'button', className: 'link', text: 'Leave this group' });
+      G.two(lv, 'Leave this group', function () { call('chat', { action: 'gcleave', gid: g.id }).then(function (r) { if (!r.ok) { st.textContent = r.j.error || 'Could not leave.'; return; } groups = groups.filter(function (x) { return x.id !== g.id; }); open({ kind: 'ooc' }); }); });
+      ui.gset.appendChild(h('div', { className: 'cht-grow' }, [h('label', { className: 'fl' }, [h('span', { text: 'Group name' }), h('div', { className: 'cht-inl' }, [gn, gs])]), h('label', { className: 'fl' }, [h('span', { text: 'Your name in this group' }), h('div', { className: 'cht-inl' }, [nn, ns])]), h('div', { className: 'fl' }, [h('span', { text: 'Add people' }), h('div', { className: 'cht-inl' }, [sel, ad])])]));
+      ui.gset.appendChild(h('p', { className: 'mono hb-note', text: 'In this group: ' + peopleNames.join(', ') }));
+      ui.gset.appendChild(h('div', { className: 'cht-inl' }, [lv, st]));
+    }
+    function applyGc(g) { if (!g) return; info = info || {}; info.gc = g; var i = groups.map(function (x) { return x.id; }).indexOf(g.id); if (i >= 0) groups[i] = g; setHead(); drawSide(); }
+
+    /* ----- pickers and tools ----- */
+    function pickRow(card, tag, fn) {
+      var b = h('button', { type: 'button', className: 'cht-pick' }, [avatar(card), h('b', { text: card.name }), tag ? h('span', { className: 'cht-tag mono', text: tag }) : null]); b.onclick = fn; return b;
+    }
+    // The lists of people and NPCs can be a few seconds old: fetch them again when a picker opens and redraw it if something changed.
+    function freshThen(m, again) {
+      var was = JSON.stringify([contactIds, npcs.map(function (n) { return n.id; })]);
+      call('chat', { action: 'members' }).then(function (r) {
+        if (!r.ok) return; take(r.j); if (mode !== m) return;
+        if (was !== JSON.stringify([contactIds, npcs.map(function (n) { return n.id; })])) { var typed = ui.log.querySelector('.cht-new-gc input'); if (!(typed && typed.value)) again(); }
+        drawSide();
+      });
+    }
+    function showPicker(fresh) {
+      showMode('pick'); if (!fresh) freshThen('pick', function () { showPicker(true); });
+      var others = contactIds.filter(function (id) { return id !== me && byId[id]; });
+      others.forEach(function (id) { ui.log.appendChild(pickRow(byId[id], '', function () { if (recent.indexOf(id) < 0) recent.push(id); open({ kind: 'pm', id: id }); })); });
+      if (!isDM()) npcs.forEach(function (n) { ui.log.appendChild(pickRow(n, 'NPC', function () { if (!recentNpc.some(function (x) { return x.nid === n.id; })) recentNpc.push({ nid: n.id, pid: me }); open({ kind: 'npc', id: n.id, pid: me }); })); });
+      if (!others.length && !npcs.length) ui.log.appendChild(note('Nobody else is here yet.'));
+    }
+    function showNpcPicker(fresh) {
+      showMode('npcpick'); if (!fresh) freshThen('npcpick', function () { showNpcPicker(true); });
+      if (!npcs.length) { ui.log.appendChild(note('No NPC can be contacted yet. Open "Contacts & NPCs" and switch one on.')); return; }
+      ui.log.appendChild(h('p', { className: 'mono red', text: 'Which NPC are you speaking as?' }));
+      npcs.forEach(function (n) {
+        ui.log.appendChild(pickRow(n, 'NPC', function () {
+          showMode('npcpick'); ui.head.textContent = 'Who is ' + n.name + ' writing to?';
+          members.filter(function (m) { return m.id !== 'hm'; }).forEach(function (m) {
+            ui.log.appendChild(pickRow(m, '', function () { if (!recentNpc.some(function (x) { return x.nid === n.id && x.pid === m.id; })) recentNpc.push({ nid: n.id, pid: m.id }); open({ kind: 'npc', id: n.id, pid: m.id }); }));
+          });
+        }));
+      });
+    }
+    function showGcNew(fresh) {
+      showMode('gcnew'); if (!fresh) freshThen('gcnew', function () { showGcNew(true); });
+      var nm = h('input', { maxLength: 40, placeholder: 'Group name', 'aria-label': 'Group name' }), checks = {}, st = h('p', { className: 'mono hb-note' });
+      var others = contactIds.filter(function (id) { return id !== me && byId[id]; });
+      var list = h('div', { className: 'cht-checks' }, others.map(function (id) {
+        var cb = h('input', { type: 'checkbox' }); checks[id] = cb;
+        return h('label', { className: 'cht-chk' }, [cb, avatar(byId[id], 'sm'), h('span', { text: byId[id].name })]);
+      }));
+      var go = h('button', { type: 'button', className: 'btn primary', text: 'Create group' });
+      go.onclick = function () {
+        var ids = others.filter(function (id) { return checks[id].checked; });
+        if (!ids.length && !isDM()) { st.textContent = 'Pick at least one person.'; return; }
+        go.disabled = true; st.textContent = 'Creating…';
+        call('chat', { action: 'gccreate', name: nm.value, ids: ids }).then(function (r) {
+          go.disabled = false; if (!r.ok) { st.textContent = r.j.error || 'Could not create the group.'; return; }
+          groups.push(r.j.gc); open({ kind: 'gc', id: r.j.gc.id });
+        });
+      };
+      ui.log.appendChild(h('div', { className: 'cht-new-gc' }, [h('label', { className: 'fl' }, [h('span', { text: 'Name' }), nm]), h('p', { className: 'mono red', text: 'Who is in it?' }), others.length ? list : note('Nobody to add yet.'), go, st]));
+      if (isDM()) ui.log.appendChild(note('You are added to groups you make. Players can see you there. You can also read every group without being in it.'));
+    }
+    // Headmaster: hide players from everyone else's contacts, and decide which NPCs can be contacted.
+    function showManage() {
+      showMode('manage');
+      var st = h('p', { className: 'mono hb-note' });
+      var players = members.filter(function (m) { return m.id !== 'hm'; });
+      var hid = h('div', { className: 'cht-checks' }, players.map(function (m) {
+        var cb = h('input', { type: 'checkbox', checked: hiddenIds.indexOf(m.id) >= 0 });
+        cb.onchange = function () { call('chat', { action: 'sethidden', id: m.id, hidden: cb.checked }).then(function (r) { if (r.ok) { hiddenIds = r.j.hidden || []; st.textContent = (cb.checked ? m.name + ' is hidden from the other players.' : m.name + ' can be seen again.'); } else { cb.checked = !cb.checked; st.textContent = r.j.error || 'Could not save.'; } }); };
+        return h('label', { className: 'cht-chk' }, [cb, avatar(m, 'sm'), h('span', { text: m.name }), h('small', { className: 'mono', text: 'hidden' })]);
+      }));
+      ui.log.appendChild(h('section', { className: 'cht-sec' }, [h('p', { className: 'mono red', text: 'Hide players from contacts' }), note('A hidden player does not appear in anyone else\'s contacts, cannot be messaged or added to groups by players, and can only write to you and to NPCs. Use it for players who have not entered the story yet.'), players.length ? hid : note('No players yet.')]));
+      var box = h('div', { className: 'cht-npcs' }, [note('Loading NPCs…')]);
+      ui.log.appendChild(h('section', { className: 'cht-sec' }, [h('p', { className: 'mono red', text: 'NPCs players can contact' }), note('Switch an NPC on to let players write to it privately. You answer as that NPC from "NPC chats".'), box, st]));
+      call('chat', { action: 'npcmanage' }).then(function (r) {
+        if (mode !== 'manage') return; clear(box);
+        if (!r.ok) { box.appendChild(note(r.j.error || 'Could not load the NPCs.')); return; }
+        if (!r.j.npcs.length) box.appendChild(note('There are no NPCs in the registry yet.'));
+        r.j.npcs.forEach(function (n) { box.appendChild(npcRow(n, players, st)); });
+      });
+    }
+    function npcRow(n, players, st) {
+      var on = h('input', { type: 'checkbox', checked: n.on }), all = h('input', { type: 'checkbox', checked: n.all }), pc = {};
+      var who = h('div', { className: 'cht-checks' }, players.map(function (m) { var cb = h('input', { type: 'checkbox', checked: n.to.indexOf(m.id) >= 0 }); pc[m.id] = cb; return h('label', { className: 'cht-chk' }, [cb, h('span', { text: m.name })]); }));
+      var opts = h('div', { className: 'cht-npc-opts' }, [h('label', { className: 'cht-chk' }, [all, h('span', { text: 'Everyone (except hidden players)' })]), who]);
+      var save = h('button', { type: 'button', className: 'btn sq', text: 'Save' }), msg = h('small', { className: 'mono' });
+      function sync() { opts.hidden = !on.checked; who.hidden = all.checked; }
+      on.onchange = sync; all.onchange = sync; sync();
+      save.onclick = function () {
+        var to = players.filter(function (m) { return pc[m.id].checked; }).map(function (m) { return m.id; });
+        call('chat', { action: 'npcset', npc: n.id, on: on.checked, all: all.checked, to: to }).then(function (r) { msg.textContent = r.ok ? 'Saved.' : (r.j.error || 'Could not save.'); if (r.ok) refreshMembers(); });
+      };
+      return h('div', { className: 'cht-npc' }, [h('div', { className: 'cht-npc-top' }, [avatar(n), h('b', { text: n.name }), h('label', { className: 'cht-chk' }, [on, h('span', { text: 'Contactable' })]), save, msg]), opts]);
+    }
+    mod = { enter: enter, leave: stop, reset: reset, wake: function () { if (built) fetchNew(); } };
+    return mod;
   })();
 
   /* ======================= NOTEBOOK ======================= */
