@@ -455,3 +455,13 @@ body.gc-lock { overflow: hidden; }
   .cht-gset { max-height: 40dvh; overflow-y: auto; }
   .chat-ping { margin-top: 0.4rem; } .chat-ping button { font-size: 0.88rem; }
 }
+
+
+/* ---- Dice log: practice dice ---- */
+.pr { background: var(--surface); border: 1px solid var(--line); padding: 0.6rem 0.9rem; }
+.pr summary { cursor: pointer; font-family: var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.8rem; color: var(--red-hi); }
+.pr[open] summary { margin-bottom: 0.6rem; }
+.pr > * + * { margin-top: 0.5rem; }
+.pr-bars { display: grid; gap: 0.2rem; }
+.pr-row { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) 3rem; gap: 0.5rem; align-items: center; font-size: 0.8rem; }
+.pr-row .pr-bar { display: block; height: 0.7rem; background: var(--red); min-width: 2px; }

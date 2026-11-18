@@ -1217,6 +1217,29 @@
       G.two(b3, 'Delete all rolls', function () { run({ mode: 'all' }); });
       return h('div', { className: 'nr-pick' }, [h('p', { className: 'mono red', text: 'Clean up the dice log' }), h('div', { className: 'ef' }, [days, 'days', b1]), h('div', { className: 'ef' }, [b2, b3]), out, note('You can also delete a single roll with the Delete link on its row.')]);
     }
+    // Practice dice: rolled in the browser only, never written to the log. The fairness test rolls 1000 times and shows how often each number came up.
+    function practice() {
+      var D = G.dice, out = h('p', { className: 'mono', role: 'status' }), bars = h('div', { className: 'pr-bars' });
+      var die = h('select', { 'aria-label': 'Die' }, [4, 6, 8, 10, 12, 20, 100].map(function (d) { return h('option', { value: String(d), text: 'd' + d, selected: d === 20 }); }));
+      var cnt = h('input', { type: 'number', min: 1, max: 10, value: 1, className: 'ni', 'aria-label': 'How many dice' }), mod = h('input', { type: 'number', min: -50, max: 50, value: 0, className: 'ni', 'aria-label': 'Modifier' });
+      var go = h('button', { type: 'button', className: 'btn primary', text: 'Roll (practice)' }), ft = h('button', { type: 'button', className: 'btn', text: 'Test fairness: roll 1000 times' });
+      go.onclick = function () {
+        var d = +die.value, n = Math.max(1, Math.min(10, Math.floor(+cnt.value) || 1)), m = Math.max(-50, Math.min(50, Math.floor(+mod.value) || 0)), x = D.plain(n, d, m);
+        go.disabled = true; clear(bars); out.textContent = '';
+        D.tumble(x, 'Practice ' + n + 'd' + d, function () { out.textContent = x.txt; go.disabled = false; });
+      };
+      ft.onclick = function () {
+        var d = +die.value, N = 1000, counts = [], sum = 0, i, v; for (i = 0; i <= d; i++) counts.push(0);
+        for (i = 0; i < N; i++) { v = D.dice(1, d)[0]; counts[v]++; sum += v; }
+        var groups = d > 20 ? 10 : d, size = d / groups, rows = [], g, lo, hi, c;
+        for (g = 0; g < groups; g++) { lo = Math.floor(g * size) + 1; hi = Math.floor((g + 1) * size); c = 0; for (v = lo; v <= hi; v++) c += counts[v]; rows.push([lo === hi ? String(lo) : lo + '–' + hi, c]); }
+        var top = Math.max.apply(null, rows.map(function (r) { return r[1]; }));
+        clear(bars); rows.forEach(function (r) { bars.appendChild(h('div', { className: 'pr-row' }, [h('span', { className: 'mono', text: r[0] }), h('span', { className: 'pr-bar', style: 'width:' + Math.round(r[1] / top * 100) + '%' }), h('span', { className: 'mono', text: String(r[1]) })])); });
+        out.textContent = 'd' + d + ', 1000 rolls: average ' + (sum / N).toFixed(2) + ' (a fair d' + d + ' averages ' + ((d + 1) / 2) + '). Each ' + (d > 20 ? 'group' : 'number') + ' should come up about ' + Math.round(N / groups) + ' times.';
+      };
+      var det = h('details', { className: 'pr' }, [h('summary', { text: 'Practice dice (not logged)' }), h('div', { className: 'ef' }, [cnt, die, 'modifier', mod, go]), h('div', { className: 'ef' }, [ft]), out, bars, note('Practice rolls stay on your screen. Real rolls are logged. Short streaks of low numbers are normal; the fairness test shows the long run.')]);
+      return det;
+    }
     function fillNames() {
       var keep = sel.value, names = [];
       rows.forEach(function (x) { if (x.name && names.indexOf(x.name) < 0) names.push(x.name); });
@@ -1233,7 +1256,9 @@
         if (first) {
           var dm = !!G.creds(); sel = h('select', { 'aria-label': 'Filter by character' }); box = h('div', { className: 'dl-wrap' });
           sel.onchange = draw; fillNames();
-          root.appendChild(h('div', { className: 'hb-wrap' }, [dm ? cleaner() : null, h('div', { className: 'ef' }, [sel, note(dm ? 'The latest 300 rolls from every soul. New rolls appear by themselves.' : 'Everyone’s latest rolls, newest first. New rolls appear by themselves.')]), box]));
+          var rfs = h('small', { className: 'mono', role: 'status' }), rf = h('button', { type: 'button', className: 'btn', text: 'Refresh' });
+          rf.onclick = function () { rf.disabled = true; rfs.textContent = 'Refreshing…'; rev = ''; load(false).then(function () { rf.disabled = false; rfs.textContent = 'Updated ' + new Date().toLocaleTimeString(); }, function () { rf.disabled = false; rfs.textContent = 'Could not refresh.'; }); };
+          root.appendChild(h('div', { className: 'hb-wrap' }, [practice(), dm ? cleaner() : null, h('div', { className: 'ef' }, [sel, rf, rfs]), note(dm ? 'The latest 300 rolls from every soul. New rolls appear by themselves.' : 'Everyone’s latest rolls, newest first. New rolls appear by themselves.'), box]));
         } else fillNames();
         draw();
       });
