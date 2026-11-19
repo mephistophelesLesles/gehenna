@@ -425,6 +425,11 @@
   .reg-nav { display: grid; gap: 2rem; align-content: start; padding: clamp(1.1rem, 3vw, 1.75rem) 1.2rem clamp(1.1rem, 3vw, 1.75rem) calc(12px + 1.4rem); border-right: 1px solid var(--line); }
   .reg-tabs { display: grid; gap: 0.7rem; justify-items: start; }
   .reg-tab { background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 0.15rem 0; color: var(--muted); font-family: var(--f-display); font-size: 1.6rem; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; }
+  .sec-mgr { border: 1px solid var(--line); background: var(--surface); padding: 0.6rem 0.8rem; display: grid; gap: 0.6rem; }
+  .sec-mgr summary { cursor: pointer; font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--red-hi); }
+  .sec-mgr p { margin: 0; color: var(--muted); font-size: 0.7rem; line-height: 1.5; }
+  .sec-row { display: grid; gap: 0.4rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
+  .sec-row input, .sec-row select { width: 100%; padding: 0.5rem 0.6rem; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 0; font: inherit; }
   .reg-tab:hover { color: var(--fg); }
   .reg-tab[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--red); }
   .reg-key { display: grid; gap: 0.5rem; }
@@ -955,6 +960,7 @@
       <button type="button" data-pane="items" aria-pressed="false">Items</button>
       <button type="button" data-pane="map" aria-pressed="false">Map</button>
       <button type="button" data-pane="market" aria-pressed="false">Marketplace</button>
+      <button type="button" data-pane="quest" aria-pressed="false">Quest Board</button>
       <button type="button" data-pane="chat" aria-pressed="false">Chat</button>
       <button type="button" data-pane="note" aria-pressed="false">Notebook</button>
       <button type="button" data-pane="dice" aria-pressed="false">Dice log</button>
@@ -988,6 +994,7 @@
   <section class="pane" id="pane-items" hidden aria-label="Items"></section>
   <section class="pane" id="pane-map" hidden aria-label="Map"></section>
   <section class="pane" id="pane-market" hidden aria-label="Marketplace"></section>
+  <section class="pane" id="pane-quest" hidden aria-label="Quest Board"></section>
   <section class="pane" id="pane-chat" hidden aria-label="Chat"></section>
   <section class="pane" id="pane-note" hidden aria-label="Notebook"></section>
   <section class="pane" id="pane-dice" hidden aria-label="Dice log"></section>
@@ -1524,7 +1531,25 @@
   var $ = function (id) { return document.getElementById(id); };
   var sec = $('registry'), openBtn = $('open-registry'), closeBtn = $('reg-close'), list = $('reg-list'), grid = $('reg-grid'), cats = $('reg-cats'), det = $('reg-det'), main = $('reg-main'),
       q = $('reg-search'), keyIn = $('reg-key'), keyMsg = $('reg-keymsg'), tabs = document.querySelectorAll('.reg-tab');
-  var entries = [], type = 'player', cat = '', key = '', loaded = false, SK = 'gehenna-reg-key', ORDER = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
+  var entries = [], sections = [], type = 'player', cat = '', key = '', loaded = false, SK = 'gehenna-reg-key', ORDER = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
+  // Which tab an entry belongs to: a custom category the headmaster made ('sec:<id>'), or its built-in kind.
+  function tabOf(e) { return e.section ? 'sec:' + e.section : e.type; }
+  // The headmaster's own categories appear as extra tabs under Shadows.
+  function renderTabs() {
+    var box = document.querySelector('.reg-tabs');
+    Array.prototype.slice.call(box.querySelectorAll('.reg-tab.custom')).forEach(function (n) { n.remove(); });
+    sections.forEach(function (s) {
+      var b = el('button', 'reg-tab custom', s.name); b.type = 'button'; b.setAttribute('data-t', 'sec:' + s.id); b.setAttribute('aria-pressed', String(type === 'sec:' + s.id));
+      b.addEventListener('click', function () { selectTab(b); }); box.appendChild(b);
+    });
+    if (type.indexOf('sec:') === 0 && !sections.some(function (s) { return 'sec:' + s.id === type; })) type = 'player';
+    Array.prototype.forEach.call(box.querySelectorAll('.reg-tab'), function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-t') === type)); });
+  }
+  function selectTab(t) {
+    type = t.getAttribute('data-t'); cat = '';
+    Array.prototype.forEach.call(document.querySelectorAll('.reg-tab'), function (x) { x.setAttribute('aria-pressed', String(x === t)); });
+    showList(); renderList();
+  }
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function call(body) {
@@ -1539,7 +1564,7 @@
   }
   function renderList() {
     grid.textContent = '';
-    var s = q.value.trim().toLowerCase(), ofType = entries.filter(function (e) { return e.type === type; });
+    var s = q.value.trim().toLowerCase(), ofType = entries.filter(function (e) { return tabOf(e) === type; });
     var names = [], seen = {};
     ofType.forEach(function (e) { if (e.category && !seen[e.category]) { seen[e.category] = 1; names.push(e.category); } });
     names.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }); });
@@ -1564,7 +1589,7 @@
     grid.textContent = ''; grid.appendChild(el('p', 'mono', 'Opening the registry…'));
     try { if (!key) key = sessionStorage.getItem(SK) || ''; } catch (e) {}
     call({}).then(function (r) {
-      if (r.ok) { entries = r.j.entries || []; loaded = true; if (key && r.j.viewer) keyMsg.textContent = 'Unlocked as ' + r.j.viewer + '.'; renderList(); return; }
+      if (r.ok) { entries = r.j.entries || []; sections = r.j.sections || []; renderTabs(); loaded = true; if (key && r.j.viewer) keyMsg.textContent = 'Unlocked as ' + r.j.viewer + '.'; renderList(); return; }
       if (key) { key = ''; try { sessionStorage.removeItem(SK); } catch (e) {} return load(); }
       grid.textContent = ''; grid.appendChild(el('p', 'mono', (r.j && r.j.error) || 'Could not open the registry.'));
     }).catch(function () { grid.textContent = ''; grid.appendChild(el('p', 'mono', 'Could not reach the server.')); });
@@ -1574,7 +1599,7 @@
     keyMsg.textContent = 'Checking…'; var old = key; key = k;
     call({}).then(function (r) {
       if (!r.ok) { key = old; keyMsg.textContent = (r.j && r.j.error) || 'Could not unlock.'; return; }
-      keyIn.value = ''; entries = r.j.entries || []; keyMsg.textContent = 'Unlocked as ' + (r.j.viewer || 'a soul') + '.';
+      keyIn.value = ''; entries = r.j.entries || []; sections = r.j.sections || sections; renderTabs(); keyMsg.textContent = 'Unlocked as ' + (r.j.viewer || 'a soul') + '.';
       try { sessionStorage.setItem(SK, k); } catch (e) {}
       showList(); renderList();
     }).catch(function () { key = old; keyMsg.textContent = 'Could not reach the server.'; });
@@ -1629,13 +1654,7 @@
   function openReg() { sec.hidden = false; openBtn.setAttribute('aria-expanded', 'true'); if (!loaded) load(); sec.scrollIntoView({ block: 'start' }); main.focus({ preventScroll: true }); }
   function closeReg() { sec.hidden = true; openBtn.setAttribute('aria-expanded', 'false'); var g = $('gate'); if (g) g.scrollIntoView({ block: 'start' }); openBtn.focus({ preventScroll: true }); }
 
-  Array.prototype.forEach.call(tabs, function (t) {
-    t.addEventListener('click', function () {
-      type = t.getAttribute('data-t'); cat = '';
-      Array.prototype.forEach.call(tabs, function (x) { x.setAttribute('aria-pressed', String(x === t)); });
-      showList(); renderList();
-    });
-  });
+  Array.prototype.forEach.call(tabs, function (t) { t.addEventListener('click', function () { selectTab(t); }); });
   q.addEventListener('input', renderList);
   $('reg-unlock').addEventListener('click', unlock);
   keyIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') unlock(); });
@@ -1666,7 +1685,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var adm = $('adm'), login = $('adm-login'), grid = $('adm-grid'), side = $('adm-side'), main = $('adm-main'), msg = $('adm-msg'), pv = $('pl-view');
   var editing = false, liveRev = '', liveT = null, adminT = null, adminRevs = {}, busyLive = false;
-  var creds = null, inbox = [], chars = [], story = [], reg = [], regTpl = null, tab = 'inbox', cur = null, pchar = null, pkey = '';
+  var creds = null, inbox = [], chars = [], story = [], reg = [], regSecs = [], regTpl = null, tab = 'inbox', cur = null, pchar = null, pkey = '';
   var ST = ['STR', 'INT', 'DEX', 'WIS', 'CHA', 'CON'], TYPES = ['Damage', 'Heal', 'Shield', 'Other'];
   // Stat modifier: the D&D steps (one point per two points of score), moved so that a score of 10 gives +1, and never below 0.
   var MOD_BASE = 8;
@@ -2066,7 +2085,8 @@
 
   /* ---------- Registry (Players / NPCs / Monsters) ---------- */
   var KINDS = { player: 'Player', npc: 'NPC', shadow: 'Monster' };
-  function regLabel(it) { return (KINDS[it.type] || 'Player') + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.undisclosed && it.hideImage ? ' · Appearance hidden' : '') + (it.category ? ' · ' + it.category : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
+  function secName(id) { var x = regSecs.filter(function (s) { return s.id === id; })[0]; return x ? x.name : ''; }
+  function regLabel(it) { return (it.section && secName(it.section) ? secName(it.section) : (KINDS[it.type] || 'Player')) + (it.isNew ? ' · Unsaved' : '') + (it.listed === false ? ' · Hidden' : '') + (it.undisclosed ? ' · Undisclosed' : '') + (it.undisclosed && it.hideImage ? ' · Appearance hidden' : '') + (it.category ? ' · ' + it.category : '') + (it.statsOpen === false ? ' · Stats sealed' : ''); }
   function newEntry(ch) {
     reg = reg.filter(function (x) { return !x.isNew; });
     var e = { id: 'new', isNew: true, type: 'player', name: '', image: '', listed: true, undisclosed: false, hideImage: false, category: '', teaser: '', revealFields: [], revealTo: [], hp: 20, armor: 0, speed: 30, initiative: 0, size: 'Medium', languages: '', level: '', prof: 2, saves: '', senses: '', immunities: '', attacks: '', statsOpen: false, weaknesses: '', resistances: '', stats: {}, basic: '', skills: [], ultimate: '', quirks: [], karma: '', notes: '', risk: '' };
@@ -2137,11 +2157,17 @@
     function chk(label, on, set) { var i = h('input', { type: 'checkbox', checked: !!on }); i.onchange = function () { set(i.checked); }; return h('label', { className: 'chk' }, [i, h('span', { text: label })]); }
     function draw() {
       box.textContent = '';
-      var ts = h('select', {}, [['player', 'Player'], ['npc', 'NPC'], ['shadow', 'Monster / Shadow']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: c.type === o[0] }); }));
-      ts.onchange = function () { c.type = ts.value; draw(); };
-      box.appendChild(h('div', { className: 'g2' }, [h('label', { className: 'fl' }, [h('span', { text: 'Type' }), ts]), txt('Name', c, 'name')]));
+      var kinds = [['player', 'Player'], ['npc', 'NPC'], ['shadow', 'Monster / Shadow']].concat(regSecs.map(function (x) { return ['sec:' + x.id, x.name + ' (category)']; }));
+      var curKind = c.section && secName(c.section) ? 'sec:' + c.section : c.type;
+      var ts = h('select', {}, kinds.map(function (o) { return h('option', { value: o[0], text: o[1], selected: curKind === o[0] }); }));
+      ts.onchange = function () {
+        if (ts.value.indexOf('sec:') === 0) { var sc = regSecs.filter(function (x) { return 'sec:' + x.id === ts.value; })[0]; c.section = sc.id; c.type = sc.base; }
+        else { c.section = ''; c.type = ts.value; }
+        draw();
+      };
+      box.appendChild(h('div', { className: 'g2' }, [h('label', { className: 'fl' }, [h('span', { text: 'Type / category (make new categories on the left, under Registry)' }), ts]), txt('Name', c, 'name')]));
       var dl = h('datalist', { id: 'cat-list' }), seenC = {};
-      reg.forEach(function (x) { if (x.type === c.type && x.category && !seenC[x.category]) { seenC[x.category] = 1; dl.appendChild(h('option', { value: x.category })); } });
+      reg.forEach(function (x) { if (x.type === c.type && (x.section || '') === (c.section || '') && x.category && !seenC[x.category]) { seenC[x.category] = 1; dl.appendChild(h('option', { value: x.category })); } });
       var ci = h('input', { value: c.category || '', maxLength: 40, placeholder: c.type === 'player' ? 'e.g. ver1.0' : c.type === 'npc' ? 'e.g. Gehenna’s Worker' : 'e.g. S Rank' }); ci.setAttribute('list', 'cat-list'); ci.oninput = function () { c.category = ci.value; };
       box.appendChild(h('label', { className: 'fl' }, [h('span', { text: 'Category (type a new one to create it, or pick an existing one. Always public)' }), ci, dl]));
       box.appendChild(chk('Listed to players (untick to hide this entry completely)', c.listed !== false, function (v) { c.listed = v; }));
@@ -2230,6 +2256,35 @@
     draw(); return [box];
   }
 
+  /* ---------- Registry categories: extra tabs under Shadows ---------- */
+  var secOpen = false, secMsg = '';
+  function secManager() {
+    var box = h('details', { className: 'sec-mgr' }), sm = h('summary', { text: 'Categories (tabs) · ' + regSecs.length });
+    box.open = secOpen; box.ontoggle = function () { secOpen = box.open; };
+    box.appendChild(sm);
+    box.appendChild(h('p', { className: 'mono', text: 'A category is a new tab next to Players / NPCs / Shadows on the public registry. “Works like” decides which fields its entries have. Deleting one never deletes its entries: they move back to their normal tab.' }));
+    function kindSel(v) { return h('select', { 'aria-label': 'Works like' }, [['player', 'Works like a Player'], ['npc', 'Works like an NPC'], ['shadow', 'Works like a Monster']].map(function (o) { return h('option', { value: o[0], text: o[1], selected: v === o[0] }); })); }
+    function done(r, okText) {
+      secOpen = true;
+      if (!r.ok) { secMsg = (r.j && r.j.error) || 'Could not save.'; render(); return; }
+      regSecs = r.j.sections || regSecs; secMsg = okText;
+      api({ action: 'reglist' }).then(function (rl) { if (rl.ok) { reg = rl.j.entries || reg; } render(); });
+    }
+    regSecs.forEach(function (x) {
+      var nm = h('input', { value: x.name, maxLength: 40, 'aria-label': 'Category name' }), kd = kindSel(x.base);
+      var sv = h('button', { type: 'button', className: 'btn', text: 'Save' }); sv.onclick = function () { api({ action: 'regsecsave', id: x.id, name: nm.value, base: kd.value }).then(function (r) { done(r, 'Saved.'); }); };
+      var dl = h('button', { type: 'button', className: 'btn', text: 'Delete' });
+      two(dl, 'Delete', function () { api({ action: 'regsecdelete', id: x.id }).then(function (r) { done(r, 'Category deleted. Its entries went back to their normal tab.'); }); });
+      box.appendChild(h('div', { className: 'sec-row' }, [nm, kd, h('div', { className: 'btns' }, [sv, dl])]));
+    });
+    var nn = h('input', { placeholder: 'New category name, e.g. Gods', maxLength: 40, 'aria-label': 'New category name' }), nk = kindSel('npc');
+    var add = h('button', { type: 'button', className: 'btn primary', text: '+ Add category' });
+    add.onclick = function () { api({ action: 'regsecsave', name: nn.value, base: nk.value }).then(function (r) { done(r, 'Category added. It now shows as a tab on the registry.'); }); };
+    box.appendChild(h('div', { className: 'sec-row' }, [nn, nk, h('div', { className: 'btns' }, [add])]));
+    if (secMsg) box.appendChild(h('p', { className: 'mono', text: secMsg, role: 'status' }));
+    return box;
+  }
+
   /* ---------- Admin shell ---------- */
   function renderSide() {
     side.textContent = '';
@@ -2241,6 +2296,7 @@
     if (tab === 'world') { var wb = h('button', { type: 'button', className: 'btn', text: '+ New location or item' }); wb.onclick = function () { GEH.worldNew(); }; side.appendChild(wb); }
     if (tab === 'reg') {
       var rb = h('button', { type: 'button', className: 'btn', text: '+ New entry' }); rb.onclick = newEntry; side.appendChild(rb);
+      side.appendChild(secManager());
       if (chars.length) {
         var imp = h('select', { 'aria-label': 'Import a saved character' }, [h('option', { value: '', text: 'Import a saved character…' })].concat(chars.map(function (ch) { return h('option', { value: ch.id, text: ch.name || 'Unnamed' }); })));
         imp.onchange = function () { var ch = chars.filter(function (x) { return x.id === imp.value; })[0]; if (ch) newEntry(ch); };
@@ -2271,7 +2327,7 @@
         return;
       }
       msg.textContent = ''; $('adm-pass').value = ''; startAdminLive();
-      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; reg = (rl.ok && rl.j.entries) || []; regTpl = (rl.ok && rl.j.template) || null; pick();
+      inbox = a.j.items || []; chars = (b.ok && b.j.chars) || []; story = (sl.ok && sl.j.chapters) || []; reg = (rl.ok && rl.j.entries) || []; regTpl = (rl.ok && rl.j.template) || null; regSecs = (rl.ok && rl.j.sections) || []; pick();
       GEH.worldLoad().then(function () { if (tab === 'world') render(); else renderSide(); });
       if (!b.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load saved characters: ' + (b.j.error || '') }), main.firstChild);
       if (!rl.ok) main.insertBefore(h('p', { className: 'adm-empty', text: 'Could not load the registry: ' + (rl.j.error || '') }), main.firstChild);
@@ -2299,7 +2355,7 @@
   $('adm-pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
   $('pl-key').addEventListener('keydown', function (e) { if (e.key === 'Enter') playerLogin(); });
   $('adm-refresh').addEventListener('click', load);
-  $('adm-out').addEventListener('click', function () { stopLive(); creds = null; pchar = null; pkey = ''; inbox = []; chars = []; story = []; reg = []; GEH.worldList.length = 0; cur = null; show('login'); msg.textContent = 'Logged out.'; });
+  $('adm-out').addEventListener('click', function () { stopLive(); creds = null; pchar = null; pkey = ''; inbox = []; chars = []; story = []; reg = []; regSecs = []; GEH.worldList.length = 0; cur = null; show('login'); msg.textContent = 'Logged out.'; });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !adm.hidden) closeAdm(); });
   /* ---------- live sync: the sheet follows the server within a second or two, no reload needed ---------- */
   var VURL = '/.netlify/functions/vitals';

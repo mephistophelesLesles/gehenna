@@ -3,7 +3,7 @@
 // key (optional) belongs to someone the headmaster allowed. Fields outside an entry's template are never sent.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
-const { loadAll, view, canOpen } = require('./lib/registry');
+const { loadAll, loadSections, view, canOpen } = require('./lib/registry');
 const hash = (k) => crypto.createHash('sha256').update(String(k).trim().toUpperCase()).digest('hex');
 const reply = (status, obj) => ({ statusCode: status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(obj) });
 const ID = /^[a-f0-9-]{8,40}$/i;
@@ -39,7 +39,7 @@ exports.handler = async (event) => {
     if (!id) {
       const all = (await loadAll(store)).filter((e) => e.listed);
       all.sort((x, y) => x.name.localeCompare(y.name));
-      return reply(200, { entries: all.map((e) => view(e, viewerId, false)), viewer: viewerName });
+      return reply(200, { entries: all.map((e) => view(e, viewerId, false)), sections: await loadSections(getStore('gehenna-regsections')), viewer: viewerName });
     }
     const e = ID.test(id) && await store.get(id, { type: 'json' });
     if (!e || !e.listed) return reply(404, { error: 'That entry does not exist.' });

@@ -78,7 +78,7 @@ exports.handler = async (event) => {
     const goodId = /^[a-f0-9-]{8,40}$/i.test(String(b.id || ''));
     const sr = await storyAdmin(b, getStore('gehenna-story'));
     if (sr) return reply(sr[0], sr[1]);
-    const rr = await registryAdmin(b, getStore('gehenna-registry'));
+    const rr = await registryAdmin(b, getStore('gehenna-registry'), getStore('gehenna-regsections'));
     if (rr) return reply(rr[0], rr[1]);
 
     if (b.action === 'delete') {

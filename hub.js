@@ -1,4 +1,4 @@
-/* Gehenna hub: the section tabs (Character details / Map / Marketplace / Chat / Notebook) shared by the headmaster and the players,
+/* Gehenna hub: the section tabs (Character details / Map / Marketplace / Quest Board / Chat / Notebook) shared by the headmaster and the players,
    plus the public World registry (Locations and Items). Talks to /.netlify/functions/{map,market,chat,world}.
    Relies on window.GEH, which the login script in index.html sets up. */
 (function () {
@@ -124,7 +124,7 @@
     if (btns[0]) btns[0].focus();
   };
 
-  var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'chat', 'note', 'dice', 'fx'], current = 'char', lastMode = '';
+  var nav = $('adm-nav'), PANES = ['char', 'items', 'map', 'market', 'quest', 'chat', 'note', 'dice', 'fx'], current = 'char', lastMode = '';
   var modules = {};
   function pane(name) {
     if (modules[current] && modules[current].leave) modules[current].leave();
@@ -631,12 +631,17 @@
     wrap._rar = r; return wrap;
   }
   // Plays the draw: a capsule drops, shakes, bursts, then the prize card (or ten cards) appear. results = [{name, desc, image, rarity}]
-  G.gachaReveal = function (results, done) {
+  G.gachaReveal = function (results, done, say) {
+    say = say || {};
     var prev = document.activeElement, quick = reduceMotion(), timers = [], finished = false;
     var best = results.reduce(function (a, x) { return RAR_ORDER.indexOf(x.rarity) > RAR_ORDER.indexOf(a) ? x.rarity : a; }, 'common');
     var ov = h('div', { className: 'gc-ov r-' + best, role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Gacha result' });
     var stage = h('div', { className: 'gc-stage' }), skip = h('button', { type: 'button', className: 'btn gc-skip', text: 'Skip' });
-    ov.appendChild(stage); ov.appendChild(skip); document.body.appendChild(ov); document.body.classList.add('gc-lock');
+    // Mammon talks while the capsule drops and again when the prize shows.
+    var says = h('p', { className: 'gc-says', 'aria-live': 'polite' });
+    function speak(t) { clear(says); if (!t) { says.hidden = true; return; } says.hidden = false; says.appendChild(h('span', { className: 'mono red', text: say.name || 'Mammon' })); says.appendChild(h('q', { text: t })); }
+    speak(say.start);
+    ov.appendChild(stage); ov.appendChild(says); ov.appendChild(skip); document.body.appendChild(ov); document.body.classList.add('gc-lock');
     function later(fn, ms) { timers.push(setTimeout(fn, quick ? Math.min(ms, 120) : ms)); }
     function close() { timers.forEach(clearTimeout); document.removeEventListener('keydown', onKey); ov.remove(); document.body.classList.remove('gc-lock'); if (prev && prev.focus) { try { prev.focus(); } catch (e) {} } if (done) done(); }
     function onKey(e) { if (e.key === 'Escape' && finished) close(); }
@@ -646,6 +651,7 @@
     function showResult() {
       clear(stage); skip.hidden = true;
       if (results.length === 1) {
+        speak(say.end);
         var it = results[0];
         stage.appendChild(h('div', { className: 'gc-one r-' + it.rarity }, [
           ransom(RAR[it.rarity].title),
@@ -664,7 +670,7 @@
       var i = 0;
       function flip(s) { s.classList.add('on'); if (s._rar === 'sr' || s._rar === 'ssr') s.classList.add('pop'); }
       function end() {
-        slots.forEach(flip); timers.forEach(clearTimeout); skip.hidden = true; closeBtn.hidden = false; finished = true;
+        slots.forEach(flip); timers.forEach(clearTimeout); skip.hidden = true; closeBtn.hidden = false; finished = true; speak(say.end);
         var n = {}; results.forEach(function (x) { n[x.rarity] = (n[x.rarity] || 0) + 1; });
         tally.textContent = RAR_ORDER.slice().reverse().filter(function (k) { return n[k]; }).map(function (k) { return RAR[k].tag + ' \u00d7' + n[k]; }).join('   ');
         closeBtn.focus();
@@ -689,7 +695,9 @@
     var root = $('pane-market'), data = null, cfg = null, cat = null, sel = null, line = '', msg = '', err = false, editMammon = false, adding = false;
     function isDM() { return !!G.creds(); }
     function reset() { data = null; cfg = null; clear(root); }
-    function pickLine() { var l = (data && data.mammon.lines) || []; return l.length ? l[Math.floor(Math.random() * l.length)] : ''; }
+    // Mammon's idle lines, or the ones for a moment: 'buy', 'debt', 'pull', or a rarity ('common' ... 'ssr').
+    function pickLine(kind) { var l = (data && data.mammon && (kind ? (data.mammon.say || {})[kind] : data.mammon.lines)) || []; return l.length ? l[Math.floor(Math.random() * l.length)] : ''; }
+    function bestOf(results) { return results.reduce(function (a, x) { return RAR_ORDER.indexOf(x.rarity) > RAR_ORDER.indexOf(a) ? x.rarity : a; }, 'common'); }
     function enter() {
       clear(root).appendChild(note('Mammon is counting coins…'));
       var jobs = [call('market', { action: 'state' })];
@@ -701,8 +709,9 @@
         sel = null; line = pickLine(); draw();
       });
     }
-    function after(r, okMsg) {
+    function after(r, okMsg, say) {
       err = !r.ok; msg = r.ok ? (r.j.message || okMsg || '') : (r.j.error || 'Something went wrong.');
+      if (r.ok && say) line = pickLine(say); // she only comments when it actually went through
       if (!r.ok && r.j.battle) data.battle = true;
       if (r.ok) { data.battle = !!r.j.battle; data.karma = r.j.karma; data.debt = r.j.debt; data.tickets = r.j.tickets; data.discount = r.j.discount; if (G.reloadChar) G.reloadChar(); }
       draw();
@@ -789,13 +798,16 @@
         if (dm) {
           var res = []; for (var i = 0; i < n; i++) { var p = previewPick(); if (p) res.push(p); }
           if (!res.length) { err = true; msg = 'Add items to the prize pool first.'; draw(); return; }
-          gcBusy = true; spin(true); G.gachaReveal(res, function () { gcBusy = false; draw(); }); return;
+          gcBusy = true; spin(true); line = pickLine(bestOf(res));
+          G.gachaReveal(res, function () { gcBusy = false; draw(); }, { name: data.mammon.name, start: pickLine('pull'), end: line }); return;
         }
         gcBusy = true; spin(true); b1.disabled = b10.disabled = knob.disabled = true; msg = '';
+        var startLine = pickLine('pull'), ml = root.querySelector('.mk-line'); if (ml) ml.textContent = startLine ? '“' + startLine + '”' : '';
         call('market', { action: 'gachapull', count: n, ticket: !!byTicket }).then(function (r) {
           if (!r.ok) { gcBusy = false; err = true; msg = r.j.error || 'The machine jammed.'; draw(); return; }
           data.karma = r.j.karma; data.debt = r.j.debt; data.tickets = r.j.tickets; data.discount = r.j.discount; if (G.reloadChar) G.reloadChar();
-          G.gachaReveal(r.j.results, function () { gcBusy = false; err = false; msg = ''; draw(); });
+          line = pickLine(bestOf(r.j.results)); // after the reveal she is still saying it beside the machine
+          G.gachaReveal(r.j.results, function () { gcBusy = false; err = false; msg = ''; draw(); }, { name: data.mammon.name, start: startLine, end: line });
         });
       }
       knob.onclick = function () { pull(1); };
@@ -891,7 +903,7 @@
       if (data.discount && !isDM()) box.appendChild(note(data.discount.name + ' is active. It is used up by your next purchase here and does not work on the gacha.'));
       if (!isDM()) {
         var buy = h('button', { type: 'button', className: 'btn primary', text: 'Buy for ' + money(p) + ' karma' });
-        G.two(buy, 'Buy for ' + money(p) + ' karma', function () { buy.disabled = true; call('market', { action: 'buy', catId: c.id, itemId: it.itemId }).then(function (r) { after(r); }); });
+        G.two(buy, 'Buy for ' + money(p) + ' karma', function () { buy.disabled = true; call('market', { action: 'buy', catId: c.id, itemId: it.itemId }).then(function (r) { after(r, '', 'buy'); }); });
         box.appendChild(buy);
         if (data.karma < p) box.appendChild(note('You need ' + money(p - data.karma) + ' more karma.'));
       } else if (kc) {
@@ -926,12 +938,20 @@
       var nm = h('input', { value: m.name, maxLength: 40, 'aria-label': 'Name' }); nm.oninput = function () { m.name = nm.value; };
       var ln = h('textarea', { rows: 6, 'aria-label': 'Dialogue lines' }); ln.value = (m.lines || []).join('\n'); ln.oninput = function () { m.lines = ln.value.split('\n'); };
       var sv = h('button', { type: 'button', className: 'btn primary', text: 'Save Mammon' }); sv.onclick = function () { m.image = c.image; saveCfg(); };
+      // What she says at other moments. One line each; a random one is picked every time.
+      m.say = m.say || {};
+      var SAYS = [['buy', 'After someone buys something'], ['debt', 'After someone pays their debt'], ['pull', 'While the gacha is pulling'], ['common', 'Gacha result: Common'], ['uncommon', 'Gacha result: Uncommon'], ['r', 'Gacha result: Rare'], ['sr', 'Gacha result: SR'], ['ssr', 'Gacha result: SSR']];
+      var more = h('details', { className: 'mk-more' }, [h('summary', { text: 'Her lines for purchases and the gacha' }), note('One line each. A ten-pull uses the line for its best prize. Leave a box empty to use her default lines.')]);
+      SAYS.forEach(function (o) {
+        var t = h('textarea', { rows: 3, 'aria-label': o[1] }); t.value = (m.say[o[0]] || []).join('\n'); t.oninput = function () { m.say[o[0]] = t.value.split('\n'); };
+        more.appendChild(h('label', { className: 'fl' }, [h('span', { text: o[1] }), t]));
+      });
       return h('div', { className: 'mk-detail ed' }, [h('p', { className: 'mono red', text: 'Mammon' }), h('label', { className: 'fl' }, [h('span', { text: 'Name' }), nm]), crop,
-        h('label', { className: 'fl' }, [h('span', { text: 'Dialogue (one line each. A random one shows when a soul clicks her face)' }), ln]), sv]);
+        h('label', { className: 'fl' }, [h('span', { text: 'Idle dialogue (one line each. A random one shows when a soul clicks her face)' }), ln]), more, sv]);
     }
     function debtPanel() {
       var amt = h('input', { type: 'number', min: 1, placeholder: 'Amount', className: 'ni', 'aria-label': 'Amount to pay' });
-      var pay = h('button', { type: 'button', className: 'btn primary', text: 'Pay debt' }); pay.onclick = function () { call('market', { action: 'paydebt', amount: amt.value }).then(function (r) { after(r); }); };
+      var pay = h('button', { type: 'button', className: 'btn primary', text: 'Pay debt' }); pay.onclick = function () { call('market', { action: 'paydebt', amount: amt.value }).then(function (r) { after(r, '', 'debt'); }); };
       var la = h('input', { type: 'number', min: 1, max: 5000, placeholder: 'Amount (max 5,000)', className: 'ni', 'aria-label': 'Loan amount' });
       var loan = h('button', { type: 'button', className: 'btn primary', text: 'Take a loan' }); loan.onclick = function () { call('market', { action: 'loan', amount: la.value }).then(function (r) { after(r); }); };
       return h('div', { className: 'mk-debt' }, [
@@ -940,6 +960,279 @@
       ]);
     }
     return { enter: function () { msg = ''; enter(); }, reset: reset };
+  })();
+
+  /* ======================= QUEST BOARD ======================= */
+  // A weekly board (Monday to Sunday, plus Side Quests). The headmaster writes and pins quests. A soul takes an open quest and
+  // picks which souls come along; the karma reward is split between them when the headmaster marks the quest complete.
+  modules.quest = (function () {
+    var root = $('pane-quest'), data = null, sel = null, draft = null, picked = {}, msg = '', err = false, timer = null, sig = '';
+    var DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['side', 'Side Quests'], ['sat', 'Saturday'], ['sun', 'Sunday']];
+    // The headmaster can rename the headers; data.labels holds the current names.
+    function dayName(k) { return (data && data.labels && data.labels[k]) || (DAYS.filter(function (d) { return d[0] === k; })[0] || [0, k])[1]; }
+    var COMPASS = '<svg viewBox="0 -8 64 72" aria-hidden="true"><circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="32" cy="32" r="20" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3"/><path d="M32 6l6 26-6 26-6-26z" fill="currentColor"/><path d="M6 32l26-6 26 6-26 6z" fill="currentColor" opacity=".4"/><circle cx="32" cy="32" r="3" fill="#0a0808"/><text x="32" y="-1" text-anchor="middle" font-size="10" font-family="serif" fill="currentColor">N</text></svg>';
+    var BLADES = '<svg viewBox="0 0 80 64" aria-hidden="true"><g stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><line x1="16" y1="56" x2="62" y2="12"/><line x1="64" y1="56" x2="18" y2="12"/></g><path d="M50 6l18 4-4 16-8-4z" fill="currentColor"/><path d="M30 6L12 10l4 16 8-4z" fill="currentColor"/><circle cx="40" cy="34" r="4" fill="#0a0808" stroke="currentColor" stroke-width="2"/></svg>';
+    var POTION = '<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M15 4h10v10l9 18a10 10 0 0 1-9 16H15A10 10 0 0 1 6 32l9-18z" fill="#2a0a0d" stroke="currentColor" stroke-width="2"/><path d="M9 34h22l-1 4a8 8 0 0 1-7 8h-6a8 8 0 0 1-7-8z" fill="#e3151f"/><rect x="13" y="2" width="14" height="6" rx="2" fill="currentColor"/></svg>';
+    var SWORD = '<svg viewBox="0 0 40 64" aria-hidden="true"><path d="M20 2l5 8v30H15V10z" fill="currentColor"/><rect x="6" y="40" width="28" height="5" rx="2" fill="#e3151f"/><rect x="17" y="45" width="6" height="12" fill="currentColor"/><circle cx="20" cy="60" r="3" fill="#e3151f"/></svg>';
+
+    function isDM() { return !!G.creds(); }
+    function money(n) { return Number(n || 0).toLocaleString('en-US'); }
+    function copy(o) { return JSON.parse(JSON.stringify(o)); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } lock(false); }
+    function start() { stop(); timer = setInterval(poll, 10000); }
+    function reset() { stop(); phoneTab = null; sheetOpen = false; data = null; sel = null; draft = null; picked = {}; msg = ''; err = false; sig = ''; clear(root); }
+    function find(id) { return data && data.quests.filter(function (q) { return q.id === id; })[0]; }
+    function signature(d) { return JSON.stringify([d.open, d.battle, d.quests]); }
+
+    function enter() {
+      if (!data) clear(root).appendChild(note('Reading the board…'));
+      call('quests', { action: 'state' }).then(function (r) {
+        if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the Quest Board.')); return; }
+        data = r.j; sig = signature(data); if (sel && !find(sel) && sel !== 'new') { sel = null; draft = null; } draw();
+      });
+      start();
+    }
+    // Souls see changes (a quest taken, the board closed) without pressing anything. Never redraw while someone is typing.
+    function poll() {
+      if (root.hidden || document.hidden || !data) return;
+      var a = document.activeElement; if (a && root.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+      call('quests', { action: 'state' }).then(function (r) {
+        if (!r.ok || signature(r.j) === sig) return;
+        data = r.j; sig = signature(data);
+        if (sel && !find(sel) && sel !== 'new') { sel = null; draft = null; }
+        draw();
+      });
+    }
+    function act(body) {
+      return call('quests', body).then(function (r) {
+        err = !r.ok; msg = r.ok ? (r.j.message || '') : (r.j.error || 'Something went wrong.');
+        if (r.ok) { data = r.j; sig = signature(data); if (isDM() && body.action === 'complete' && G.reloadChars) G.reloadChars(); }
+        draw();
+        if (!r.ok && (r.j.battle || r.j.closed)) enter();
+        return r;
+      });
+    }
+    function select(q) { sel = q.id; picked = {}; msg = ''; draft = isDM() ? copy(q) : null; draw(); var d = root.querySelector('.qb-detail'); if (d && d.scrollIntoView) { try { d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} } }
+    function newQuest(day) { sel = 'new'; picked = {}; msg = ''; draft = { id: '', title: '', kind: '', desc: '', day: day || 'side', reward: 100, maxParty: 4, hidden: false, status: 'open', party: [] }; draw(); var d = root.querySelector('.qb-detail'); if (d && d.scrollIntoView) { try { d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} } }
+
+    function note1(q) {
+      var cls = 'qb-q' + (q.status === 'active' ? ' active' : '') + (q.status === 'done' ? ' done' : '') + (q.hidden ? ' hid' : '') + (sel === q.id ? ' sel' : '');
+      var b = h('button', { type: 'button', className: cls, 'aria-pressed': String(sel === q.id) }, [
+        h('b', { text: q.title }),
+        h('small', { text: [q.kind, money(q.reward) + ' karma'].filter(Boolean).join(' · ') }),
+        q.status === 'active' ? h('span', { className: 'qb-tag', text: 'In progress' }) : q.status === 'done' ? h('span', { className: 'qb-tag done', text: 'Done' }) : null,
+        q.hidden ? h('span', { className: 'qb-tag hid', text: 'Hidden' }) : null
+      ]);
+      b.onclick = function () { select(q); };
+      return b;
+    }
+    function dayBox(key, label) {
+      var dm = isDM(), list = data.quests.filter(function (q) { return q.day === key; });
+      var paper = h('div', { className: 'qb-paper' });
+      list.forEach(function (q) { paper.appendChild(note1(q)); });
+      if (!list.length) paper.appendChild(h('p', { className: 'qb-empty', text: dm ? 'Nothing pinned yet.' : 'Nothing posted.' }));
+      if (dm) { var add = h('button', { type: 'button', className: 'qb-add', 'aria-label': 'Add a quest to ' + label, text: '+ Add quest' }); add.onclick = function () { newQuest(key); }; paper.appendChild(add); }
+      var box = h('div', { className: 'qb-day qb-d-' + key, role: 'group', 'aria-label': label }, [h('h3', { className: 'qb-ban' }, [h('span', { text: label })]), paper]);
+      if (key === 'side') { var deco = h('div', { className: 'qb-deco', 'aria-hidden': 'true' }); deco.innerHTML = '<i>' + POTION + '</i><i>' + SWORD + '</i>'; paper.appendChild(deco); }
+      return box;
+    }
+
+    /* ---- souls on a phone: day tabs, big quest cards and a bottom sheet to read and take a quest ---- */
+    var PQ = window.matchMedia ? window.matchMedia('(max-width: 40rem)') : null, phoneTab = null, sheetOpen = false, lockedAdm = false;
+    function isPhone() { return !!(PQ && PQ.matches); }
+    function lock(on) { var a = $('adm'); if (!a) return; if (on) { a.style.overflow = 'hidden'; lockedAdm = true; } else if (lockedAdm) { a.style.overflow = ''; lockedAdm = false; } }
+    function myQuests() { var me = data.me; return data.quests.filter(function (q) { return q.status !== 'done' && (q.party || []).some(function (p) { return p.id === me; }); }); }
+    function tabItems() { var out = []; if (myQuests().length) out.push(['mine', 'Mine']); DAYS.forEach(function (d) { out.push([d[0], dayName(d[0])]); }); return out; }
+    function firstTab() {
+      if (myQuests().length) return 'mine';
+      var wd = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date().getDay()];
+      function has(k) { return data.quests.some(function (q) { return q.day === k; }); }
+      if (has(wd)) return wd;
+      for (var i = 0; i < DAYS.length; i++) if (has(DAYS[i][0])) return DAYS[i][0];
+      return 'side';
+    }
+    function closeSheet() { sheetOpen = false; sel = null; msg = ''; draw(); }
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheetOpen && !root.hidden) closeSheet(); });
+    if (PQ && PQ.addEventListener) PQ.addEventListener('change', function () { if (data && !root.hidden) draw(); });
+    function phoneCard(q) {
+      var me = data.me, mine = (q.party || []).some(function (p) { return p.id === me; });
+      var sub = q.status === 'done' ? 'Completed' : q.status === 'active' ? 'Taken by ' + (q.leaderName || '—') + ' · ' + q.party.length + '/' + q.maxParty : (q.maxParty > 1 ? 'Up to ' + q.maxParty + ' souls' : 'One soul only');
+      var b = h('button', { type: 'button', className: 'qp-card' + (q.status === 'active' ? ' active' : '') + (q.status === 'done' ? ' done' : '') + (mine ? ' mine' : '') }, [
+        h('span', { className: 'qp-main' }, [h('b', { text: q.title }), q.kind ? h('span', { className: 'qp-kind', text: q.kind }) : null, h('small', { text: sub })]),
+        h('span', { className: 'qp-side' }, [h('span', { className: 'qp-karma', text: money(q.reward) }), h('small', { text: 'karma' }), mine && q.status !== 'done' ? h('span', { className: 'qb-tag', text: 'You' }) : q.status === 'done' ? h('span', { className: 'qb-tag done', text: 'Done' }) : null])
+      ]);
+      b.onclick = function () { sel = q.id; picked = {}; msg = ''; sheetOpen = true; draw(); };
+      return b;
+    }
+    function phoneSheet(q) {
+      var x = h('button', { type: 'button', className: 'qp-x', 'aria-label': 'Close', text: '×' }); x.onclick = closeSheet;
+      var back = h('div', { className: 'qp-back' }); back.onclick = closeSheet;
+      var body = h('div', { className: 'qp-sbody' }, [playerDetail(q)]);
+      if (msg) body.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
+      return h('div', { className: 'qp-sheet' }, [back, h('div', { className: 'qp-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': q.title }, [h('div', { className: 'qp-grab', 'aria-hidden': 'true' }), x, body])]);
+    }
+    function drawPhone() {
+      var adm = $('adm'), keep = adm ? adm.scrollTop : 0, oldBody = root.querySelector('.qp-sbody'), keepSheet = oldBody ? oldBody.scrollTop : 0, oldTabs = root.querySelector('.qp-tabs'), keepTabs = oldTabs ? oldTabs.scrollLeft : 0;
+      var tabs = tabItems(), keys = tabs.map(function (t) { return t[0]; });
+      if (!phoneTab || keys.indexOf(phoneTab) < 0) phoneTab = firstTab();
+      var list = phoneTab === 'mine' ? myQuests() : data.quests.filter(function (q) { return q.day === phoneTab; });
+      clear(root);
+      var head = h('div', { className: 'qp-head' }); head.innerHTML = '<span class="qb-ico">' + COMPASS + '</span><h2 class="qp-title">Quest Board</h2>';
+      head.appendChild(h('span', { className: 'qp-state' + (data.open ? '' : ' shut'), text: data.open ? 'Open' : 'Closed' }));
+      var strip = h('div', { className: 'qp-tabs', role: 'tablist', 'aria-label': 'Days' });
+      tabs.forEach(function (t) {
+        var n = t[0] === 'mine' ? myQuests().length : data.quests.filter(function (q) { return q.day === t[0] && q.status !== 'done'; }).length;
+        var c = h('button', { type: 'button', role: 'tab', className: 'qp-chip' + (t[0] === 'mine' ? ' mine' : ''), 'aria-selected': String(t[0] === phoneTab) }, [h('span', { text: t[1] }), n ? h('i', { text: String(n) }) : null]);
+        c.onclick = function () { phoneTab = t[0]; draw(); }; strip.appendChild(c);
+      });
+      var cards = h('div', { className: 'qp-list', role: 'tabpanel' });
+      list.forEach(function (q) { cards.appendChild(phoneCard(q)); });
+      if (!list.length) cards.appendChild(h('p', { className: 'qp-empty', text: phoneTab === 'mine' ? 'You have not taken any quest.' : 'Nothing is posted for ' + dayName(phoneTab) + '.' }));
+      // Swipe the list sideways to go to the next or the previous day.
+      var sx = 0, sy = 0;
+      cards.addEventListener('touchstart', function (e) { var t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+      cards.addEventListener('touchend', function (e) {
+        var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
+        var i = keys.indexOf(phoneTab) + (dx < 0 ? 1 : -1); if (i >= 0 && i < keys.length) { phoneTab = keys[i]; draw(); }
+      }, { passive: true });
+      var wrap = h('div', { className: 'hb-wrap qp' }, [head]);
+      if (!data.open) wrap.appendChild(h('p', { className: 'qp-note', text: 'The board is closed. You can read it, but nobody can take or drop quests until the headmaster opens it.' }));
+      else if (data.battle) wrap.appendChild(h('p', { className: 'qp-note', text: 'You are in battle. You cannot take or drop quests until it ends.' }));
+      wrap.appendChild(strip); wrap.appendChild(cards);
+      var q = sheetOpen && find(sel);
+      if (msg && !q) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
+      if (q) wrap.appendChild(phoneSheet(q)); else if (sheetOpen) sheetOpen = false;
+      root.appendChild(wrap); lock(!!q);
+      var on = strip.querySelector('[aria-selected="true"]'); strip.scrollLeft = keepTabs; if (on && on.scrollIntoView && !keepTabs) { try { on.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (e) {} }
+      if (adm) adm.scrollTop = keep; var nb = root.querySelector('.qp-sbody'); if (nb) nb.scrollTop = keepSheet;
+    }
+
+    function draw() {
+      if (!isDM() && isPhone()) { drawPhone(); return; }
+      lock(false); clear(root); var dm = isDM(), wrap0 = [];
+      var top = h('div', { className: 'qb-top' }, [h('p', { className: 'qb-state' + (data.open ? '' : ' shut'), text: data.open ? 'The board is open' : 'The board is closed' })]);
+      if (dm) {
+        var tg = h('button', { type: 'button', className: 'btn' + (data.open ? '' : ' primary'), text: data.open ? 'Close the board (battle)' : 'Open the board' });
+        tg.onclick = function () { act({ action: 'setopen', open: !data.open }); };
+        var nq = h('button', { type: 'button', className: 'btn primary', text: '+ New quest' }); nq.onclick = function () { newQuest('side'); };
+        top.appendChild(h('div', { className: 'ef' }, [tg, nq]));
+      }
+      if (dm) wrap0.push(renameBox());
+      var head = h('div', { className: 'qb-head' }); head.innerHTML = '<span class="qb-ico">' + COMPASS + '</span><h2 class="qb-title">Quest Board</h2><span class="qb-ico">' + BLADES + '</span>';
+      var grid = h('div', { className: 'qb-grid' }); DAYS.forEach(function (d) { grid.appendChild(dayBox(d[0], dayName(d[0]))); });
+      var sheet = h('div', { className: 'qb-sheet' }, [head, h('div', { className: 'qb-rule', 'aria-hidden': 'true' }), grid]);
+      var wrap = h('div', { className: 'hb-wrap qb' }, [top].concat(wrap0, [h('div', { className: 'qb-wood' }, [sheet])]));
+      if (msg) wrap.appendChild(h('p', { className: 'mk-msg' + (err ? ' bad' : ''), text: msg, role: 'status' }));
+      if (!dm && !data.open) wrap.appendChild(h('p', { className: 'mk-msg bad', text: 'The Quest Board is closed right now. You can read it, but nobody can take or drop quests until the headmaster opens it again.' }));
+      if (!dm && data.battle) wrap.appendChild(h('p', { className: 'mk-msg bad', text: 'You are in battle. You cannot take or drop quests until the headmaster ends the battle.' }));
+      var q = find(sel);
+      if (dm) wrap.appendChild(draft ? editor() : note('Pick a quest on the board to edit it, or press “+ Add quest” on a day.'));
+      else if (q) wrap.appendChild(playerDetail(q));
+      else wrap.appendChild(note('Pick a quest on the board to read it and take it.'));
+      root.appendChild(wrap);
+    }
+
+    /* ---- headmaster: rename the headers (Monday, Tuesday...) ---- */
+    var renameOpen = false;
+    function renameBox() {
+      var box = h('details', { className: 'mk-more qb-rename' }, [h('summary', { text: 'Rename the days' }), note('Call them anything: “Day 1”, “First Gate”, “Today”. Leave one empty to go back to its normal name.')]);
+      box.open = renameOpen; box.ontoggle = function () { renameOpen = box.open; };
+      var ins = {}, grid = h('div', { className: 'g2' });
+      DAYS.forEach(function (d) { var i = h('input', { value: dayName(d[0]), maxLength: 24, 'aria-label': 'Name for ' + d[1] }); ins[d[0]] = i; grid.appendChild(h('label', { className: 'fl' }, [h('span', { text: d[1] }), i])); });
+      var sv = h('button', { type: 'button', className: 'btn primary', text: 'Save names' });
+      sv.onclick = function () { var l = {}; DAYS.forEach(function (d) { l[d[0]] = ins[d[0]].value; }); renameOpen = true; act({ action: 'setlabels', labels: l }); };
+      var df = h('button', { type: 'button', className: 'btn', text: 'Back to Monday, Tuesday…' });
+      df.onclick = function () { renameOpen = true; act({ action: 'setlabels', labels: {} }); };
+      box.appendChild(grid); box.appendChild(h('div', { className: 'ef' }, [sv, df]));
+      return box;
+    }
+
+    /* ---- headmaster: write, edit, pay out ---- */
+    function editor() {
+      var d = draft, isNew = !d.id, box = h('div', { className: 'mk-detail qb-detail ed' });
+      box.appendChild(h('p', { className: 'mono red', text: isNew ? 'New quest' : 'Edit quest' }));
+      function field(label, el) { return h('label', { className: 'fl' }, [h('span', { text: label }), el]); }
+      var ti = h('input', { value: d.title, maxLength: 80, placeholder: 'e.g. Retrieve the Warden’s Key' }); ti.oninput = function () { d.title = ti.value; };
+      var ki = h('input', { value: d.kind, maxLength: 30, placeholder: 'e.g. Hunt, Escort, Fetch, Story' }); ki.oninput = function () { d.kind = ki.value; };
+      var ds = h('select', { 'aria-label': 'Where it is pinned' }, DAYS.map(function (x) { return h('option', { value: x[0], text: dayName(x[0]), selected: d.day === x[0] }); })); ds.onchange = function () { d.day = ds.value; };
+      var rw = h('input', { type: 'number', min: 0, value: d.reward, className: 'ni' }); rw.oninput = function () { d.reward = Math.max(0, Math.floor(+rw.value) || 0); };
+      var mp = h('input', { type: 'number', min: 1, max: 30, value: d.maxParty, className: 'ni' }); mp.oninput = function () { d.maxParty = Math.max(1, Math.min(30, Math.floor(+mp.value) || 1)); };
+      var de = h('textarea', { rows: 5, maxLength: 1500, placeholder: 'What the quest asks of them.' }); de.value = d.desc || ''; de.oninput = function () { d.desc = de.value; };
+      var hd = h('input', { type: 'checkbox', checked: !!d.hidden }); hd.onchange = function () { d.hidden = hd.checked; };
+      box.appendChild(h('div', { className: 'g2' }, [field('Title', ti), field('Kind of quest (a small label)', ki)]));
+      box.appendChild(h('div', { className: 'g2' }, [field('Pinned on', ds), h('div', { className: 'ef' }, [field('Reward (karma, split between the party)', rw), field('Most souls allowed', mp)])]));
+      box.appendChild(field('Description', de));
+      box.appendChild(h('label', { className: 'chk' }, [hd, h('span', { text: 'Hidden from souls (a draft only you can see)' })]));
+      var save = h('button', { type: 'button', className: 'btn primary', text: isNew ? 'Pin to the board' : 'Save changes' });
+      save.onclick = function () { save.disabled = true; act({ action: 'save', quest: d }).then(function (r) { if (r && r.ok) { var q = find(r.j.saved); sel = r.j.saved; draft = q ? copy(q) : null; draw(); } else save.disabled = false; }); };
+      var btns = h('div', { className: 'ef' }, [save]);
+      if (!isNew) {
+        var live = find(d.id) || d;
+        if (live.status === 'active') {
+          var done = h('button', { type: 'button', className: 'btn primary', text: 'Complete and pay the party' });
+          G.two(done, 'Complete and pay the party', function () { act({ action: 'complete', id: d.id }).then(function () { var q = find(d.id); draft = q ? copy(q) : null; draw(); }); });
+          btns.appendChild(done);
+        }
+        if (live.status !== 'open') {
+          var rs = h('button', { type: 'button', className: 'btn', text: 'Put back on the board' });
+          G.two(rs, 'Put back on the board', function () { act({ action: 'reset', id: d.id }).then(function () { var q = find(d.id); draft = q ? copy(q) : null; draw(); }); });
+          btns.appendChild(rs);
+        }
+        var del = h('button', { type: 'button', className: 'btn', text: 'Delete quest' });
+        G.two(del, 'Delete quest', function () { act({ action: 'delete', id: d.id }).then(function () { sel = null; draft = null; draw(); }); });
+        btns.appendChild(del);
+        if (live.status !== 'open') {
+          var names = (live.party || []).map(function (p) { return p.name + (p.id === live.leader ? ' (took it)' : ''); }).join(', ');
+          box.appendChild(h('p', { className: 'mono red', text: live.status === 'done' ? 'Completed · paid ' + money(live.paid) + ' karma each' : 'In progress' }));
+          box.appendChild(h('p', { text: 'Party: ' + (names || '—') + '. ' + (live.status === 'active' && (live.party || []).length ? 'Reward ' + money(live.reward) + ' ÷ ' + live.party.length + ' = ' + money(Math.floor(live.reward / live.party.length)) + ' each.' : '') }));
+        }
+      }
+      box.appendChild(btns);
+      return box;
+    }
+
+    /* ---- souls: read it, pick the party, take it ---- */
+    function playerDetail(q) {
+      var me = data.me, box = h('div', { className: 'mk-detail qb-detail' }), canAct = data.open && !data.battle;
+      box.appendChild(h('h4', { text: q.title }));
+      box.appendChild(h('p', { className: 'mono red', text: [dayName(q.day), q.kind].filter(Boolean).join(' · ') }));
+      if (q.desc) box.appendChild(h('p', { className: 'pre', text: q.desc }));
+      box.appendChild(h('p', { className: 'qb-reward', text: 'Reward: ' + money(q.reward) + ' karma, split between everyone on the quest' + (q.maxParty > 1 ? ' (up to ' + q.maxParty + ' souls)' : ' (one soul only)') + '.' }));
+      var mine = (q.party || []).some(function (p) { return p.id === me; });
+      if (q.status === 'done') { box.appendChild(h('p', { className: 'mono red', text: 'Completed by ' + q.party.map(function (p) { return p.name; }).join(', ') + (q.paid ? ' · ' + money(q.paid) + ' karma each' : '') + '.' })); return box; }
+      if (q.status === 'active') {
+        box.appendChild(h('p', { className: 'mono red', text: 'Taken by ' + (q.leaderName || '—') }));
+        box.appendChild(h('p', { text: 'Party: ' + q.party.map(function (p) { return p.name; }).join(', ') + '. ' + money(Math.floor(q.reward / Math.max(1, q.party.length))) + ' karma each.' }));
+        if (mine && q.leader === me) {
+          var drop = h('button', { type: 'button', className: 'btn', text: 'Drop this quest' }); drop.disabled = !canAct;
+          G.two(drop, 'Drop this quest', function () { act({ action: 'abandon', id: q.id }); });
+          box.appendChild(drop);
+        } else if (mine) box.appendChild(note('You are on this quest. The headmaster pays everyone when it is done.'));
+        return box;
+      }
+      // Open: choose who comes along.
+      var others = data.people.filter(function (p) { return p.id !== me; }), room = Math.max(0, q.maxParty - 1);
+      var chips = h('div', { className: 'fx-chips' }), split = h('p', { className: 'mono red' }), take = h('button', { type: 'button', className: 'btn primary', text: 'Take this quest' });
+      function count() { return Object.keys(picked).length; }
+      function refresh() {
+        var n = count() + 1; split.textContent = 'Party of ' + n + ' · ' + money(Math.floor(q.reward / n)) + ' karma each' + (q.reward % n ? ' (the leftover ' + (q.reward % n) + ' goes to you)' : '');
+        Array.prototype.forEach.call(chips.children, function (c) { var id = c.getAttribute('data-id'); c.setAttribute('aria-pressed', String(!!picked[id])); c.disabled = !canAct || (!picked[id] && count() >= room); });
+      }
+      if (!others.length || !room) box.appendChild(note(room ? 'There is nobody else to bring yet.' : 'This quest takes one soul only.'));
+      else {
+        box.appendChild(h('p', { className: 'mono hb-note', text: 'Who comes with you? Pick up to ' + room + '. They share the reward.' }));
+        others.forEach(function (p) { var c = h('button', { type: 'button', className: 'fx-chip', text: p.name, 'data-id': p.id }); c.onclick = function () { if (picked[p.id]) delete picked[p.id]; else if (count() < room) picked[p.id] = 1; refresh(); }; chips.appendChild(c); });
+        box.appendChild(chips);
+      }
+      box.appendChild(split);
+      take.disabled = !canAct;
+      take.onclick = function () { take.disabled = true; act({ action: 'accept', id: q.id, party: Object.keys(picked) }); };
+      box.appendChild(take);
+      if (!canAct) box.appendChild(note(data.battle ? 'You are in battle.' : 'The board is closed.'));
+      refresh();
+      return box;
+    }
+    return { enter: enter, leave: stop, reset: reset, wake: function () { if (data) poll(); } };
   })();
 
   /* ======================= headmaster: pick a soul by portrait (Effects and Items share the choice) ======================= */
@@ -1273,12 +1566,12 @@
   /* ======================= EFFECTS (headmaster) ======================= */
   // Put a skill's buff or debuff (or one you type in) on chosen souls, see who is carrying what, and end it when you want.
   modules.fx = (function () {
-    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], pickFx = '', stEdit = null, targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' });
+    var root = $('pane-fx'), data = null, msg = '', err = false, caster = '', skill = '', source = '', fx = [], pickFx = '', stEdit = null, targets = {}, kind = 'char', npcQ = '', npcSel = '', npcHost = h('div', { className: 'dm-sheet' }), qOpen = true;
     function reset() { data = null; clear(root); caster = skill = source = ''; fx = []; pickFx = ''; stEdit = null; targets = {}; msg = ''; kind = 'char'; npcQ = ''; npcSel = ''; clear(npcHost); }
     function enter() {
       var fresh = G.reloadChars ? G.reloadChars() : Promise.resolve();
-      Promise.all([fresh, call('effects', { action: 'list' })]).then(function (rs) {
-        var r = rs[1];
+      Promise.all([fresh, call('effects', { action: 'list' }), call('quests', { action: 'state' })]).then(function (rs) {
+        var r = rs[1]; if (rs[2] && rs[2].ok) qOpen = rs[2].j.open;
         if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the effects.')); return; }
         data = r.j; draw();
       });
@@ -1298,7 +1591,10 @@
       }));
       var allIn = h('button', { type: 'button', className: 'btn', text: 'Everyone in battle' }), allOut = h('button', { type: 'button', className: 'btn', text: 'End battle for everyone' });
       allIn.onclick = function () { act({ action: 'battle', targets: data.chars.map(function (c) { return c.id; }), on: true }); }; allOut.onclick = function () { act({ action: 'battle', targets: data.chars.map(function (c) { return c.id; }), on: false }); };
-      bp.appendChild(bchips); bp.appendChild(h('div', { className: 'ef' }, [allIn, allOut])); wrap.appendChild(bp);
+      // The Quest Board has its own switch, so you can shut it for the whole fight (souls in battle are blocked from it anyway).
+      var qb = h('button', { type: 'button', className: 'btn' + (qOpen === false ? ' primary' : ''), text: qOpen === false ? 'Open the Quest Board' : 'Close the Quest Board' });
+      qb.onclick = function () { call('quests', { action: 'setopen', open: qOpen === false }).then(function (r) { err = !r.ok; msg = r.ok ? r.j.message : (r.j.error || 'Could not change the Quest Board.'); if (r.ok) qOpen = r.j.open; draw(); }); };
+      bp.appendChild(bchips); bp.appendChild(h('div', { className: 'ef' }, [allIn, allOut, qb])); wrap.appendChild(bp);
 
       /* ----- active effects, grouped by the cast that made them ----- */
       var groups = {}, order = [];
@@ -1431,15 +1727,31 @@
   modules.chat = (function () {
     var root = $('pane-chat'), ui = {}, built = false, me = null, members = [], byId = {}, contactIds = [], unread = {}, threads = [], groups = [], npcs = [], hiddenIds = [];
     var cur = { kind: 'ooc' }, mode = 'chat', lastKey = '', timer = null, mtimer = null, recent = [], recentNpc = [], editing = false, seen = {}, pending = [], info = null, mod = null;
+    // On a phone the chat works like Discord: first the list of chats, then one full-screen conversation with a back arrow.
+    var screen = 'list', pushed = false, collapsed = {}, lockedAdm = false, MQ = window.matchMedia ? window.matchMedia('(max-width: 52rem)') : null;
     function isDM() { return !!G.creds(); }
-    function reset() { built = false; clear(root); stop(); me = null; members = []; byId = {}; contactIds = []; unread = {}; threads = []; groups = []; npcs = []; hiddenIds = []; recent = []; recentNpc = []; cur = { kind: 'ooc' }; mode = 'chat'; lastKey = ''; seen = {}; pending = []; info = null; editing = false; }
+    function isMobile() { return !!(MQ && MQ.matches); }
+    function lockAdm(on) { var a = $('adm'); if (!a) return; if (on) { a.style.overflow = 'hidden'; lockedAdm = true; } else if (lockedAdm) { a.style.overflow = ''; lockedAdm = false; } }
+    // The keyboard shrinks the visible area: keep the conversation (and the text box) inside what is really visible.
+    function fitView() {
+      if (!ui.main) return; var vv = window.visualViewport;
+      if (isMobile() && screen === 'conv' && vv) { ui.main.style.height = Math.round(vv.height) + 'px'; ui.main.style.transform = 'translateY(' + Math.round(vv.offsetTop) + 'px)'; }
+      else { ui.main.style.height = ''; ui.main.style.transform = ''; }
+    }
+    function syncScreen() { if (ui.wrap) ui.wrap.classList.toggle('show-conv', screen === 'conv'); lockAdm(isMobile() && screen === 'conv' && !root.hidden); fitView(); }
+    function goConv() { screen = 'conv'; if (isMobile() && !pushed) { try { history.pushState({ cht: 1 }, ''); pushed = true; } catch (e) {} } syncScreen(); }
+    function toList() { screen = 'list'; mode = 'chat'; if (ui.gset) ui.gset.hidden = true; syncScreen(); setHead(); drawSide(); refreshMembers(); }
+    function back() { if (pushed) history.back(); else toList(); } // the phone's own back button does the same thing
+    window.addEventListener('popstate', function () { if (!pushed) return; pushed = false; if (screen === 'conv' && built && !root.hidden && isMobile()) toList(); });
+    if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitView); window.visualViewport.addEventListener('scroll', fitView); }
+    if (MQ && MQ.addEventListener) MQ.addEventListener('change', function () { if (built) { syncScreen(); drawSide(); } });
+    function reset() { built = false; clear(root); stop(); lockAdm(false); me = null; members = []; byId = {}; contactIds = []; unread = {}; threads = []; groups = []; npcs = []; hiddenIds = []; recent = []; recentNpc = []; cur = { kind: 'ooc' }; mode = 'chat'; lastKey = ''; seen = {}; pending = []; info = null; editing = false; screen = 'list'; collapsed = {}; ui = {}; }
     function stop() { clearInterval(timer); clearInterval(mtimer); timer = mtimer = null; }
     function body(extra) {
       var b = cur.kind === 'ooc' || cur.kind === 'rp' ? { channel: cur.kind } : cur.kind === 'pm' ? { with: cur.id } : cur.kind === 'gc' ? { gid: cur.id } : isDM() ? { npc: cur.id, with: cur.pid } : { npc: cur.id };
       return Object.assign(b, extra || {});
     }
     function keyOf(c) { return c.kind === 'pm' ? c.id : c.kind === 'gc' ? 'gc:' + c.id : c.kind === 'npc' ? 'npc:' + c.id + (isDM() ? ':' + c.pid : '') : ''; }
-    function same(a, b) { return a.kind === b.kind && a.id === b.id && a.pid === b.pid; }
     function npcById(id) { var r = null; npcs.forEach(function (n) { if (n.id === id) r = n; }); if (!r && info && info.npc && info.npc.id === id) r = info.npc; return r; }
     function groupById(id) { var r = null; groups.forEach(function (g) { if (g.id === id) r = g; }); return r; }
     function nameOf(id) { return (byId[id] && byId[id].name) || '?'; }
@@ -1449,8 +1761,9 @@
       call('chat', { action: 'members' }).then(function (r) {
         if (!r.ok) { clear(root).appendChild(note(r.j.error || 'Could not open the chat.')); return; }
         take(r.j); if (!built) { build(); }
-        if (mod.focusUnread) { mod.focusUnread = false; var u = firstUnread(); if (u) cur = u; mode = 'chat'; }
-        drawSide(); open(cur);
+        if (mod.focusUnread) { mod.focusUnread = false; var u = firstUnread(); if (u) { cur = u; mode = 'chat'; screen = 'conv'; } }
+        if (isMobile() && screen === 'list') { mode = 'chat'; syncScreen(); setHead(); drawSide(); }
+        else { drawSide(); open(cur); }
         stop(); timer = setInterval(function () { if (!document.hidden) fetchNew(); }, 2500); mtimer = setInterval(function () { if (!document.hidden) refreshMembers(); }, 12000);
       });
     }
@@ -1461,7 +1774,7 @@
       if (j.ping !== undefined) setPing(j.ping, j.n);
     }
     function sig() { return JSON.stringify([unread, members.length, threads, groups, npcs.map(function (n) { return n.id + n.name; }), hiddenIds]); }
-    function refreshMembers() { call('chat', { action: 'members' }).then(function (r) { if (!r.ok) return; var was = sig(); take(r.j); if (was !== sig() && !editing && mode !== 'manage') { drawSide(); if (mode === 'chat') setHead(); } }); }
+    function refreshMembers() { call('chat', { action: 'members' }).then(function (r) { if (!r.ok || !built) return; var was = sig(); take(r.j); if (was !== sig() && !editing && mode !== 'manage') { drawSide(); if (mode === 'chat') setHead(); } }); }
     // The conversation the ping points at.
     function firstUnread() {
       var out = null;
@@ -1474,36 +1787,67 @@
       return out;
     }
 
+    var ICON_BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var ICON_SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4l17.4-8.2a.4.4 0 0 0 0-.7L3.4 3.6a.4.4 0 0 0-.6.5l2.2 6.9 8.7 1-8.7 1-2.2 6.9a.4.4 0 0 0 .6.5z" fill="currentColor"/></svg>';
+    var ICON_OPTS = '<svg viewBox="0 0 24 24" aria-hidden="true"><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></g></svg>';
     function build() {
       clear(root); built = true;
       ui.side = h('div', { className: 'cht-side' }); ui.log = h('div', { className: 'cht-log', 'aria-live': 'polite' }); ui.head = h('h3', { className: 'cht-title' });
-      ui.sub = h('p', { className: 'mono hb-note cht-sub', hidden: true });
-      ui.gbtn = h('button', { type: 'button', className: 'btn sq cht-gbtn', text: 'Group settings', hidden: true }); ui.gbtn.onclick = function () { ui.gset.hidden = !ui.gset.hidden; if (!ui.gset.hidden) drawGset(); };
+      ui.sub = h('p', { className: 'cht-sub', hidden: true }); ui.hico = h('span', { className: 'cht-hico', hidden: true });
+      ui.back = h('button', { type: 'button', className: 'cht-back', 'aria-label': 'Back to the chat list' }); ui.back.innerHTML = ICON_BACK; ui.back.onclick = back;
+      ui.gbtn = h('button', { type: 'button', className: 'cht-gbtn', 'aria-label': 'Group settings', title: 'Group settings', hidden: true }); ui.gbtn.innerHTML = ICON_OPTS;
+      ui.gbtn.onclick = function () { ui.gset.hidden = !ui.gset.hidden; if (!ui.gset.hidden) drawGset(); };
       ui.gset = h('div', { className: 'cht-gset', hidden: true });
-      ui.in = h('input', { type: 'text', maxLength: 500, placeholder: 'Type…', 'aria-label': 'Message' });
+      ui.in = h('input', { type: 'text', className: 'cht-in', maxLength: 500, placeholder: 'Message', autocomplete: 'off', enterKeyHint: 'send', 'aria-label': 'Message' });
       ui.file = h('input', { type: 'file', accept: 'image/*', hidden: true });
-      ui.imgBtn = h('button', { type: 'button', className: 'btn', text: '+ image' }); ui.imgBtn.onclick = function () { ui.file.click(); };
-      ui.send = h('button', { type: 'button', className: 'btn primary', text: 'Send' });
-      ui.err = h('p', { className: 'mono hb-note' }); ui.pend = null;
+      ui.attach = h('button', { type: 'button', className: 'cht-attach', 'aria-label': 'Add an image', text: '+' }); ui.attach.onclick = function () { ui.file.click(); };
+      ui.send = h('button', { type: 'button', className: 'cht-sendbtn', 'aria-label': 'Send' }); ui.send.innerHTML = ICON_SEND;
+      ui.prev = h('div', { className: 'cht-prev', hidden: true }); ui.pend = null;
+      ui.err = h('p', { className: 'mono hb-note cht-err' });
       ui.file.onchange = function () {
         var f = ui.file.files && ui.file.files[0]; if (!f) return; ui.err.textContent = 'Preparing image…';
-        shrink(f, 720, 170000, function (d) { if (!d) { ui.err.textContent = 'Could not use that image.'; return; } ui.pend = d; ui.imgBtn.textContent = 'Image ready ✓'; ui.err.textContent = ''; });
+        shrink(f, 720, 170000, function (d) { if (!d) { ui.err.textContent = 'Could not use that image.'; return; } ui.pend = d; showPrev(d); ui.err.textContent = ''; ui.in.focus(); });
         ui.file.value = '';
       };
-      ui.send.onclick = send; ui.in.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
-      ui.cmp = h('div', { className: 'cht-compose' }, [ui.imgBtn, ui.in, ui.send, ui.file]);
-      ui.wnote = h('p', { className: 'mono hb-note cht-watch', hidden: true, text: 'Read only. You can see this chat, but you are not in it.' });
-      ui.top = h('div', { className: 'cht-top' }, [h('div', { className: 'cht-toprow' }, [ui.head, ui.gbtn]), ui.sub, ui.gset]);
-      ui.main = h('div', { className: 'cht-main' }, [ui.top, ui.log, h('div', { className: 'cht-bottom' }, [ui.cmp, ui.wnote]), ui.err, note('Players appear by their first name. Chat logs are deleted every month.')]);
-      root.appendChild(h('div', { className: 'hb-wrap cht' }, [ui.side, ui.main]));
+      ui.send.onclick = send; ui.in.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+      ui.in.addEventListener('focus', function () { setTimeout(function () { ui.log.scrollTop = ui.log.scrollHeight; }, 250); });
+      ui.cmp = h('div', { className: 'cht-compose' }, [ui.attach, h('div', { className: 'cht-field' }, [ui.in]), ui.send, ui.file]);
+      ui.wnote = h('p', { className: 'cht-watch', hidden: true, text: 'Read only. You can see this chat, but you are not in it.' });
+      ui.top = h('div', { className: 'cht-top' }, [h('div', { className: 'cht-toprow' }, [ui.back, ui.hico, h('div', { className: 'cht-htext' }, [ui.head, ui.sub]), ui.gbtn]), ui.gset]);
+      ui.main = h('div', { className: 'cht-main' }, [ui.top, ui.log, h('div', { className: 'cht-bottom' }, [ui.prev, ui.err, ui.cmp, ui.wnote])]);
+      ui.wrap = h('div', { className: 'hb-wrap cht' + (screen === 'conv' ? ' show-conv' : '') }, [ui.side, ui.main]);
+      root.appendChild(ui.wrap);
       mod.ui = ui;
     }
+    function showPrev(d) {
+      clear(ui.prev); ui.prev.hidden = !d; if (!d) return;
+      var x = h('button', { type: 'button', className: 'cht-prev-x', 'aria-label': 'Remove the image', text: '×' }); x.onclick = function () { ui.pend = null; showPrev(null); };
+      ui.prev.appendChild(h('span', { className: 'cht-prev-img' }, [h('img', { src: d, alt: 'Image ready to send' }), x]));
+    }
     function avatar(m, cls) { return thumb(m && m.avatar, (m && m.name || '?').charAt(0).toUpperCase(), 'av ' + (cls || '')); }
+    // Every soul gets a name colour of their own, like roles do on Discord.
+    function tint(id) { var n = 0, s = String(id); for (var i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 360; return 'hsl(' + n + ', 64%, 74%)'; }
+    function hueOf(s) { var n = 0; s = String(s); for (var i = 0; i < s.length; i++) n = (n * 37 + s.charCodeAt(i)) % 360; return n; }
+    function groupIcon(g) { var i = h('span', { className: 'cht-ico grp', text: String(g && g.name || '?').charAt(0).toUpperCase() }); i.style.background = 'hsl(' + hueOf(g && g.id) + ', 42%, 30%)'; return i; }
+    function hashIcon() { return h('span', { className: 'cht-ico hash', text: '#', 'aria-hidden': 'true' }); }
 
-    /* ----- the left column ----- */
-    function sideBtn(label, count, active, fn, tag) {
-      var b = h('button', { type: 'button', className: 'cht-btn', 'aria-pressed': String(!!active) }, [h('span', { text: label }), tag ? h('span', { className: 'cht-tag mono', text: tag }) : null, count ? h('span', { className: 'cht-new', text: '+' + count + ' new message' + (count > 1 ? 's' : '') }) : null]);
-      b.onclick = fn; return b;
+    /* ----- the chat list (the left column on a computer, the first screen on a phone) ----- */
+    function row(o) {
+      var b = h('button', { type: 'button', className: 'cht-row' + (o.count ? ' unread' : ''), 'aria-pressed': String(!!o.active) }, [
+        o.icon, h('span', { className: 'cht-rname', text: o.label }), o.tag ? h('span', { className: 'cht-tag mono', text: o.tag }) : null,
+        o.count ? h('span', { className: 'cht-badge', 'aria-label': o.count + ' new', text: o.count > 99 ? '99+' : String(o.count) }) : null
+      ]);
+      b.onclick = o.fn; return b;
+    }
+    // A group of rows with a title you can fold away (a + at the end starts something new).
+    function category(key, title, rows, total, add, addLabel, empty) {
+      var open = !collapsed[key];
+      var t = h('button', { type: 'button', className: 'cht-cat-t', 'aria-expanded': String(open) }, [h('span', { className: 'cht-car', 'aria-hidden': 'true', text: '›' }), h('span', { text: title }), !open && total ? h('span', { className: 'cht-badge sm', text: String(total) }) : null]);
+      var head = h('div', { className: 'cht-cat' }, [t]);
+      if (add) { var a = h('button', { type: 'button', className: 'cht-cat-add', 'aria-label': addLabel, title: addLabel, text: '+' }); a.onclick = add; head.appendChild(a); }
+      var list = h('div', { className: 'cht-cat-list', hidden: !open }, rows.length ? rows : [h('p', { className: 'cht-none', text: empty || 'Nothing here yet.' })]);
+      t.onclick = function () { collapsed[key] = open; drawSide(); };
+      return h('div', { className: 'cht-sect' }, [head, list]);
     }
     function pmList() {
       var ids = [];
@@ -1525,32 +1869,34 @@
       clear(ui.side);
       var meM = byId[me] || { name: isDM() ? 'Headmaster' : '?' };
       if (isDM()) meM = byId.hm || meM;
-      ui.side.appendChild(h('div', { className: 'cht-me' }, [avatar(meM, 'lg'), h('b', { text: meM.name }), h('small', { className: 'mono', text: isDM() ? 'Headmaster' : 'You' })]));
+      ui.side.appendChild(h('div', { className: 'cht-me' }, [avatar(meM, 'lg'), h('div', { className: 'cht-me-t' }, [h('b', { text: meM.name }), h('small', { className: 'mono', text: isDM() ? 'Headmaster' : 'You' })])]));
       if (isDM()) {
-        var ed = h('button', { type: 'button', className: 'link', text: editing ? 'Close profile editor' : 'Edit my profile' }); ed.onclick = function () { editing = !editing; drawSide(); }; ui.side.appendChild(ed);
+        var ed = h('button', { type: 'button', className: 'link cht-edit', text: editing ? 'Close profile editor' : 'Edit my profile' }); ed.onclick = function () { editing = !editing; drawSide(); }; ui.side.appendChild(ed);
         if (editing) ui.side.appendChild(profileEditor(meM));
-      } else ui.side.appendChild(note('Your name and icon come from your character.'));
+      }
       var on = function (kind, id, pid) { return mode === 'chat' && cur.kind === kind && cur.id === id && cur.pid === pid; };
 
-      ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Chat logs' }));
-      [['ooc', 'OOC'], ['rp', 'RP chat']].forEach(function (c) { ui.side.appendChild(sideBtn(c[1], 0, on(c[0], undefined, undefined), function () { open({ kind: c[0] }); })); });
+      ui.side.appendChild(category('logs', 'Chat logs', [
+        row({ icon: hashIcon(), label: 'OOC', active: on('ooc', undefined, undefined), fn: function () { open({ kind: 'ooc' }); } }),
+        row({ icon: hashIcon(), label: 'RP chat', active: on('rp', undefined, undefined), fn: function () { open({ kind: 'rp' }); } })
+      ], 0));
 
-      ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Private messages' }));
-      ui.side.appendChild(sideBtn('+ New message', 0, mode === 'pick', function () { showPicker(); }, '')).classList.add('new');
-      pmList().forEach(function (id) { ui.side.appendChild(sideBtn(byId[id].name, unread[id] || 0, on('pm', id, undefined), function () { open({ kind: 'pm', id: id }); })); });
-      if (!isDM()) npcItems().forEach(function (it) { ui.side.appendChild(sideBtn(npcById(it.nid).name, unread['npc:' + it.nid] || 0, on('npc', it.nid, it.pid), function () { open({ kind: 'npc', id: it.nid, pid: it.pid }); }, 'NPC')); });
+      var rows = [], total = 0;
+      pmList().forEach(function (id) { var n = unread[id] || 0; total += n; rows.push(row({ icon: avatar(byId[id], 'row'), label: byId[id].name, count: n, active: on('pm', id, undefined), fn: function () { open({ kind: 'pm', id: id }); } })); });
+      if (!isDM()) npcItems().forEach(function (it) { var n = unread['npc:' + it.nid] || 0, c = npcById(it.nid); total += n; rows.push(row({ icon: avatar(c, 'row'), label: c.name, tag: 'NPC', count: n, active: on('npc', it.nid, it.pid), fn: function () { open({ kind: 'npc', id: it.nid, pid: it.pid }); } })); });
+      ui.side.appendChild(category('pm', 'Private messages', rows, total, function () { showPicker(); }, 'New message', 'Press + to message someone.'));
 
-      ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Group chats' }));
-      ui.side.appendChild(sideBtn('+ New group', 0, mode === 'gcnew', function () { showGcNew(); })).classList.add('new');
-      groups.forEach(function (g) { ui.side.appendChild(sideBtn(g.name, unread['gc:' + g.id] || 0, on('gc', g.id, undefined), function () { open({ kind: 'gc', id: g.id }); }, g.watch ? 'watching' : '')); });
+      rows = []; total = 0;
+      groups.forEach(function (g) { var n = unread['gc:' + g.id] || 0; total += n; rows.push(row({ icon: groupIcon(g), label: g.name, tag: g.watch ? 'watching' : '', count: n, active: on('gc', g.id, undefined), fn: function () { open({ kind: 'gc', id: g.id }); } })); });
+      ui.side.appendChild(category('gc', 'Group chats', rows, total, function () { showGcNew(); }, 'New group', 'Press + to start a group.'));
 
       if (isDM()) {
-        ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'NPC chats' }));
-        ui.side.appendChild(sideBtn('+ Message as NPC', 0, mode === 'npcpick', function () { showNpcPicker(); })).classList.add('new');
-        npcItems().forEach(function (it) { ui.side.appendChild(sideBtn(npcById(it.nid).name + ' → ' + nameOf(it.pid), unread['npc:' + it.nid + ':' + it.pid] || 0, on('npc', it.nid, it.pid), function () { open({ kind: 'npc', id: it.nid, pid: it.pid }); })); });
-        ui.side.appendChild(h('p', { className: 'mono red cht-h', text: 'Headmaster tools' }));
-        ui.side.appendChild(sideBtn('Contacts & NPCs', 0, mode === 'manage', function () { showManage(); }));
+        rows = []; total = 0;
+        npcItems().forEach(function (it) { var n = unread['npc:' + it.nid + ':' + it.pid] || 0, c = npcById(it.nid); total += n; rows.push(row({ icon: avatar(c, 'row'), label: c.name + ' → ' + nameOf(it.pid), tag: 'NPC', count: n, active: on('npc', it.nid, it.pid), fn: function () { open({ kind: 'npc', id: it.nid, pid: it.pid }); } })); });
+        ui.side.appendChild(category('npc', 'NPC chats', rows, total, function () { showNpcPicker(); }, 'Message as an NPC', 'Press + to speak as an NPC.'));
+        ui.side.appendChild(category('tools', 'Headmaster tools', [row({ icon: h('span', { className: 'cht-ico hash', text: '⚙', 'aria-hidden': 'true' }), label: 'Contacts & NPCs', active: mode === 'manage', fn: function () { showManage(); } })], 0));
       }
+      ui.side.appendChild(h('p', { className: 'cht-foot', text: 'Players appear by their first name. Chat logs are deleted every month.' }));
     }
     function profileEditor(m) {
       var c = { image: m.avatar || '' }, crop = G.cropper(c), nm = h('input', { value: m.name === '?' ? '' : m.name, maxLength: 30, 'aria-label': 'Display name' });
@@ -1562,26 +1908,28 @@
       return h('div', { className: 'ed cht-prof' }, [h('label', { className: 'fl' }, [h('span', { text: 'Display name' }), nm]), crop, sv, st]);
     }
 
-    /* ----- the middle: heading, group settings, log ----- */
+    /* ----- the conversation: header, group settings, messages, text box ----- */
     function setHead() {
-      var t = '', sub = '';
-      if (mode === 'pick') t = 'Who do you want to message?'; else if (mode === 'gcnew') t = 'New group chat'; else if (mode === 'npcpick') t = 'Message as an NPC'; else if (mode === 'manage') t = 'Contacts & NPCs';
-      else if (cur.kind === 'ooc') t = 'OOC'; else if (cur.kind === 'rp') t = 'RP chat';
-      else if (cur.kind === 'pm') t = nameOf(cur.id);
-      else if (cur.kind === 'gc') { var g = groupById(cur.id); t = g ? g.name : 'Group chat'; if (g && g.watch) sub = 'You are reading this group without being in it. Players cannot see that you are here.'; }
-      else if (cur.kind === 'npc') { var n = npcById(cur.id); t = isDM() ? (n ? n.name : 'NPC') + ' ↔ ' + nameOf(cur.pid) : (n ? n.name : 'NPC'); if (isDM()) sub = 'You are writing as ' + (n ? n.name : 'the NPC') + '. ' + nameOf(cur.pid) + ' sees you as the NPC.'; }
+      if (!ui.head) return;
+      var t = '', sub = '', ico = null;
+      if (mode === 'pick') t = 'New message'; else if (mode === 'gcnew') t = 'New group chat'; else if (mode === 'npcpick') t = 'Speak as an NPC'; else if (mode === 'manage') t = 'Contacts & NPCs';
+      else if (cur.kind === 'ooc') { t = 'OOC'; ico = hashIcon(); } else if (cur.kind === 'rp') { t = 'RP chat'; ico = hashIcon(); }
+      else if (cur.kind === 'pm') { t = nameOf(cur.id); ico = avatar(byId[cur.id], 'sm'); }
+      else if (cur.kind === 'gc') { var g = groupById(cur.id); t = g ? g.name : 'Group chat'; ico = groupIcon(g); if (g && g.watch) sub = 'You are reading this group without being in it. Players cannot see you here.'; }
+      else if (cur.kind === 'npc') { var n = npcById(cur.id); t = isDM() ? (n ? n.name : 'NPC') + ' ↔ ' + nameOf(cur.pid) : (n ? n.name : 'NPC'); ico = avatar(n, 'sm'); if (isDM()) sub = 'You are writing as ' + (n ? n.name : 'the NPC') + '. ' + nameOf(cur.pid) + ' sees you as the NPC.'; }
       ui.head.textContent = t; ui.sub.textContent = sub; ui.sub.hidden = !sub;
+      clear(ui.hico); if (ico && mode === 'chat') { ui.hico.appendChild(ico); ui.hico.hidden = false; } else ui.hico.hidden = true;
       ui.gbtn.hidden = !(mode === 'chat' && cur.kind === 'gc');
-      ui.in.placeholder = cur.kind === 'npc' && isDM() && npcById(cur.id) ? 'Reply as ' + npcById(cur.id).name + '…' : 'Type…';
+      ui.in.placeholder = cur.kind === 'npc' && isDM() && npcById(cur.id) ? 'Reply as ' + npcById(cur.id).name : cur.kind === 'ooc' ? 'Message #ooc' : cur.kind === 'rp' ? 'Message #rp-chat' : t ? 'Message ' + t : 'Message';
     }
-    function setCan(can) { ui.cmp.hidden = !can || mode !== 'chat'; ui.wnote.hidden = can || mode !== 'chat'; }
-    function showMode(m) { mode = m; lastKey = ''; seen = {}; pending = []; info = null; clear(ui.log); ui.gset.hidden = true; ui.cmp.hidden = true; ui.wnote.hidden = true; setHead(); drawSide(); }
+    function setCan(can) { ui.cmp.hidden = !can || mode !== 'chat'; ui.prev.hidden = ui.cmp.hidden || !ui.pend; ui.wnote.hidden = can || mode !== 'chat'; }
+    function showMode(m) { mode = m; lastKey = ''; seen = {}; pending = []; info = null; clear(ui.log); ui.gset.hidden = true; ui.cmp.hidden = true; ui.prev.hidden = true; ui.wnote.hidden = true; goConv(); setHead(); drawSide(); }
     function open(c) {
-      cur = c; mode = 'chat'; lastKey = ''; seen = {}; pending = []; info = null; clear(ui.log); clear(ui.gset); ui.gset.hidden = true;
-      delete unread[keyOf(c)]; setCan(true); setHead(); drawSide(); fetchNew(true);
+      cur = c; mode = 'chat'; lastKey = ''; seen = {}; pending = []; info = null; clear(ui.log); clear(ui.gset); ui.gset.hidden = true; ui.pend = null; showPrev(null);
+      delete unread[keyOf(c)]; goConv(); setCan(true); setHead(); drawSide(); fetchNew(true);
     }
     function fetchNew(first) {
-      if (mode !== 'chat' || !built) return;
+      if (mode !== 'chat' || !built || (isMobile() && screen === 'list')) return;
       var mine = JSON.stringify(cur);
       call('chat', body(lastKey ? { action: 'history', after: lastKey } : { action: 'history' })).then(function (r) {
         if (!r.ok) { if (first && mine === JSON.stringify(cur) && mode === 'chat') { clear(ui.log); ui.log.appendChild(note(r.j.error || 'Could not open this chat.')); setCan(false); } return; }
@@ -1591,10 +1939,10 @@
         if (j.gc) { info = info || {}; var was = JSON.stringify(groupById(j.gc.id)); info.gc = j.gc; var i = groups.map(function (g) { return g.id; }).indexOf(j.gc.id); if (i >= 0) groups[i] = j.gc; else groups.push(j.gc); setHead(); if (was !== JSON.stringify(j.gc) && !ui.gset.hidden && !ui.gset.contains(document.activeElement)) drawGset(); }
         if (j.npc) { info = info || {}; info.npc = j.npc; setHead(); }
         setCan(j.canSend !== false);
-        var msgs = j.msgs || []; if (!msgs.length) { if (first && !ui.log.children.length) ui.log.appendChild(h('p', { className: 'mono hb-note cht-empty', text: j.canSend === false ? 'Nothing written yet.' : 'No messages yet. Say something.' })); }
+        var msgs = j.msgs || []; if (!msgs.length) { if (first && !ui.log.children.length) ui.log.appendChild(emptyState(j.canSend === false)); }
         else {
           var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
-          var near = ui.log.scrollHeight - ui.log.scrollTop - ui.log.clientHeight < 80 || first;
+          var near = ui.log.scrollHeight - ui.log.scrollTop - ui.log.clientHeight < 120 || first;
           msgs.forEach(function (m) {
             lastKey = m.k;
             if (seen[m.k]) return;
@@ -1602,12 +1950,16 @@
               var pi = -1; pending.forEach(function (p, n) { if (pi < 0 && p.text === (m.text || '') && !!p.image === !!m.img) pi = n; });
               if (pi >= 0) { pending[pi].el.remove(); pending.splice(pi, 1); }
             }
-            seen[m.k] = 1; ui.log.appendChild(bubble(m));
+            seen[m.k] = 1; msgEl({ from: m.from, p: sender(m.from), text: m.text, img: m.img ? FN + 'chat?mimg=' + encodeURIComponent(m.img) : '', ts: m.ts || Date.now() });
           });
           if (near) ui.log.scrollTop = ui.log.scrollHeight;
         }
         if (first) setTimeout(pollPing, 700); // opening the conversation cleared its unread count on the server
       });
+    }
+    function emptyState(readOnly) {
+      var t = ui.head.textContent;
+      return h('div', { className: 'cht-empty' }, [h('b', { text: cur.kind === 'ooc' || cur.kind === 'rp' ? 'Welcome to #' + (cur.kind === 'ooc' ? 'ooc' : 'rp-chat') + '!' : 'This is the start of ' + t }), h('p', { text: readOnly ? 'Nothing has been written yet.' : 'No messages yet. Say something.' })]);
     }
     function isMine(m) { return m.from === me || (cur.kind === 'npc' && isDM() && String(m.from).indexOf('npc:') === 0); }
     // Who a message looks like it is from: a nickname inside a group, the NPC when the headmaster speaks as one.
@@ -1617,22 +1969,36 @@
       if (cur.kind === 'gc' && info && info.gc && info.gc.nick && info.gc.nick[from]) return { name: info.gc.nick[from], avatar: p.avatar };
       return p;
     }
-    function bubble(m) {
-      var mine = isMine(m), p = sender(m.from);
-      var txt = h('div', { className: 'cht-txt' }, [mine ? null : h('small', { className: 'mono', text: p.name }), m.text ? h('p', { text: m.text }) : null, m.img ? h('img', { className: 'cht-img', src: FN + 'chat?mimg=' + encodeURIComponent(m.img), alt: 'Shared image', loading: 'lazy' }) : null]);
-      return h('div', { className: 'cht-msg' + (mine ? ' mine' : '') }, mine ? [txt, avatar(p, 'sm')] : [avatar(p, 'sm'), txt]);
+    // ---- one message, laid out like Discord: avatar, name and time, then the text. Messages from the same person close together share one header. ----
+    function dayKey(ts) { var d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+    function dayLabel(ts) { if (dayKey(ts) === dayKey(Date.now())) return 'Today'; if (dayKey(ts) === dayKey(Date.now() - 864e5)) return 'Yesterday'; return new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' }); }
+    function clock(ts) { return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+    function msgEl(o) {
+      var anchor = ui.log.querySelector('.cht-msg.pending'), prev = anchor ? anchor.previousElementSibling : ui.log.lastElementChild; // a message still being sent always stays last
+      var dk = dayKey(o.ts), frag = document.createDocumentFragment(), newDay = !prev || prev.getAttribute('data-day') !== dk;
+      if (newDay) frag.appendChild(h('div', { className: 'cht-day', 'data-day': dk, role: 'separator' }, [h('span', { text: dayLabel(o.ts) })]));
+      var grouped = !newDay && prev.classList.contains('cht-msg') && prev.getAttribute('data-from') === String(o.from) && Math.abs(o.ts - Number(prev.getAttribute('data-ts'))) < 300000;
+      var name = h('span', { className: 'cht-name', text: o.p.name }); name.style.color = tint(o.from);
+      var content = h('div', { className: 'cht-cont' }, [
+        grouped ? null : h('div', { className: 'cht-meta' }, [name, String(o.from).indexOf('npc:') === 0 ? h('span', { className: 'cht-tag mono', text: 'NPC' }) : null, h('time', { className: 'cht-time', text: clock(o.ts) })]),
+        o.text ? h('p', { className: 'cht-text', text: o.text }) : null,
+        o.img ? h('img', { className: 'cht-img', src: o.img, alt: 'Shared image', loading: 'lazy' }) : null,
+        o.state || null
+      ]);
+      var el = h('div', { className: 'cht-msg' + (grouped ? ' grouped' : '') + (o.pending ? ' pending' : ''), 'data-from': String(o.from), 'data-ts': String(o.ts), 'data-day': dk }, [grouped ? h('span', { className: 'cht-gtime', text: clock(o.ts), 'aria-hidden': 'true' }) : avatar(o.p, 'msg'), content]);
+      frag.appendChild(el); if (anchor) ui.log.insertBefore(frag, anchor); else ui.log.appendChild(frag);
+      return el;
     }
     // The message shows up at once, a little faded with "Sending…", and settles when the server confirms it.
     function send() {
       if (mode !== 'chat' || ui.cmp.hidden) return;
       var text = ui.in.value.trim(), image = ui.pend; if (!text && !image) return;
-      ui.in.value = ''; ui.pend = null; ui.imgBtn.textContent = '+ image'; ui.err.textContent = '';
-      var p = cur.kind === 'npc' && isDM() ? (npcById(cur.id) || { name: '?' }) : sender(me), state = h('small', { className: 'mono cht-state', text: 'Sending…' }), at = JSON.stringify(cur);
-      var txt = h('div', { className: 'cht-txt' }, [text ? h('p', { text: text }) : null, image ? h('img', { className: 'cht-img', src: image, alt: 'Image being sent' }) : null, state]);
-      var el = h('div', { className: 'cht-msg mine pending' }, [txt, avatar(p, 'sm')]);
-      var rec = { text: text, image: image, el: el }; pending.push(rec);
+      ui.in.value = ''; ui.pend = null; showPrev(null); ui.err.textContent = '';
+      var npcMode = cur.kind === 'npc' && isDM(), p = npcMode ? (npcById(cur.id) || { name: '?' }) : sender(me), state = h('small', { className: 'cht-state', text: 'Sending…' });
       var empty = ui.log.querySelector('.cht-empty'); if (empty) empty.remove();
-      ui.log.appendChild(el); ui.log.scrollTop = ui.log.scrollHeight; ui.in.focus();
+      var el = msgEl({ from: npcMode ? 'npc:' + cur.id : me, p: p, text: text, img: image, ts: Date.now(), pending: true, state: state });
+      var rec = { text: text, image: image, el: el }; pending.push(rec);
+      ui.log.scrollTop = ui.log.scrollHeight; ui.in.focus();
       var reqBody = body({ action: 'send', text: text, image: image || undefined });
       function go() {
         el.classList.remove('failed'); state.textContent = 'Sending…';
@@ -1755,7 +2121,7 @@
       };
       return h('div', { className: 'cht-npc' }, [h('div', { className: 'cht-npc-top' }, [avatar(n), h('b', { text: n.name }), h('label', { className: 'cht-chk' }, [on, h('span', { text: 'Contactable' })]), save, msg]), opts]);
     }
-    mod = { enter: enter, leave: stop, reset: reset, wake: function () { if (built) fetchNew(); } };
+    mod = { enter: enter, leave: function () { stop(); lockAdm(false); }, reset: reset, wake: function () { if (built) fetchNew(); } };
     return mod;
   })();
 

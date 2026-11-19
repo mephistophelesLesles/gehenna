@@ -51,13 +51,38 @@ const LINES = [
   'Take your time. Time is the one thing down here I cannot sell you.',
   'Careful, honey. Everything has a price, and I always remember yours.',
 ];
+// Extra things Mammon says. The headmaster can rewrite all of these in "Edit Mammon".
+const SAY_DEFAULT = {
+  buy: [
+    'Pleasure doing business, darling~ no refunds, of course.',
+    'Mmm, that karma sounds lovely in my pocket. Enjoy your purchase!',
+    'Sold! Come back when you are feeling a little more… generous.',
+    'A wise soul spends. A wiser soul spends it here.',
+  ],
+  debt: [
+    'Paying your debts? How very responsible. I am almost proud.',
+    'Every coin counts, sweetie. Slowly, but it counts.',
+  ],
+  pull: [
+    'Ooh, feeling lucky? Let us see what the machine thinks of you~',
+    'Spin, spin, spin. Karma goes in, surprises come out.',
+    'Hold your breath, honey. The capsule is deciding.',
+  ],
+  common: ['Scraps. The machine has a sense of humor, does it not?', 'Oh dear. Better luck next time, darling.'],
+  uncommon: ['Adequate. Not thrilling, but adequate.', 'Hmm, a modest little prize. Pull again?'],
+  r: ['Ooh, a rare one! Not bad at all~', 'Look at you, getting somewhere!'],
+  sr: ['A super rare?! Fine, fine… I am a little impressed.', 'Well drawn, darling. I will admit it.'],
+  ssr: ['…That is the grand prize. Did you cheat? You cheated. Hm. You did not. Congratulations.', 'No. NO. That was supposed to be MINE. …Fine. Congratulations, you lucky soul.'],
+};
+const SAY_KEYS = Object.keys(SAY_DEFAULT);
+const sayOf = (m) => { const o = {}; SAY_KEYS.forEach((k) => { const l = (m && m.say && Array.isArray(m.say[k]) ? m.say[k] : []).map((x) => S(x, 200).trim()).filter(Boolean).slice(0, 30); o[k] = l.length ? l : SAY_DEFAULT[k].slice(); }); return o; };
 const DEFAULT = () => ({
-  mammon: { name: 'Mammon', image: '', lines: LINES.slice() },
+  mammon: { name: 'Mammon', image: '', lines: LINES.slice(), say: sayOf({}) },
   cats: ['Soul Marketplace', 'Weapon Marketplace', 'Others'].map((n) => ({ id: crypto.randomUUID(), name: n, items: [] })),
   gacha: { pool: [] },
   updatedAt: new Date().toISOString(),
 });
-async function getCfg(store) { const c = (await store.get('config', { type: 'json' })) || DEFAULT(); if (!c.gacha || !Array.isArray(c.gacha.pool)) c.gacha = { pool: [] }; return c; }
+async function getCfg(store) { const c = (await store.get('config', { type: 'json' })) || DEFAULT(); if (!c.gacha || !Array.isArray(c.gacha.pool)) c.gacha = { pool: [] }; c.mammon.say = sayOf(c.mammon); return c; }
 
 function cleanCfg(inc, old, worldIds) {
   let image = old.mammon.image || '';
@@ -65,7 +90,7 @@ function cleanCfg(inc, old, worldIds) {
   if (m.image === '') image = ''; else if (typeof m.image === 'string' && IMG.test(m.image) && m.image.length < 250000) image = m.image;
   const lines = (Array.isArray(m.lines) ? m.lines : []).map((x) => S(x, 200).trim()).filter(Boolean).slice(0, 30);
   return {
-    mammon: { name: S(m.name, 40).trim() || 'Mammon', image, lines: lines.length ? lines : LINES.slice() },
+    mammon: { name: S(m.name, 40).trim() || 'Mammon', image, lines: lines.length ? lines : LINES.slice(), say: sayOf(m.say ? m : { say: (old.mammon || {}).say }) },
     cats: (Array.isArray(inc.cats) ? inc.cats : []).slice(0, 12).map((c) => ({
       id: ID.test(String(c.id || '')) ? String(c.id) : crypto.randomUUID(),
       name: S(c.name, 40).trim() || 'Category',
@@ -118,7 +143,7 @@ exports.handler = async (event) => {
       const stocked = (cfg.gacha.pool || []).some((g) => byId[g.itemId]);
       return reply(200, Object.assign(view(c), {
         gacha: { ready: stocked, cost1: COST[1], cost10: COST[10] },
-        mammon: { name: cfg.mammon.name, image: cfg.mammon.image ? '/.netlify/functions/market?img=1&v=' + Date.parse(cfg.updatedAt) : '', lines: cfg.mammon.lines },
+        mammon: { name: cfg.mammon.name, image: cfg.mammon.image ? '/.netlify/functions/market?img=1&v=' + Date.parse(cfg.updatedAt) : '', lines: cfg.mammon.lines, say: cfg.mammon.say },
         cats: cfg.cats.map((k) => ({ id: k.id, name: k.name, items: k.items.filter((i) => byId[i.itemId]).map((i) => { const e = byId[i.itemId]; return { itemId: e.id, name: e.name, desc: e.desc, image: e.image ? '/.netlify/functions/world?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0) : '', price: i.price, sale: i.sale || 0 }; }) })),
       }));
     }

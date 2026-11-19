@@ -32,12 +32,15 @@ async function loadAll(store) {
 }
 
 // Only known fields are kept, with limits.
-function clean(e, old) {
-  const type = TYPES.includes(e.type) ? e.type : (old ? old.type : 'player');
+function clean(e, old, secs) {
+  // A custom category (tab) decides the type, so the entry always follows that category's template.
+  const sec = secs && secs.find((x) => x.id === String(e.section || ''));
+  const type = sec ? sec.base : (TYPES.includes(e.type) ? e.type : (old ? old.type : 'player'));
   const img = typeof e.image === 'string' && IMG.test(e.image) && e.image.length < 250000 ? e.image : '';
   return {
     id: old ? old.id : crypto.randomUUID(),
     type,
+    section: sec ? sec.id : '',
     name: S(e.name, 100).trim() || 'Unnamed',
     image: img,
     listed: e.listed === false ? false : true,
@@ -88,7 +91,7 @@ function canOpen(e, viewerId) {
 // What a player is allowed to receive. Public images are served by URL; granted ones go inline.
 function view(e, viewerId, detail) {
   const o = canOpen(e, viewerId);
-  const out = { id: e.id, type: e.type, name: e.name, category: e.category || '', undisclosed: !o.open, image: '' };
+  const out = { id: e.id, type: e.type, section: e.section || '', name: e.name, category: e.category || '', undisclosed: !o.open, image: '' };
   // The picture is public unless the headmaster hid the appearance too. Everything else stays sealed.
   if (e.image && (o.open || !e.hideImage)) out.image = o.granted ? e.image : '/.netlify/functions/registry?img=' + e.id + '&v=' + Date.parse(e.updatedAt || 0);
   if (!detail) return out;
@@ -100,17 +103,47 @@ function view(e, viewerId, detail) {
   return out;
 }
 
+// Custom categories: extra tabs next to Players / NPCs / Shadows. Each one works like one of the three built-in kinds
+// (its "base"), which decides the fields the entry has. Kept in their own store so they never mix with the entries.
+async function loadSections(sstore) {
+  const l = await sstore.get('list', { type: 'json' });
+  return (Array.isArray(l) ? l : []).filter((x) => x && ID.test(String(x.id || '')) && TYPES.includes(x.base)).map((x) => ({ id: String(x.id), name: S(x.name, 40).trim() || 'Category', base: x.base }));
+}
+
 // Headmaster actions. Returns [status, body], or null when the action is not a registry action.
-async function registryAdmin(b, store) {
-  if (!['reglist', 'regsave', 'regdelete'].includes(b.action)) return null;
+async function registryAdmin(b, store, sstore) {
+  if (!['reglist', 'regsave', 'regdelete', 'regsecsave', 'regsecdelete'].includes(b.action)) return null;
   if (b.action === 'reglist') {
     const all = await loadAll(store);
-    return [200, { entries: all.map((e) => Object.assign({}, e, { quirks: quirksOf(e) })).sort((x, y) => x.name.localeCompare(y.name)), template: TEMPLATE }];
+    return [200, { entries: all.map((e) => Object.assign({}, e, { quirks: quirksOf(e) })).sort((x, y) => x.name.localeCompare(y.name)), template: TEMPLATE, sections: await loadSections(sstore) }];
+  }
+  if (b.action === 'regsecsave') {
+    // Add a category, or rename / re-base an existing one. Entries already inside follow the new base.
+    const list = await loadSections(sstore), name = S(b.name, 40).trim(), base = TYPES.includes(b.base) ? b.base : 'npc';
+    if (!name) return [400, { error: 'Give the category a name.' }];
+    if (['players', 'npcs', 'shadows', 'monsters'].includes(name.toLowerCase())) return [400, { error: 'That name is already a built-in tab.' }];
+    if (list.some((x) => x.name.toLowerCase() === name.toLowerCase() && x.id !== b.id)) return [400, { error: 'A category with that name already exists.' }];
+    const i = list.findIndex((x) => x.id === String(b.id || ''));
+    let sec;
+    if (i >= 0) { sec = { id: list[i].id, name, base }; list[i] = sec; }
+    else { if (list.length >= 12) return [400, { error: 'You can have at most 12 categories.' }]; sec = { id: crypto.randomUUID(), name, base }; list.push(sec); }
+    await sstore.setJSON('list', list);
+    if (i >= 0) { const all = await loadAll(store); await Promise.all(all.filter((e) => e.section === sec.id && e.type !== base).map((e) => { e.type = base; if (base !== 'npc') { e.undisclosed = false; e.hideImage = false; } return store.setJSON(e.id, e); })); }
+    return [200, { sections: list, section: sec }];
+  }
+  if (b.action === 'regsecdelete') {
+    // The entries are not deleted: they move back to their built-in tab.
+    const list = await loadSections(sstore), id = String(b.id || '');
+    if (!list.some((x) => x.id === id)) return [404, { error: 'That category does not exist.' }];
+    await sstore.setJSON('list', list.filter((x) => x.id !== id));
+    const all = await loadAll(store);
+    await Promise.all(all.filter((e) => e.section === id).map((e) => { e.section = ''; return store.setJSON(e.id, e); }));
+    return [200, { sections: list.filter((x) => x.id !== id) }];
   }
   if (b.action === 'regsave') {
     const inc = b.entry || {};
     const old = ID.test(String(inc.id || '')) ? await store.get(inc.id, { type: 'json' }) : null;
-    const next = clean(inc, old);
+    const next = clean(inc, old, await loadSections(sstore));
     await store.setJSON(next.id, next);
     return [200, { entry: next }];
   }
@@ -119,4 +152,4 @@ async function registryAdmin(b, store) {
   return [200, { ok: true }];
 }
 
-module.exports = { loadAll, view, canOpen, registryAdmin, TEMPLATE, TYPES };
+module.exports = { loadAll, loadSections, view, canOpen, registryAdmin, TEMPLATE, TYPES };
