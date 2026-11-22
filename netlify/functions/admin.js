@@ -26,7 +26,7 @@ const newKey = () => 'GEH-' + Array.from(crypto.randomBytes(12), x => ALPH[x % 3
 const hash = k => crypto.createHash('sha256').update(String(k).trim().toUpperCase()).digest('hex');
 const S = (v, n) => String(v == null ? '' : v).slice(0, n || 4000);
 const N = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
-const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+const IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/;
 
 // At most 3 quirks, one per line.
 const quirks = v => String(v || '').split('\n').map(x => x.trim().slice(0, 100)).filter(Boolean).slice(0, 3).join('\n');

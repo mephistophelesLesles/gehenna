@@ -1,7 +1,7 @@
 // World registry: Locations and Items. Everyone can read them; the headmaster edits them.
 // The Marketplace can only sell items that exist here.
 const crypto = require('crypto');
-const { S, N, IMG, ID } = require('./auth');
+const { S, N, IMG, imgOk, ID } = require('./auth');
 const { cleanFx, cleanDice, diceName, cleanStatUp, cleanCleanse } = require('./fx');
 
 const KINDS = ['location', 'item'];
@@ -15,7 +15,7 @@ function clean(e, old) {
   const kind = KINDS.includes(e.kind) ? e.kind : (old ? old.kind : 'item');
   let image = old ? old.image || '' : '';
   if (e.image === '') image = '';
-  else if (typeof e.image === 'string' && IMG.test(e.image) && e.image.length < 250000) image = e.image;
+  else if (imgOk(e.image, 250000)) image = e.image;
   return {
     id: old ? old.id : crypto.randomUUID(), kind,
     name: S(e.name, 100).trim() || 'Unnamed', image,

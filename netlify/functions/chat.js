@@ -12,7 +12,7 @@
 //  Chat logs are deleted at the start of every month.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
-const { reply, S, IMG, ID, needUser, parseBody, imageReply } = require('./lib/auth');
+const { reply, S, IMG, imgOk, ID, needUser, parseBody, imageReply } = require('./lib/auth');
 
 const ymOf = (d) => (d || new Date()).toISOString().slice(0, 7);
 // Players appear by their first name only. The headmaster's display name is whatever she typed.
@@ -180,7 +180,7 @@ exports.handler = async (event) => {
       if (!u.admin) return reply(403, { error: 'Only the headmaster can edit her profile.' });
       const p = await profile(store);
       p.name = display(b.name === undefined ? p.name : b.name);
-      if (b.image === '') p.image = ''; else if (typeof b.image === 'string' && IMG.test(b.image) && b.image.length < 200000) p.image = b.image;
+      if (b.image === '') p.image = ''; else if (imgOk(b.image, 200000)) p.image = b.image;
       p.at = Date.now(); await store.setJSON('hm-profile', p);
       return reply(200, { ok: true });
     }
@@ -274,7 +274,7 @@ exports.handler = async (event) => {
     }
     if (b.action === 'send') {
       if (!rv.canSend) return reply(403, { error: 'You can only read this chat.' });
-      const text = S(b.text, 500).trim(), image = typeof b.image === 'string' && IMG.test(b.image) && b.image.length < 180000 ? b.image : '';
+      const text = S(b.text, 500).trim(), image = imgOk(b.image, 180000) ? b.image : '';
       if (!text && !image) return reply(400, { error: 'Write something first.' });
       const ym = ymOf(), id = crypto.randomBytes(8).toString('hex'), ts = Date.now(), k = prefix + ym + '/' + pad(ts) + '-' + id;
       const ops = [monthlyCleanup(store), store.setJSON(k, { from: rv.from || u.id, text, img: image ? ym + '_' + id : '', ts })];

@@ -2,6 +2,7 @@
 // Chapters live in one Netlify Blobs entry ('chapters' in the 'gehenna-story' store). Until the headmaster
 // saves something, the starter chapters below are served.
 const crypto = require('crypto');
+const { imgOk } = require('./auth');
 
 const PROLOGUE = `The first thing you notice is the ash on your mouth, and the second one is that you're no longer breathing.
 
@@ -21,7 +22,7 @@ const DEFAULTS = [
 ];
 
 const ID = /^[a-z0-9-]{1,40}$/;
-const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+const IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/;
 const S = (v, n) => String(v == null ? '' : v).slice(0, n);
 
 async function loadAll(store) {
@@ -34,7 +35,7 @@ const meta = (c) => ({ id: c.id, title: c.title, locked: !!c.locked });
 // Only known fields are kept, with limits. A chapter is locked unless it is explicitly opened.
 function clean(c, old) {
   const imgs = (Array.isArray(c.images) ? c.images : []).slice(0, 6)
-    .filter((i) => i && typeof i.src === 'string' && i.src.length < 500000 && IMG.test(i.src))
+    .filter((i) => i && imgOk(i.src, 500000))
     .map((i) => ({ src: i.src, caption: S(i.caption, 200) }));
   return {
     id: old ? old.id : crypto.randomUUID(),

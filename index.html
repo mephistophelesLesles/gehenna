@@ -464,6 +464,7 @@
   /* Registry editor (headmaster) */
   .cropper { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
   .crop-cv { width: 12rem; height: 12rem; border: 1px solid var(--red); background: #000; flex: none; }
+  .crop-gif { object-fit: cover; } .crop-gif[hidden] { display: none; }
   .cropper .ctl { display: grid; gap: 0.5rem; flex: 1 1 14rem; min-width: 0; }
   .ed input[type="range"] { padding: 0; }
   .chk { display: flex; align-items: center; gap: 0.55rem; } .ed .chk input { width: auto; } .chk span { font-size: 0.95rem; }
@@ -1357,6 +1358,10 @@
     if (!/^image\//.test(file.type)) { msg.textContent = 'That is not an image.'; return; }
     var r = new FileReader();
     r.onload = function () {
+      if (file.type === 'image/gif') { // a GIF stays animated, so it is not redrawn on a canvas
+        if (r.result.length < 580000) { set(r.result); msg.textContent = 'GIF added (it stays animated). It is sent with your sheet.'; } else msg.textContent = 'That GIF is too big. Use one under about 430 KB.';
+        return;
+      }
       var im = new Image();
       im.onload = function () {
         var m = 640, k = Math.min(1, m / Math.max(im.width, im.height)), c = document.createElement('canvas');
@@ -1832,7 +1837,13 @@
     do { c.getRandomValues(a); } while (a[0] >= max);
     return 1 + (a[0] % d);
   }
-  function dice(n, d) { var r = []; for (var i = 0; i < n; i++) r.push(rnd(d)); return r; }
+  // The d20 is weighted a little so the long run feels kinder than a flat d20: the middle (10-15) comes up a bit more often, 2-5 and 17-19 a bit less,
+  // and a natural 1 or 20 is rare. The numbers are "how many tickets each face gets" (index 0 is a 1, index 19 is a 20); any numbers work, they are scaled
+  // automatically. To make the d20 perfectly fair again, set every number to 1. Other dice (d4, d6, d8, d10, d12, d100) are always fair.
+  var D20_WEIGHTS = [20, 45, 45, 45, 45, 52, 52, 52, 52, 62, 62, 62, 62, 62, 62, 52, 45, 45, 45, 20];
+  var D20_TOTAL = D20_WEIGHTS.reduce(function (a, b) { return a + b; }, 0);
+  function rnd20() { var r = rnd(D20_TOTAL) - 1, i = 0; while (i < 19 && r >= D20_WEIGHTS[i]) { r -= D20_WEIGHTS[i]; i++; } return i + 1; }
+  function dice(n, d) { var r = []; for (var i = 0; i < n; i++) r.push(d === 20 ? rnd20() : rnd(d)); return r; }
   function sgn(m) { return m ? (m > 0 ? ' + ' : ' - ') + Math.abs(m) : ''; }
   function plain(n, d, m) { var r = dice(n, d), t = m; r.forEach(function (v) { t += v; }); return { vals: r, d: d, cls: '', txt: '[' + r.join(', ') + ']' + sgn(m) + ' = ' + t }; }
   var stage = null, stT = null;
@@ -1997,6 +2008,7 @@
     var r = new FileReader();
     r.onerror = function () { cb(null); };
     r.onload = function () {
+      if (file.type === 'image/gif') { cb(r.result.length < 550000 ? r.result : null); return; } // a GIF is kept as it is so it stays animated
       var im = new Image();
       im.onerror = function () { cb(null); };
       im.onload = function () {
@@ -2102,6 +2114,7 @@
   // Square picture: the image is cropped (never squashed) to 512 x 512 and saved as a JPEG.
   function cropper(c) {
     var wrap = h('div', { className: 'cropper' }), cv = h('canvas', { className: 'crop-cv' }), im = null, z = 1, px = 0, py = 0, msg = h('p', { className: 'mono' });
+    var gi = h('img', { className: 'crop-cv crop-gif', alt: 'Animated picture', hidden: true }), GIF_LIMIT = 580000;
     cv.width = 512; cv.height = 512;
     function paint() {
       var x = cv.getContext('2d'); x.fillStyle = '#0d0b0c'; x.fillRect(0, 0, 512, 512);
@@ -2122,11 +2135,18 @@
       return { box: h('label', { className: 'fl' }, [h('span', { text: label }), i]), input: i };
     }
     var zs = sl('Zoom', 1, 3, 1, function (v) { z = v; }), xs = sl('Move left / right', -1, 1, 0, function (v) { px = v; }), ys = sl('Move up / down', -1, 1, 0, function (v) { py = v; });
+    function gifMode(on) { cv.hidden = on; gi.hidden = !on; [zs, xs, ys].forEach(function (s) { s.input.disabled = on; }); }
+    function useGif(src, fresh) {
+      var kb = Math.round(src.length * 0.75 / 1024);
+      if (src.length >= GIF_LIMIT) { msg.textContent = 'That GIF is ' + kb + ' KB, which is too big. Use one under about 430 KB (you can shrink it for free at ezgif.com).'; return; }
+      im = null; gi.src = src; gifMode(true); c.image = src;
+      msg.textContent = 'GIF kept as it is (' + kb + ' KB), so it stays animated. It is shown as a centred square and cannot be cropped. Choose a normal picture to crop.';
+    }
     function use(src, fresh) {
       var i = new Image();
       i.onerror = function () { msg.textContent = 'Could not read that image.'; };
       i.onload = function () {
-        im = i; z = 1; px = 0; py = 0; zs.input.value = 1; xs.input.value = 0; ys.input.value = 0; paint();
+        gifMode(false); im = i; z = 1; px = 0; py = 0; zs.input.value = 1; xs.input.value = 0; ys.input.value = 0; paint();
         var m = Math.min(i.width, i.height);
         msg.textContent = fresh && m < 512 ? 'That image is ' + i.width + '×' + i.height + ', smaller than 512×512, so it gets enlarged and looks soft. A bigger one is better.' : 'Saved as a 512×512 square. To re-crop, choose the original file again.';
         if (fresh || i.width !== 512 || i.height !== 512) commit();
@@ -2137,13 +2157,21 @@
     f.onchange = function () {
       var file = f.files && f.files[0]; if (!file) return;
       if (!/^image\//.test(file.type)) { msg.textContent = 'That is not an image.'; return; }
-      var r = new FileReader(); r.onload = function () { use(r.result, true); }; r.readAsDataURL(file);
+      var r = new FileReader(); r.onload = function () { if (file.type === 'image/gif') useGif(r.result, true); else use(r.result, true); }; r.readAsDataURL(file);
     };
     var rm = h('button', { type: 'button', className: 'link', text: 'Remove image' });
-    rm.onclick = function () { c.image = ''; im = null; f.value = ''; msg.textContent = ''; paint(); };
-    wrap.appendChild(cv);
-    wrap.appendChild(h('div', { className: 'ctl' }, [h('label', { className: 'fl' }, [h('span', { text: 'Picture (cropped to a square, 512 × 512)' }), f]), zs.box, xs.box, ys.box, rm, msg]));
-    paint(); if (c.image) use(c.image, false);
+    rm.onclick = function () { c.image = ''; im = null; f.value = ''; msg.textContent = ''; gifMode(false); paint(); };
+    wrap.appendChild(cv); wrap.appendChild(gi);
+    wrap.appendChild(h('div', { className: 'ctl' }, [h('label', { className: 'fl' }, [h('span', { text: 'Picture (cropped to a square, 512 × 512; a GIF stays animated and is not cropped)' }), f]), zs.box, xs.box, ys.box, rm, msg]));
+    // A picture that is already saved: a GIF must stay a GIF, so find out what it is before the cropper touches it (a canvas would flatten it to one frame).
+    function existing() {
+      var s0 = c.image;
+      function asGif() { gi.src = s0; gifMode(true); msg.textContent = 'Animated GIF, kept as it is. Choose a new picture to replace it.'; }
+      if (/^data:image\/gif/.test(s0)) { asGif(); return; }
+      if (/^data:/.test(s0)) { use(s0, false); return; }
+      fetch(s0).then(function (r) { return r.blob(); }).then(function (bl) { if (c.image !== s0) return; if (bl.type === 'image/gif') asGif(); else use(s0, false); }).catch(function () { if (c.image === s0) use(s0, false); });
+    }
+    paint(); if (c.image) existing();
     return wrap;
   }
   function regEditor(src) {
@@ -2413,7 +2441,7 @@
     reloadChars: function () { return api({ action: 'chars' }).then(function (r) { if (r.ok && r.j.chars) { chars = r.j.chars; pick(); } }); },
     sheetInto: function (c, el) { profile(c, el, true); },
     onSync: null, render: function () { render(); }, setCur: function (id) { cur = id; }, worldList: [], onMode: null,
-    dice: { dice: dice, plain: plain, sgn: sgn, tumble: tumble, modOf: modOf } };
+    dice: { dice: dice, plain: plain, sgn: sgn, tumble: tumble, modOf: modOf, d20: function () { return { weights: D20_WEIGHTS.slice(), total: D20_TOTAL }; } } };
 })();
 </script>
 <script src="hub.js"></script>

@@ -3,7 +3,7 @@
 // Only items that exist in the World registry can be sold.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
-const { settle, reply, S, N, IMG, ID, isAdmin, who, needUser, karmaOf, parseBody, imageReply } = require('./lib/auth');
+const { settle, reply, S, N, IMG, imgOk, ID, isAdmin, who, needUser, karmaOf, parseBody, imageReply } = require('./lib/auth');
 const { loadAll } = require('./lib/world');
 const { addBuffs, label: fxLabel, rollDice, diceName, ST, maxHp, curHp, modFromScore, cures } = require('./lib/fx');
 const { loadStatuses } = require('./lib/status');
@@ -87,7 +87,7 @@ async function getCfg(store) { const c = (await store.get('config', { type: 'jso
 function cleanCfg(inc, old, worldIds) {
   let image = old.mammon.image || '';
   const m = inc.mammon || {};
-  if (m.image === '') image = ''; else if (typeof m.image === 'string' && IMG.test(m.image) && m.image.length < 250000) image = m.image;
+  if (m.image === '') image = ''; else if (imgOk(m.image, 250000)) image = m.image;
   const lines = (Array.isArray(m.lines) ? m.lines : []).map((x) => S(x, 200).trim()).filter(Boolean).slice(0, 30);
   return {
     mammon: { name: S(m.name, 40).trim() || 'Mammon', image, lines: lines.length ? lines : LINES.slice(), say: sayOf(m.say ? m : { say: (old.mammon || {}).say }) },

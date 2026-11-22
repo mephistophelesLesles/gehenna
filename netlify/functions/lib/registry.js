@@ -1,6 +1,7 @@
 // Registry helpers shared by the public reader (registry.js) and the headmaster admin (admin.js).
 // Players, NPCs and Monsters/Shadows each live in their own Netlify Blobs entry ('gehenna-registry' store).
 const crypto = require('crypto');
+const { imgOk } = require('./auth');
 
 const TYPES = ['player', 'npc', 'shadow'];
 const STATS = ['STR', 'WIS', 'DEX', 'INT', 'CHA', 'CON'];
@@ -18,7 +19,7 @@ const TEMPLATE = {
 const GATED = ['hp', 'armor', 'speed', 'initiative', 'stats', 'prof', 'saves', 'immunities', 'resistances', 'weaknesses', 'attacks'];
 
 const ID = /^[a-f0-9-]{8,40}$/i;
-const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+const IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/;
 // Up to 3 quirks. Older entries stored one text; split it so nothing is lost.
 const S = (v, n) => String(v == null ? '' : v).slice(0, n == null ? 4000 : n);
 const N = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
@@ -36,7 +37,7 @@ function clean(e, old, secs) {
   // A custom category (tab) decides the type, so the entry always follows that category's template.
   const sec = secs && secs.find((x) => x.id === String(e.section || ''));
   const type = sec ? sec.base : (TYPES.includes(e.type) ? e.type : (old ? old.type : 'player'));
-  const img = typeof e.image === 'string' && IMG.test(e.image) && e.image.length < 250000 ? e.image : '';
+  const img = imgOk(e.image, 250000) ? e.image : '';
   return {
     id: old ? old.id : crypto.randomUUID(),
     type,

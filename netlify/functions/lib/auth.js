@@ -10,7 +10,10 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Mephisto').trim().toLowerCase()
 const reply = (status, obj) => ({ statusCode: status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(obj) });
 const S = (v, n) => String(v == null ? '' : v).slice(0, n == null ? 4000 : n);
 const N = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
-const IMG = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+const IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/;
+// Animated GIFs cannot be re-compressed in the browser, so a GIF may be a bit larger than a normal picture (about 450 KB).
+const GIF_MAX = 600000;
+const imgOk = (s, cap) => typeof s === 'string' && IMG.test(s) && s.length < (s.slice(0, 14) === 'data:image/gif' ? Math.max(cap, GIF_MAX) : cap);
 const ID = /^[a-zA-Z0-9-]{1,60}$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,4 +49,4 @@ function imageReply(dataUrl, maxAge) {
   return { statusCode: 200, isBase64Encoded: true, headers: { 'Content-Type': m[1], 'Cache-Control': 'public, max-age=' + (maxAge || 86400) }, body: m[2] };
 }
 
-module.exports = { settle, reply, S, N, IMG, ID, sleep, isAdmin, who, needUser, karmaOf, parseBody, imageReply, hash };
+module.exports = { settle, reply, S, N, IMG, imgOk, GIF_MAX, ID, sleep, isAdmin, who, needUser, karmaOf, parseBody, imageReply, hash };

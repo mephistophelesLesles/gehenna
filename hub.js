@@ -23,8 +23,14 @@
   function clear(n) { n.textContent = ''; return n; }
   function note(text, cls) { return h('p', { className: cls || 'mono hb-note', text: text }); }
   // Any picture file -> a JPEG that is at most maxSide pixels wide or tall and under maxLen characters.
-  function shrink(file, maxSide, maxLen, cb) {
+  // Pictures are redrawn smaller as JPEGs. An animated GIF can't be: a canvas keeps only its first frame. So when gifMax is given, a GIF is kept exactly as it is
+  // if it fits (cb gets it), otherwise cb gets (null, 'gif') so the caller can say the GIF is too big.
+  function shrink(file, maxSide, maxLen, cb, gifMax) {
     var fr = new FileReader();
+    if (gifMax && file.type === 'image/gif') {
+      fr.onload = function () { if (fr.result.length < gifMax) cb(fr.result); else cb(null, 'gif'); };
+      fr.onerror = function () { cb(null); }; fr.readAsDataURL(file); return;
+    }
     fr.onload = function () {
       var im = new Image();
       im.onerror = function () { cb(null); };
@@ -455,7 +461,7 @@
       var file = h('input', { type: 'file', accept: 'image/*' });
       file.onchange = function () {
         var f = file.files && file.files[0]; if (!f) return; ui.status.textContent = 'Preparing image…';
-        shrink(f, 2200, 4400000, function (d) { if (!d) { ui.status.textContent = 'Could not use that image.'; return; } lob.image = d; lob._img = true; drawBox(); save(true); });
+        shrink(f, 2200, 4400000, function (d, why) { if (!d) { ui.status.textContent = why === 'gif' ? 'That GIF is too big. Use one under about 3 MB.' : 'Could not use that image.'; return; } lob.image = d; lob._img = true; drawBox(); save(true); }, 4400000);
       };
       var rm = h('button', { type: 'button', className: 'link', text: 'Remove image' }); rm.onclick = function () { lob.image = ''; lob._img = true; drawBox(); save(true); };
       var fitb = h('button', { type: 'button', className: 'btn', text: 'Fit image to box' }); fitb.onclick = function () { lob.imgScale = 1; lob.imgX = 0; lob.imgY = 0; styleImg(); drawSide(); save(); };
@@ -561,7 +567,7 @@
             if (!cn.value.trim()) { cm.textContent = 'Give it a name first.'; return; }
             var f = cf.files && cf.files[0]; if (!f) { put(''); return; }
             cm.textContent = 'Preparing picture…';
-            shrink(f, 256, 150000, function (d) { if (!d) { cm.textContent = 'Could not use that picture.'; return; } put(d); });
+            shrink(f, 256, 150000, function (d, why) { if (!d) { cm.textContent = why === 'gif' ? 'That GIF is too big for a token. Use one under about 290 KB.' : 'Could not use that picture.'; return; } put(d); }, 390000);
           };
           [cn, h('label', { className: 'fl' }, [h('span', { text: 'Picture (optional)' }), cf]), ca, cm].forEach(function (x) { list.appendChild(x); });
           return;
@@ -1528,7 +1534,10 @@
         for (g = 0; g < groups; g++) { lo = Math.floor(g * size) + 1; hi = Math.floor((g + 1) * size); c = 0; for (v = lo; v <= hi; v++) c += counts[v]; rows.push([lo === hi ? String(lo) : lo + '–' + hi, c]); }
         var top = Math.max.apply(null, rows.map(function (r) { return r[1]; }));
         clear(bars); rows.forEach(function (r) { bars.appendChild(h('div', { className: 'pr-row' }, [h('span', { className: 'mono', text: r[0] }), h('span', { className: 'pr-bar', style: 'width:' + Math.round(r[1] / top * 100) + '%' }), h('span', { className: 'mono', text: String(r[1]) })])); });
-        out.textContent = 'd' + d + ', 1000 rolls: average ' + (sum / N).toFixed(2) + ' (a fair d' + d + ' averages ' + ((d + 1) / 2) + '). Each ' + (d > 20 ? 'group' : 'number') + ' should come up about ' + Math.round(N / groups) + ' times.';
+        if (d === 20 && D.d20) { // the d20 is weighted on purpose: say what to expect
+          var W = D.d20(), per = function (i) { return Math.round(N * W.weights[i] / W.total); }, mean = 0; W.weights.forEach(function (w, k) { mean += (k + 1) * w / W.total; });
+          out.textContent = 'd20 (weighted), 1000 rolls: average ' + (sum / N).toFixed(2) + ' (it should average about ' + mean.toFixed(2) + '). Expect about ' + per(0) + ' each for 1 and 20, ' + per(1) + ' each for 2–5 and 17–19, ' + per(5) + ' each for 6–9 and 16, and ' + per(9) + ' each for 10–15.';
+        } else out.textContent = 'd' + d + ', 1000 rolls: average ' + (sum / N).toFixed(2) + ' (a fair d' + d + ' averages ' + ((d + 1) / 2) + '). Each ' + (d > 20 ? 'group' : 'number') + ' should come up about ' + Math.round(N / groups) + ' times.';
       };
       var det = h('details', { className: 'pr' }, [h('summary', { text: 'Practice dice (not logged)' }), h('div', { className: 'ef' }, [cnt, die, 'modifier', mod, go]), h('div', { className: 'ef' }, [ft]), out, bars, note('Practice rolls stay on your screen. Real rolls are logged. Short streaks of low numbers are normal; the fairness test shows the long run.')]);
       return det;
@@ -1806,7 +1815,7 @@
       ui.err = h('p', { className: 'mono hb-note cht-err' });
       ui.file.onchange = function () {
         var f = ui.file.files && ui.file.files[0]; if (!f) return; ui.err.textContent = 'Preparing image…';
-        shrink(f, 720, 170000, function (d) { if (!d) { ui.err.textContent = 'Could not use that image.'; return; } ui.pend = d; showPrev(d); ui.err.textContent = ''; ui.in.focus(); });
+        shrink(f, 720, 170000, function (d, why) { if (!d) { ui.err.textContent = why === 'gif' ? 'That GIF is too big. Use one under about 430 KB.' : 'Could not use that image.'; return; } ui.pend = d; showPrev(d); ui.err.textContent = ''; ui.in.focus(); }, 580000);
         ui.file.value = '';
       };
       ui.send.onclick = send; ui.in.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
