@@ -8,13 +8,9 @@
   window.GEH_vnCard = function (vn) {
     var card = el('div', 'vn-card');
     card.appendChild(el('p', 'mono red', 'Visual novel'));
-    card.appendChild(el('p', '', 'This chapter is told as a short visual novel: a dark screen, one picture and a voice. Spoken in Japanese, with English text. Sound on, and headphones if you can. It takes about five minutes.'));
     var go = el('button', 'btn primary', 'Begin Chapter 1'); go.type = 'button';
     go.addEventListener('click', function () { play(vn, go); });
     card.appendChild(go);
-    var d = el('details'), s = el('summary', '', 'Read it as plain text instead'), box = el('div');
-    vn.pages.forEach(function (p) { box.appendChild(el('p', '', p.lines.join(' '))); });
-    d.appendChild(s); d.appendChild(box); card.appendChild(d);
     return card;
   };
 
@@ -40,7 +36,6 @@
     var start = el('div', 'vn-start show');
     start.appendChild(el('p', 'mono', 'Gehenna\u2019s Gate \u00b7 Storyline'));
     start.appendChild(el('h2', '', 'Chapter 1'));
-    start.appendChild(el('p', '', 'Spoken in Japanese, written in English. Click or press Space to move on, or leave Auto on. Sound on, headphones recommended.'));
     var begin = el('button', 'go', 'Loading\u2026'); begin.type = 'button'; begin.disabled = true; start.appendChild(begin);
     root.appendChild(start);
     var end = el('div', 'vn-end');
