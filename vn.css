@@ -1,0 +1,52 @@
+/* Chapter 1 visual novel: a black screen, one picture, subtitles. */
+.vn-card { max-width: 38rem; display: grid; gap: 1rem; padding: 1.5rem; border: 1px solid var(--line); background: var(--surface); }
+.vn-card p { margin: 0; color: var(--muted); }
+.vn-card .btn { justify-self: start; }
+.vn-card details { color: var(--muted); font-size: 0.95rem; }
+.vn-card summary { cursor: pointer; font-family: var(--f-mono); font-size: 0.76rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.vn-card details div { margin-top: 0.8rem; display: grid; gap: 0.6rem; line-height: 1.6; }
+
+.vn { position: fixed; inset: 0; z-index: 9999; background: #000; color: var(--fg, #f3efec); overflow: hidden; user-select: none; -webkit-user-select: none; cursor: pointer; font-family: var(--f-body, system-ui, sans-serif); }
+.vn-stage { position: absolute; inset: 0; opacity: 0; transition: opacity 3.4s ease 0.8s; }
+.vn.img-on .vn-stage { opacity: 1; }
+.vn.img-off .vn-stage { transition: opacity 2.4s ease 0s; }
+.vn-stage img { width: 100%; height: 100%; object-fit: contain; display: block; transform-origin: 60% 45%; }
+.vn.img-on .vn-stage img { animation: vn-drift 90s linear forwards; }
+@keyframes vn-drift { from { transform: scale(1); } to { transform: scale(1.06); } }
+.vn.shake .vn-stage { animation: vn-shake 0.55s linear; }
+@keyframes vn-shake { 0%,100% { transform: translate(0,0); } 12% { transform: translate(-7px,3px); } 25% { transform: translate(6px,-4px); } 37% { transform: translate(-5px,-3px); } 50% { transform: translate(5px,4px); } 62% { transform: translate(-3px,2px); } 75% { transform: translate(3px,-2px); } }
+.vn-vig { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%); opacity: 0; transition: opacity 3s ease 0.8s; }
+.vn.img-on .vn-vig { opacity: 1; }
+
+.vn-textwrap { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: 4.5rem max(1.5rem, env(safe-area-inset-left,0px)) 3rem; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; }
+.vn-textwrap.in { opacity: 1; }
+.vn.img-on .vn-textwrap { align-items: flex-end; padding-bottom: max(2.2rem, env(safe-area-inset-bottom,0px)); background: linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0.55) 22%, transparent 42%); }
+.vn-text { max-width: 40rem; text-align: center; font-family: var(--f-display, Georgia, serif); font-size: clamp(1.2rem, 2.5vw, 1.8rem); line-height: 1.6; text-shadow: 0 1px 12px #000; text-wrap: balance; }
+.vn-text .ln { display: block; min-height: 1.6em; }
+.vn-text .ln + .ln { margin-top: 0.15em; }
+.vn-text.k-emph { color: var(--red-hi, #ff4d4d); letter-spacing: 0.04em; font-size: clamp(1.4rem, 3vw, 2.2rem); }
+.vn-text.k-insult .ln { color: #cdbfbc; font-style: italic; }
+.vn-text.k-shout { color: #fff; font-weight: 700; font-size: clamp(1.6rem, 3.6vw, 2.6rem); letter-spacing: 0.03em; }
+.vn-text.k-time .ln:first-child { font-family: var(--f-mono, monospace); font-size: 0.78em; letter-spacing: 0.3em; color: var(--red-hi, #ff4d4d); margin-bottom: 0.8rem; }
+.vn-text.hide { opacity: 0; transition: opacity 0.6s ease; }
+.vn-more { position: absolute; left: 50%; bottom: max(0.8rem, env(safe-area-inset-bottom,0px)); width: 0; height: 0; margin-left: -6px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid rgba(243,239,236,0.55); opacity: 0; pointer-events: none; }
+.vn.ready .vn-more { opacity: 1; animation: vn-blink 1.3s ease-in-out infinite; }
+@keyframes vn-blink { 50% { opacity: 0.15; } }
+
+.vn-ui { position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; padding: max(0.7rem, env(safe-area-inset-top,0px)) max(0.8rem, env(safe-area-inset-right,0px)) 0.7rem; opacity: 0.5; transition: opacity 0.25s; z-index: 3; cursor: default; }
+.vn-ui:hover, .vn-ui:focus-within { opacity: 1; }
+.vn-ui button, .vn-end button, .vn-start button { font: inherit; font-family: var(--f-mono, monospace); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #f3efec; background: rgba(0,0,0,0.55); border: 1px solid rgba(243,239,236,0.4); padding: 0.45rem 0.7rem; cursor: pointer; }
+.vn-ui button:hover, .vn-end button:hover, .vn-start button:hover:not(:disabled) { background: #f3efec; color: #0a0808; }
+.vn-ui button[aria-pressed="false"] { opacity: 0.6; }
+.vn-start, .vn-end { position: absolute; inset: 0; z-index: 4; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 1.1rem; text-align: center; padding: 2rem; background: #000; cursor: default; }
+.vn-start.show, .vn-end.show { display: flex; }
+.vn-end { background: transparent; }
+.vn-start h2, .vn-end h2 { font-family: var(--f-display, Georgia, serif); font-weight: 500; font-size: clamp(1.8rem, 5vw, 3rem); margin: 0; }
+.vn-start p, .vn-end p { margin: 0; max-width: 28rem; color: #b3a5a3; line-height: 1.6; }
+.vn-start .mono, .vn-end .mono { color: var(--red-hi, #ff4d4d); font-family: var(--f-mono, monospace); font-size: 0.76rem; letter-spacing: 0.2em; text-transform: uppercase; }
+.vn-start button.go { background: var(--red, #e3151f); border-color: var(--red, #e3151f); padding: 0.75rem 1.6rem; font-size: 0.8rem; }
+.vn-start button:disabled { opacity: 0.45; cursor: wait; }
+.vn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; }
+.vn-paused { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-family: var(--f-mono, monospace); letter-spacing: 0.3em; text-transform: uppercase; font-size: 0.8rem; color: #b3a5a3; display: none; z-index: 2; pointer-events: none; }
+.vn.paused .vn-paused { display: block; }
+@media (prefers-reduced-motion: reduce) { .vn.img-on .vn-stage img, .vn.shake .vn-stage, .vn.ready .vn-more { animation: none; } .vn-stage, .vn-vig { transition-duration: 0.01s; transition-delay: 0s; } }

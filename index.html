@@ -510,6 +510,7 @@
   .imgctl { display: grid; gap: 0.5rem; min-width: 0; }
 </style>
 <link rel="stylesheet" href="hub.css">
+<link rel="stylesheet" href="vn.css">
 
 
 
@@ -1479,8 +1480,8 @@
     nav.appendChild(step(next ? (next.locked ? 'Next chapter locked' : (next.title || 'Next') + ' →') : 'To be continued', next));
     page.textContent = '';
     page.appendChild(el('h3', 'ch-title', c.title || 'Untitled'));
-    page.appendChild(body(c.body));
-    figs(c.images).forEach(function (f) { page.appendChild(f); });
+    if (c.vn && window.GEH_vnCard) page.appendChild(window.GEH_vnCard(c.vn));
+    else { page.appendChild(body(c.body)); figs(c.images).forEach(function (f) { page.appendChild(f); }); }
     page.appendChild(nav);
     page.classList.remove('turn'); void page.offsetWidth; page.classList.add('turn');
     if (focus) { page.focus({ preventScroll: true }); if (book.getBoundingClientRect().top < 0) book.scrollIntoView({ block: 'start' }); }
@@ -2445,4 +2446,5 @@
 })();
 </script>
 <script src="hub.js"></script>
+<script src="vn.js"></script>
 </body></html>

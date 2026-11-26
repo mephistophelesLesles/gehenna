@@ -2,6 +2,7 @@
 // Locked chapters never leave the server, only their title does.
 const { getStore, connectLambda } = require('@netlify/blobs');
 const { loadAll, meta } = require('./lib/story');
+const vn1 = require('./lib/vn1');
 const reply = (status, obj) => ({ statusCode: status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(obj) });
 
 exports.handler = async (event) => {
@@ -16,6 +17,9 @@ exports.handler = async (event) => {
     const c = all.find((x) => x.id === id);
     if (!c) return reply(404, { error: 'That chapter does not exist.' });
     if (c.locked) return reply(403, { error: 'This chapter is not open yet.' });
-    return reply(200, { chapter: { id: c.id, title: c.title, body: c.body, images: c.images || [] } });
+    const out = { id: c.id, title: c.title, body: c.body, images: c.images || [] };
+    // Chapter 1 is a visual novel. Its script is only sent once the chapter is open.
+    if (c.id === 'chapter-1') out.vn = vn1;
+    return reply(200, { chapter: out });
   } catch (e) { return reply(502, { error: 'Server error: ' + e.message }); }
 };
